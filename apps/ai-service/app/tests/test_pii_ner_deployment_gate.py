@@ -62,11 +62,22 @@ class PiiNerDeploymentGateTests(unittest.TestCase):
         )
 
         self.assertIn("GATEWAY_AI_SAFETY_SIDECAR_ENABLED=true", candidate_env)
+        self.assertIn("GATEWAY_AI_SAFETY_PERSON_NAME_MODEL_ONLY=true", candidate_env)
         self.assertIn("AI_SERVICE_AI_SAFETY_MICRO_BATCH_SIZE=1", candidate_env)
+        self.assertIn(
+            "AI_SERVICE_AI_SAFETY_ML_DETECTOR_THRESHOLDS="
+            "email=0.99,organization_name=0.90,person_name=0.90,"
+            "phone_number=0.99,postal_address=0.90,"
+            "resident_registration_number=0.99",
+            candidate_env,
+        )
+        self.assertIn("AI_SERVICE_AI_SAFETY_PERSON_NAME_MODEL_ONLY=true", candidate_env)
         self.assertEqual(
             render_rollback_env(),
             "GATEWAY_AI_SAFETY_SIDECAR_ENABLED=false\n"
-            "AI_SERVICE_AI_SAFETY_ADDITIONAL_DETECTOR_MODEL_IDS=\n",
+            "GATEWAY_AI_SAFETY_PERSON_NAME_MODEL_ONLY=false\n"
+            "AI_SERVICE_AI_SAFETY_ADDITIONAL_DETECTOR_MODEL_IDS=\n"
+            "AI_SERVICE_AI_SAFETY_PERSON_NAME_MODEL_ONLY=false\n",
         )
 
     def test_runtime_model_path_rejects_env_injection(self) -> None:

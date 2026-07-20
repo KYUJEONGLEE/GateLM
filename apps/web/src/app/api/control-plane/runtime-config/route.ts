@@ -125,6 +125,14 @@ function isRuntimePolicyDraftValues(value: unknown): value is RuntimePolicyDraft
     record.promptCaptureMaxChars <= 20000 &&
     typeof record.rateLimitEnabled === "boolean" &&
     Number.isInteger(record.rateLimitLimit) &&
+    Number.isInteger(record.rateLimitRefillTokensPerSecond) &&
+    Number.isInteger(record.rateLimitWindowSeconds) &&
+    Number(record.rateLimitLimit) >= 1 &&
+    Number(record.rateLimitLimit) <= 100000 &&
+    Number(record.rateLimitRefillTokensPerSecond) >= 1 &&
+    Number(record.rateLimitRefillTokensPerSecond) <= 100000 &&
+    Number(record.rateLimitWindowSeconds) >= 1 &&
+    Number(record.rateLimitWindowSeconds) <= 100000 &&
     isRoutingPolicyDraft(record.routingPolicy) &&
     !hasLegacyRoutingFields(record as Record<string, unknown>) &&
     record.detectors.every(isDetector) &&

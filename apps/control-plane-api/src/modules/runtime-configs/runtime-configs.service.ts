@@ -1112,7 +1112,9 @@ export class RuntimeConfigsService {
     if (
       document.rateLimit.scope !== 'application' ||
       document.rateLimit.algorithm !== 'fixed_window' ||
-      document.rateLimit.windowSeconds !== 60 ||
+      !Number.isInteger(document.rateLimit.windowSeconds) ||
+      document.rateLimit.windowSeconds < 1 ||
+      document.rateLimit.windowSeconds > 100000 ||
       !Number.isInteger(document.rateLimit.limit) ||
       document.rateLimit.limit < 1 ||
       !this.isExecutableBudgetPolicy(document.budgetPolicy) ||
@@ -1565,7 +1567,7 @@ export class RuntimeConfigsService {
       enabled: dto?.enabled ?? true,
       scope: 'application',
       algorithm: 'fixed_window',
-      windowSeconds: 60,
+      windowSeconds: dto?.windowSeconds ?? 60,
       limit: dto?.limit ?? 60,
     };
   }
@@ -2961,6 +2963,7 @@ export class RuntimeConfigsService {
       rateLimit: {
         enabled: document.rateLimit.enabled,
         limit: document.rateLimit.limit,
+        windowSeconds: document.rateLimit.windowSeconds,
       },
       budgetPolicy: {
         enabled: document.budgetPolicy.enabled,

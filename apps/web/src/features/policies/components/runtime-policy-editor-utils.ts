@@ -280,14 +280,32 @@ export function findProviderConnectionForModelRef(
   );
 }
 
-export function parseBoundedInteger(value: string, min: number, max: number) {
-  const parsed = Number.parseInt(value, 10);
+export function parseOptionalBoundedInteger(
+  value: string,
+  min: number,
+  max: number
+) {
+  if (!value.trim()) {
+    return null;
+  }
 
-  if (!Number.isFinite(parsed)) {
-    return min;
+  const parsed = Number(value);
+
+  if (!Number.isInteger(parsed)) {
+    return null;
   }
 
   return Math.min(Math.max(parsed, min), max);
+}
+
+export function formatPolicyNumberInputValue(
+  value: number | null | undefined
+) {
+  return typeof value === "number" && Number.isFinite(value) ? String(value) : "";
+}
+
+export function parseBoundedInteger(value: string, min: number, max: number) {
+  return parseOptionalBoundedInteger(value, min, max) ?? min;
 }
 
 export function isMandatorySafetyDetector(detectorType: RuntimePolicyDetector["type"]) {

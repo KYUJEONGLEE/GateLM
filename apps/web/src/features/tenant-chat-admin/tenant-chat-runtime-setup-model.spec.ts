@@ -264,9 +264,13 @@ test("Chat App routing keeps existing fallback candidates when a primary changes
 
 test("Chat App routing reuses the original routing policy presentation", async () => {
   const componentSourceUrl = new URL("./components/chat-app-routing-setup.tsx", import.meta.url);
+  const knowledgeBaseSourceUrl = new URL("../rag-documents/knowledge-base-management.tsx", import.meta.url);
   const stylesUrl = new URL("../../app/globals.css", import.meta.url);
-  const source = await readFile(componentSourceUrl, "utf8");
-  const styles = await readFile(stylesUrl, "utf8");
+  const [knowledgeBaseSource, source, styles] = await Promise.all([
+    readFile(knowledgeBaseSourceUrl, "utf8"),
+    readFile(componentSourceUrl, "utf8"),
+    readFile(stylesUrl, "utf8")
+  ]);
 
   expect(source).toContain('import { ManagementPage } from "@/components/layout/management-page"');
   expect(source).toContain('className="tenant-management-content tenant-chat-app-content"');
@@ -279,6 +283,28 @@ test("Chat App routing reuses the original routing policy presentation", async (
   expect(source).toContain("MessageSquareMore");
   expect(source).toContain("BrainCircuit");
   expect(source).toContain("ProviderFamilyIcon");
+  expect(styles).toMatch(
+    /\.tenant-management-content:not\(\.tenant-chat-app-content\)[\s\S]*?\.tenant-routing-model-card/
+  );
+  expect(styles).toContain(
+    ".management-line-content:not(.tenant-chat-app-content)"
+  );
+  expect(styles).toMatch(
+    /html\[data-presentation-mode="true"\] \.tenant-chat-app-content \{[\s\S]*?--global-font-lift: 5px;/
+  );
+  expect(styles).toMatch(
+    /\.tenant-chat-app-content[\s\S]*?:where\(\.tenant-routing-panel, \.chat-app-policy-form, \.tenant-chat-knowledge-panel\)[\s\S]*?:is\(p, label, input, select, textarea, button, th, td, dt, dd\)/
+  );
+  expect(styles).not.toMatch(
+    /\.tenant-chat-app-content\s+:is\(p, label, input, select, textarea, button, th, td, dt, dd\)/
+  );
+  expect(knowledgeBaseSource).toContain("tenant-chat-knowledge-panel");
+  expect(styles).toMatch(
+    /\.tenant-chat-app-content[\s\S]*?\.tenant-routing-table-row \{[\s\S]*?min-height: 90px;/
+  );
+  expect(styles).toMatch(
+    /\.tenant-chat-app-content[\s\S]*?\.tenant-routing-provider-control select,[\s\S]*?min-height: 54px;[\s\S]*?font-size: 17px;/
+  );
 });
 
 test("Chat App policy navigation exposes routing, cache, security, usage limits, and tenant-admin Knowledge Base panels", async () => {

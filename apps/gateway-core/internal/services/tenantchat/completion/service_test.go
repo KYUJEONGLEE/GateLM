@@ -410,17 +410,25 @@ func TestServiceReturnsEncryptedExactCacheHitWithoutReservationOrProvider(t *tes
 	snapshot.Policies.Cache = tenantruntime.CachePolicy{
 		Strategy: "exact", Enabled: true, TTLSeconds: 300, MaxEntriesPerUser: 100, KeySetID: "keys_001",
 	}
-	usage := &fakeUsageAccounting{}
+	snapshot.Policies.Safety = tenantruntime.SafetyPolicy{
+		Enabled: true, PolicyDigest: "sha256:" + strings.Repeat("A", 43),
+		DetectorSet: []tenantruntime.SafetyDetector{{DetectorType: "email", Action: "redact"}},
+	}
+	none := &tenantchat.SafetySummary{
+		MaskingAction: "none", MaskingDetectedTypes: []string{},
+		SafetyPolicyDigest: snapshot.Policies.Safety.PolicyDigest,
+	}
+	usage := &fakeUsageAccounting{safetySummary: none}
 	cache := &fakeExactCache{entry: tenantchat.ExactCacheEntry{
 		ResponseText: "cached synthetic response", EffectiveProviderID: "provider-cached",
-		EffectiveModelKey: "model-cached", EffectiveRouteTier: "high_quality", SourceCostMicroUSD: 450,
+		EffectiveModelKey: "gpt-5.4-mini", EffectiveRouteTier: "high_quality", SourceCostMicroUSD: 450,
 	}, hit: true}
 	providers := &fakeProviderExecutor{}
+	request := completionRequest()
 	service := New(
 		&fakeSnapshotResolver{snapshot: snapshot}, usage, providers,
-		WithExactCache(cache),
+		WithExactCache(cache), WithSafetyEvaluator(&fakeSafetyEvaluator{result: tenantchat.SafetyEvaluation{Input: request.Input}}),
 	)
-	request := completionRequest()
 	request.Context.UsageIntent.CacheStrategy = "exact"
 	execution, err := service.Prepare(context.Background(), request)
 	if err != nil {
@@ -433,15 +441,108 @@ func TestServiceReturnsEncryptedExactCacheHitWithoutReservationOrProvider(t *tes
 	}); err != nil {
 		t.Fatalf("relay cache hit: %v", err)
 	}
-	if usage.reserveCalls != 0 || usage.ledgerlessCalls != 1 || providers.calls != 0 || len(events) != 2 ||
+	if usage.safetyReadCalls != 1 || usage.reserveCalls != 0 || usage.ledgerlessCalls != 1 ||
+		providers.calls != 0 || len(events) != 2 ||
 		events[1].CacheOutcome != "hit" || events[1].Usage == nil || events[1].Usage.TotalTokens != 0 {
 		t.Fatalf("unexpected cache hit path: usage=%+v provider=%d events=%+v", usage, providers.calls, events)
+	}
+	if usage.lastSettlementContext.Safety == nil || usage.lastSettlementContext.Safety.MaskingAction != "none" {
+		t.Fatalf("cache hit must carry explicit non-masking evidence: %+v", usage.lastSettlementContext.Safety)
 	}
 	if got := usage.transactionCalls(); got != 1 {
 		t.Fatalf("cache-hit transaction budget exceeded: got %d want 1", got)
 	}
 	if usage.lastSettlementContext.TTFTMs == nil || *usage.lastSettlementContext.TTFTMs != 0 {
 		t.Fatalf("cache hit must persist zero TTFT: %+v", usage.lastSettlementContext)
+	}
+}
+
+func TestServiceBypassesExactCacheForRedactedSafetySummary(t *testing.T) {
+	snapshot := completionSnapshot()
+	snapshot.Policies.Cache = tenantruntime.CachePolicy{
+		Strategy: "exact", Enabled: true, TTLSeconds: 300, MaxEntriesPerUser: 100, KeySetID: "keys_001",
+	}
+	snapshot.Policies.Safety = tenantruntime.SafetyPolicy{
+		Enabled: true, PolicyDigest: "sha256:" + strings.Repeat("A", 43),
+		DetectorSet: []tenantruntime.SafetyDetector{{DetectorType: "email", Action: "redact"}},
+	}
+	redacted := &tenantchat.SafetySummary{
+		MaskingAction: "redacted", MaskingDetectedTypes: []string{"email"}, MaskingDetectedCount: 1,
+		SafetyPolicyDigest: snapshot.Policies.Safety.PolicyDigest,
+	}
+	usage := &fakeUsageAccounting{
+		safetySummary: redacted,
+		reservation: tenantchat.UsageReservation{
+			ReservationID: "7f88ef2f-975e-4557-bdd5-f7050cd54c15", RequestID: "request_completion_001",
+			State: "reserved", QuotaState: "normal", BudgetState: "normal", CacheOutcome: "off",
+			Route:  tenantchat.SelectedRoute{RouteID: "route_standard", ProviderID: "provider", ModelKey: "gpt-5.4-mini"},
+			Safety: redacted,
+		},
+		settlement: tenantchat.UsageSettlement{
+			RequestID: "request_completion_001", ReservationID: "7f88ef2f-975e-4557-bdd5-f7050cd54c15",
+			State: "settled", ConfirmedInputTokens: 4, ConfirmedOutputTokens: 2,
+			QuotaState: "normal", BudgetState: "normal", CacheOutcome: "off", LedgerVersion: 2,
+		},
+	}
+	cache := &fakeExactCache{entry: tenantchat.ExactCacheEntry{ResponseText: "must not be reused"}, hit: true}
+	providers := &fakeProviderExecutor{stream: &fakeStream{events: []provider.ChatCompletionStreamEvent{
+		{Delta: "fresh synthetic response"},
+		{Usage: &provider.Usage{PromptTokens: 4, CompletionTokens: 2, TotalTokens: 6}},
+	}}}
+	request := completionRequest()
+	request.Context.UsageIntent.CacheStrategy = "exact"
+	service := New(
+		&fakeSnapshotResolver{snapshot: snapshot}, usage, providers,
+		WithExactCache(cache), WithSafetyEvaluator(&fakeSafetyEvaluator{result: tenantchat.SafetyEvaluation{Input: request.Input}}),
+	)
+
+	execution, err := service.Prepare(context.Background(), request)
+	if err != nil {
+		t.Fatalf("prepare redacted cache bypass: %v", err)
+	}
+	var events []tenantchat.CompletionEvent
+	if err := execution.Relay(context.Background(), func(event tenantchat.CompletionEvent) error {
+		events = append(events, event)
+		return nil
+	}); err != nil {
+		t.Fatalf("relay redacted cache bypass: %v", err)
+	}
+	if usage.safetyReadCalls != 1 || usage.reserveCalls != 1 || providers.calls != 1 ||
+		cache.getCalls != 0 || cache.putCalls != 0 {
+		t.Fatalf("redacted request must bypass cache: usage=%+v provider=%d cache=%+v", usage, providers.calls, cache)
+	}
+	if len(events) == 0 || events[len(events)-1].CacheOutcome != "off" {
+		t.Fatalf("redacted request must report cache off: %+v", events)
+	}
+}
+
+func TestServiceBypassesExactCacheWhenSafetySummaryIsMissing(t *testing.T) {
+	snapshot := completionSnapshot()
+	snapshot.Policies.Cache = tenantruntime.CachePolicy{Strategy: "exact", Enabled: true}
+	snapshot.Policies.Safety = tenantruntime.SafetyPolicy{
+		Enabled: true, PolicyDigest: "sha256:" + strings.Repeat("A", 43),
+		DetectorSet: []tenantruntime.SafetyDetector{{DetectorType: "email", Action: "redact"}},
+	}
+	usage := &fakeUsageAccounting{reservation: tenantchat.UsageReservation{
+		ReservationID: "7f88ef2f-975e-4557-bdd5-f7050cd54c15", State: "reserved", CacheOutcome: "off",
+		Route: tenantchat.SelectedRoute{RouteID: "route_standard", ProviderID: "provider", ModelKey: "model-standard"},
+	}}
+	cache := &fakeExactCache{entry: tenantchat.ExactCacheEntry{ResponseText: "must not be reused"}, hit: true}
+	providers := &fakeProviderExecutor{stream: &fakeStream{}}
+	request := completionRequest()
+	request.Context.UsageIntent.CacheStrategy = "exact"
+	service := New(
+		&fakeSnapshotResolver{snapshot: snapshot}, usage, providers,
+		WithExactCache(cache), WithSafetyEvaluator(&fakeSafetyEvaluator{result: tenantchat.SafetyEvaluation{Input: request.Input}}),
+	)
+
+	execution, err := service.Prepare(context.Background(), request)
+	if err != nil {
+		t.Fatalf("prepare missing-safety cache bypass: %v", err)
+	}
+	execution.Close()
+	if usage.safetyReadCalls != 1 || usage.reserveCalls != 1 || providers.calls != 1 || cache.getCalls != 0 {
+		t.Fatalf("missing safety evidence must bypass cache: usage=%+v provider=%d cache=%+v", usage, providers.calls, cache)
 	}
 }
 
@@ -1375,6 +1476,8 @@ type fakeUsageAccounting struct {
 	restrictions          []bool
 	lastContext           tenantchat.RequestContext
 	lastSettlementContext tenantchat.RequestContext
+	safetySummary         *tenantchat.SafetySummary
+	safetyReadErr         error
 
 	reserveCalls      int
 	startAttemptCalls int
@@ -1384,9 +1487,15 @@ type fakeUsageAccounting struct {
 	releasedCalls     int
 	unconfirmedCalls  int
 	ledgerlessCalls   int
+	safetyReadCalls   int
 	preCallCalls      int
 	confirmedUsage    tenantchat.ConfirmedUsage
 	lastOutcome       string
+}
+
+func (f *fakeUsageAccounting) ReadSafetySummary(context.Context, tenantchat.RequestContext) (*tenantchat.SafetySummary, error) {
+	f.safetyReadCalls++
+	return tenantchat.CloneSafetySummary(f.safetySummary), f.safetyReadErr
 }
 
 func (f *fakeUsageAccounting) transactionCalls() int {

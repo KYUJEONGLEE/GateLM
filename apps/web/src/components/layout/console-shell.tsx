@@ -170,7 +170,7 @@ const navigationItems: Array<{
       {
         labels: {
           en: "API Key Management",
-          ko: "API Key 관리"
+          ko: "API Key"
         },
         item: "api-keys",
         path: (tenantId) => `/tenants/${tenantId}/api-keys`

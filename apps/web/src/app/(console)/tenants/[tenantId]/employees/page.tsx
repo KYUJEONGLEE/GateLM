@@ -38,13 +38,29 @@ export default async function EmployeesPage({ params, searchParams }: EmployeesP
 
   const controlPlaneTenantId = resolveControlPlaneTenantId(effectiveTenantId);
   const usageTo = new Date();
-  const usageFrom = new Date(usageTo.getTime() - 24 * 60 * 60 * 1000);
-  const [model, monthlyCostReport, weeklyTokenQuotas, tenantChatUsage, tenantChatRuntime] = await Promise.all([
+  const dailyUsageFrom = new Date(usageTo.getTime() - 24 * 60 * 60 * 1000);
+  const weeklyUsageFrom = new Date(usageTo.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const [
+    model,
+    monthlyCostReport,
+    weeklyTokenQuotas,
+    tenantChatUsage,
+    weeklyTenantChatUsage,
+    tenantChatRuntime
+  ] = await Promise.all([
     getEmployeeControlModel(effectiveTenantId),
     getLiveMonthlyProjectCostReport(effectiveTenantId),
     getEmployeeWeeklyTokenQuotas(controlPlaneTenantId),
     getAllEmployeeUsage({
-      from: usageFrom.toISOString(),
+      from: dailyUsageFrom.toISOString(),
+      metric: "cost",
+      order: "desc",
+      source: "tenant_chat",
+      tenantId: controlPlaneTenantId,
+      to: usageTo.toISOString()
+    }),
+    getAllEmployeeUsage({
+      from: weeklyUsageFrom.toISOString(),
       metric: "cost",
       order: "desc",
       source: "tenant_chat",
@@ -58,8 +74,11 @@ export default async function EmployeesPage({ params, searchParams }: EmployeesP
       ? weeklyTokenQuotas.error
       : !tenantChatUsage.ok
         ? tenantChatUsage.error
-        : null,
+        : !weeklyTenantChatUsage.ok
+          ? weeklyTenantChatUsage.error
+          : null,
     tenantChatUsage: tenantChatUsage.ok ? tenantChatUsage.data : undefined,
+    weeklyUsage: weeklyTenantChatUsage.ok ? weeklyTenantChatUsage.data : undefined,
     weeklyTokenQuotas: weeklyTokenQuotas.ok ? weeklyTokenQuotas.data : undefined
   });
 

@@ -1,0 +1,75 @@
+{
+  "reportVersion": "gatelm.pii-ner-v314-deployment-summary.v1",
+  "evaluatedAt": "2026-07-21",
+  "scope": "single GateLM KoELECTRA v3.14 QInt8 ONNX bundle with product-adapter boundary repair",
+  "syntheticOnly": true,
+  "customerPromptUsed": false,
+  "rawPromptIncluded": false,
+  "detectedValueIncluded": false,
+  "shadowCanaryIncluded": false,
+  "model": {
+    "modelId": "gatelm/koelectra-small-v3-pii-ner",
+    "quantization": "dynamic-qint8",
+    "bytes": 14595587,
+    "sha256": "8a5cb146e84d413910a423d304e662a6aba9f69e83db129f5061d007a6de9381"
+  },
+  "thresholds": {
+    "email": 0.99,
+    "organization_name": 0.9,
+    "person_name": 0.9,
+    "phone_number": 0.99,
+    "postal_address": 0.9,
+    "resident_registration_number": 0.99
+  },
+  "postprocessing": {
+    "singleKoreanSyllablePersonFragmentRejected": true,
+    "adjacentAddressFragmentRepair": true,
+    "immediateAdministrativeSuffixRepair": true,
+    "noWhitespaceAdministrativeSuffixRepair": true,
+    "commonOrganizationSuffixExclusion": true
+  },
+  "productAdapterFrozenGate": {
+    "reportSha256": "4030b035301be197198312004d0349a454c011f8ca8e7b25f365774013d1ae34",
+    "datasetSha256": "64764cd4a99755c281691ad114098b6a0f33ad17cc358cb4aa9ef03ab860ba1c",
+    "recordCount": 5000,
+    "exactMatchRate": 0.9832,
+    "microF1": 0.98716,
+    "negativeFalsePositiveCount": 0,
+    "p95MsLocalReference": 15.057,
+    "decision": "pass",
+    "byType": {
+      "organization_name": {"precision": 0.920844, "recall": 0.930667, "f1": 0.925729},
+      "person_name": {"precision": 1.0, "recall": 0.995619, "f1": 0.997805},
+      "phone_number": {"precision": 0.990818, "recall": 1.0, "f1": 0.995388},
+      "postal_address": {"precision": 0.995018, "recall": 0.995018, "f1": 0.995018}
+    }
+  },
+  "sixTypeValidation": {
+    "reportSha256": "276b3c6df7b45f21adffe8a622bf1f68b57cfe65b514fca61189fbcac3bcde4",
+    "recordCount": 4270,
+    "exactMatchRate": 0.989461,
+    "microF1": 0.989862,
+    "negativeFalsePositiveCount": 0,
+    "byTypeF1": {
+      "email": 1.0,
+      "organization_name": 0.994545,
+      "person_name": 0.995816,
+      "phone_number": 0.995619,
+      "postal_address": 0.985834,
+      "resident_registration_number": 0.947368
+    }
+  },
+  "privateRegression": {
+    "reportSha256": "514daef6620af4f13276d78941c48a93690e5d258c8f7e85472296f337617bec",
+    "datasetSha256": "8ea3a2c945abac99858420b32c7a89db0ac6eefd20a794b1235145d38e7a7b63",
+    "recordCount": 1000,
+    "exactMatchRate": 0.991,
+    "microF1": 0.994595,
+    "negativeFalsePositiveCount": 0,
+    "postalAddressF1": 1.0,
+    "p95MsLocalReference": 18.118
+  },
+  "releaseDecision": "deployment-package-ready",
+  "productionActivationPerformed": false,
+  "note": "Offline quality and local artifact integrity are ready. Remote installation, readiness smoke, and Gateway E2E remain deployment-time checks."
+}

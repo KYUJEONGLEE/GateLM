@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -245,21 +246,50 @@ func TestReservationCacheOutcomeRequiresBothSnapshotAndRequestEligibility(t *tes
 	}}}
 	requestContext := tenantchat.RequestContext{UsageIntent: &tenantchat.UsageIntent{CacheStrategy: "exact"}}
 
-	if outcome := reservationCacheOutcome(requestContext, snapshot); outcome != "miss" {
+	if outcome := reservationCacheOutcome(requestContext, snapshot, nil); outcome != "miss" {
 		t.Fatalf("eligible exact cache request must reserve as miss, got %q", outcome)
 	}
 
 	snapshot.Policies.Cache.Enabled = false
-	if outcome := reservationCacheOutcome(requestContext, snapshot); outcome != "off" {
+	if outcome := reservationCacheOutcome(requestContext, snapshot, nil); outcome != "off" {
 		t.Fatalf("disabled cache policy must reserve as off, got %q", outcome)
 	}
 
 	snapshot.Policies.Cache.Enabled = true
 	requestContext.UsageIntent.CacheStrategy = "off"
-	if outcome := reservationCacheOutcome(requestContext, snapshot); outcome != "off" {
+	if outcome := reservationCacheOutcome(requestContext, snapshot, nil); outcome != "off" {
 		t.Fatalf("cache-ineligible request must reserve as off, got %q", outcome)
 	}
 }
+
+func TestReservationCacheOutcomeDisablesCacheForObservedOrUnknownSafety(t *testing.T) {
+	digest := "sha256:" + strings.Repeat("A", 43)
+	requestContext := tenantchat.RequestContext{UsageIntent: &tenantchat.UsageIntent{CacheStrategy: "exact"}}
+	snapshot := tenantruntime.Snapshot{Policies: tenantruntime.Policies{
+		Cache:  tenantruntime.CachePolicy{Enabled: true, Strategy: "exact"},
+		Safety: tenantruntime.SafetyPolicy{Enabled: true},
+	}}
+
+	if outcome := reservationCacheOutcome(requestContext, snapshot, nil); outcome != "off" {
+		t.Fatalf("missing safety evidence must bypass cache, got %q", outcome)
+	}
+	for _, action := range []string{"redacted", "blocked"} {
+		summary := &tenantchat.SafetySummary{
+			MaskingAction: action, MaskingDetectedTypes: []string{"email"},
+			MaskingDetectedCount: 1, SafetyPolicyDigest: digest,
+		}
+		if outcome := reservationCacheOutcome(requestContext, snapshot, summary); outcome != "off" {
+			t.Fatalf("%s safety action must bypass cache, got %q", action, outcome)
+		}
+	}
+	none := &tenantchat.SafetySummary{
+		MaskingAction: "none", MaskingDetectedTypes: []string{}, SafetyPolicyDigest: digest,
+	}
+	if outcome := reservationCacheOutcome(requestContext, snapshot, none); outcome != "miss" {
+		t.Fatalf("explicit none must preserve cache eligibility, got %q", outcome)
+	}
+}
+
 func TestRestoreRoutingDifficultyPreservesExistingDecision(t *testing.T) {
 	difficulty := "complex"
 	existing := &tenantchat.RoutingDecision{

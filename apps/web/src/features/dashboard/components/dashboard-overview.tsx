@@ -264,7 +264,7 @@ const dashboardText: Record<
     keyMetrics: "대시보드 핵심 지표",
     kpi: {
       averageLatency: "평균 지연 시간",
-      monthCost: "이번 달 누적 비용",
+      monthCost: "이번 달 총 비용",
       totalCost: "총 비용",
       totalRequests: "총 요청"
     },
@@ -342,7 +342,7 @@ export function DashboardOverviewView({
       icon: <Timer aria-hidden="true" size={22} strokeWidth={2.2} />,
       label: text.kpi.averageLatency,
       tone: "violet",
-      value: formatLatency(overview.averageLatencyMs)
+      value: formatLatency(Math.round(overview.averageLatencyMs))
     },
     {
       icon: <WalletCards aria-hidden="true" size={22} strokeWidth={2.2} />,

@@ -36,6 +36,35 @@ describe('UpsertRuntimeConfigDraftDto routing policy v2', () => {
     whitelist: true,
   });
 
+  it('accepts a configurable rate limit window', async () => {
+    const payload = {
+      rateLimit: {
+        enabled: true,
+        limit: 60,
+        windowSeconds: 30,
+      },
+    };
+
+    await expect(
+      validationPipe.transform(payload, {
+        type: 'body',
+        metatype: UpsertRuntimeConfigDraftDto,
+      }),
+    ).resolves.toEqual(payload);
+  });
+
+  it('rejects an empty rate limit window', async () => {
+    await expect(
+      validationPipe.transform(
+        { rateLimit: { windowSeconds: 0 } },
+        {
+          type: 'body',
+          metatype: UpsertRuntimeConfigDraftDto,
+        },
+      ),
+    ).rejects.toThrow('Bad Request Exception');
+  });
+
   it('accepts the complete category by difficulty matrix', async () => {
     const payload = {
       routingPolicy: {
