@@ -136,7 +136,7 @@ describe('DashboardRollupService', () => {
       discoverProjectApplication: (
         client: typeof tx,
         cursor: {
-          cursor_at: Date;
+          cursor_at: string;
           cursor_key: string;
           last_reconciled_at: null;
         },
@@ -148,7 +148,7 @@ describe('DashboardRollupService', () => {
     await internals.discoverProjectApplication(
       tx,
       {
-        cursor_at: new Date('2026-01-01T00:00:00Z'),
+        cursor_at: '2026-01-01 00:00:00.123456+00',
         cursor_key: 'stale-request',
         last_reconciled_at: null,
       },
@@ -166,6 +166,71 @@ describe('DashboardRollupService', () => {
       new Date('2025-12-31T23:45:00Z'),
     );
   });
+
+  it.each([
+    {
+      source: 'project_application' as const,
+      sourceTimestampColumn: 'ingested_at',
+      sourceRow: {
+        request_id: 'request-tail',
+        tenant_id: tenantA,
+        created_at: new Date('2026-07-20T12:00:00Z'),
+        ingested_at: '2026-07-20 12:47:21.705353+00',
+      },
+    },
+    {
+      source: 'tenant_chat' as const,
+      sourceTimestampColumn: 'updated_at',
+      sourceRow: {
+        request_id: 'request-tail',
+        tenant_id: tenantA,
+        completed_at: new Date('2026-07-20T12:00:00Z'),
+        updated_at: '2026-07-20 12:47:21.705353+00',
+      },
+    },
+  ])(
+    'preserves the $source discovery cursor below millisecond precision',
+    async ({ source, sourceRow, sourceTimestampColumn }) => {
+      const preciseTimestamp = '2026-07-20 12:47:21.705353+00';
+      const queryRaw = jest
+        .fn()
+        .mockResolvedValueOnce([
+          {
+            cursor_at: preciseTimestamp,
+            cursor_key: 'request-before-tail',
+            last_reconciled_at: new Date(),
+          },
+        ])
+        .mockResolvedValueOnce([sourceRow]);
+      const executeRaw = jest.fn().mockResolvedValue(1);
+      const tx = { $executeRaw: executeRaw, $queryRaw: queryRaw };
+      const prisma = {
+        $transaction: jest.fn(
+          async (callback: (client: typeof tx) => unknown) => callback(tx),
+        ),
+      } as unknown as PrismaService;
+      const service = createService(prisma);
+      const internals = service as unknown as {
+        discoverSource: (value: typeof source) => Promise<number>;
+      };
+
+      await expect(internals.discoverSource(source)).resolves.toBe(1);
+
+      const cursorRead = rawQuery(queryRaw.mock.calls[0]?.[0]);
+      const sourceRead = rawQuery(queryRaw.mock.calls[1]?.[0]);
+      const cursorAdvance = rawQuery(executeRaw.mock.calls.at(-1)?.[0]);
+      expect(cursorRead.sql).toContain('cursor_at::text AS cursor_at');
+      expect(sourceRead.sql).toContain(
+        `${sourceTimestampColumn}::text AS ${sourceTimestampColumn}`,
+      );
+      expect(sourceRead.sql).toContain('::timestamptz');
+      expect(sourceRead.values).toContain(preciseTimestamp);
+      expect(cursorAdvance.sql).toContain(
+        'cursor_at = coalesce(?::timestamptz, cursor_at)',
+      );
+      expect(cursorAdvance.values).toContain(preciseTimestamp);
+    },
+  );
 
   it('records poison bucket backoff in a separate transaction', async () => {
     const executeRaw = jest.fn().mockResolvedValue(1);

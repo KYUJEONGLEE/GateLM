@@ -116,7 +116,25 @@ Rollup을 끈 상태에서 실패 버킷을 읽기 전용·단일 DB worker·최
 
 기존 쿼리는 source row를 8개 dimension으로 확장하는 동안 큰 JSON 표현식을 반복 평가하고, 30만 건이 넘는 중간 결과를 external merge sort했다. `filtered` CTE를 materialize해 JSON 파싱을 source row당 한 번으로 제한하자 light 비교 시간이 약 `75.1%` 감소했고, 실제 histogram을 포함한 읽기 전용 집계도 20초 제한 안에서 완료됐다. 결과값의 의미나 table schema를 바꾸지 않은 실행계획 최적화다.
 
-다만 이 수치는 37,886건 버킷의 단독 집계 결과다. Krafton 180,001건 hour bucket과 dashboard 동시 조회 조건을 통과했다는 증거는 아니며, 배포 후 낮은 Rollup 동시성으로 backlog를 순차 처리하면서 별도로 확인해야 한다.
+이 수치는 우선 37,886건 버킷의 읽기 전용 프로파일이었다. 이후 패치를 운영에 배포하고 Rollup worker는 비활성화한 채 단일 버킷 실행으로 82,123건과 180,008건 hour bucket도 별도로 검증했다. 이는 단일 집계가 60초 제한 안에 완료된다는 근거이며, Dashboard 동시 조회 조건까지 안전하다는 증거는 아니다.
+
+### 배포 후 제한된 backlog 복구 검증
+
+`filtered AS MATERIALIZED` 패치는 main SHA `d2a06ab3d9922028c21ac3155d172a628cd03e2c`로 배포했고 공개 인증 경계와 인증 Tenant Chat 실행 스모크를 통과했다. 상시 Rollup은 계속 끈 상태에서 discovery backlog를 읽기 전용으로 계산했다.
+
+| 항목 | 결과 |
+|---|---:|
+| 미발견 원본 로그 | 274,083건 |
+| 압축된 hour / day / month bucket | 3 / 2 / 2 |
+| 기존 실패 37,886건 hour bucket | 7.857초, `error → ready` |
+| 82,123건 hour bucket | 17.105초, 성공 |
+| 180,008건 hour bucket | 36.852초, 성공 |
+| 82,123건 처리 후 PostgreSQL | CPU 2.03%, 활성 쿼리 0건 |
+| 180,008건 처리 후 PostgreSQL | CPU 4.11%, 활성 쿼리 0건 |
+
+원본 274,083행은 수정하거나 삭제하지 않았다. cursor/dirty queue 상태를 SHA-256과 함께 별도 백업한 뒤, 같은 트랜잭션을 먼저 `ROLLBACK`으로 예행연습했다. 실제 반영에서는 로그를 tenant·UTC hour/day/month 기준 7개 dirty bucket으로 압축하고 source cursor만 마지막 수집 지점으로 이동했다. 각 bucket은 `DASHBOARD_ROLLUP_BUCKET_BATCH_SIZE=1`인 일회성 Control Plane process로 하나씩 실행했다.
+
+이 과정에서 source timestamp 정밀도 결함도 확인했다. PostgreSQL `timestamptz`의 `2026-07-20 12:47:21.705353+00`가 Node `Date`를 거치면서 `...21.705+00`로 잘렸고, 마지막 2개 로그가 매 실행마다 다시 discovery됐다. 그 결과 이미 완료한 180,008건 hour bucket이 다시 dirty queue에 들어갈 수 있었다. 따라서 상시 worker는 재활성화하지 않았고, cursor와 source timestamp를 DB 문자열로 전달해 마이크로초를 보존하는 후속 패치와 회귀 테스트를 추가했다.
 
 ## 6. 진단 과정
 
