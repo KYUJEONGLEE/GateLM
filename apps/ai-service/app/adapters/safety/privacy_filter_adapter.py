@@ -170,7 +170,7 @@ _GATELM_ADDRESS_ADMIN_SUFFIX_RE = re.compile(
     + _GATELM_ADDRESS_ADMIN_TOKEN
     + r"(?:\s+"
     + _GATELM_ADDRESS_ADMIN_TOKEN
-    + r"){0,2})\s+$"
+    + r"){0,2})\s*$"
 )
 
 

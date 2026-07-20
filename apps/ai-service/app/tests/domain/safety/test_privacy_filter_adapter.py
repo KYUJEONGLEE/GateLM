@@ -222,6 +222,30 @@ class PrivacyFilterAdapterTests(unittest.TestCase):
         self.assertEqual(detections[0].start, prefix_start)
         self.assertEqual(detections[0].end, address_start + len(address))
 
+    def test_gatelm_koelectra_expands_admin_suffix_without_space(self) -> None:
+        prefix = "서울특별시 강남구"
+        address = "테헤란로 123"
+        prompt = f"주소는 {prefix}{address}입니다."
+        prefix_start = prompt.index(prefix)
+        address_start = prompt.index(address)
+        adapter = PrivacyFilterAdapter(
+            classifier=lambda _text: [
+                {
+                    "entity_group": "ADDR",
+                    "score": 0.99,
+                    "start": address_start,
+                    "end": address_start + len(address),
+                }
+            ],
+            model_name=GATELM_KOELECTRA_PII_NER_MODEL,
+        )
+
+        detections = adapter.detect(prompt)
+
+        self.assertEqual(len(detections), 1)
+        self.assertEqual(detections[0].start, prefix_start)
+        self.assertEqual(detections[0].end, address_start + len(address))
+
     def test_gatelm_koelectra_does_not_merge_organization_suffix(self) -> None:
         organization = "한빛대학교"
         address = "서울특별시 강남구 테헤란로 123"

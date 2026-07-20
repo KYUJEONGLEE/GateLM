@@ -13,8 +13,8 @@
 - `rules-only-rollback.env`
 - 이 문서
 
-ZIP 크기는 11,004,765 bytes이며 SHA-256은
-`3d88ac516ba18da888a7400a757df98d6494be2ba9810d1a3a0ce579c2d8eb0b`이다.
+ZIP 크기는 11,004,908 bytes이며 SHA-256은
+`3c42b2dfb8e0b3e5a22bdb2c4669c9d08904c6d30aba482f82a8509306d2eb95`이다.
 모델 ONNX SHA-256은
 `8a5cb146e84d413910a423d304e662a6aba9f69e83db129f5061d007a6de9381`이다.
 
@@ -64,7 +64,7 @@ python scripts/tenant_chat_pii_models/run_gatelm_v314_synthetic_smoke.py \
 - 주소 F1: 99.5018%, 사람 이름 F1: 99.7805%
 - 설치된 번들의 6개 유형 합성 스모크: 모두 통과
 - `너의이름은?` 한 글자 이름 오탐 회귀: 통과
-- 로컬 p95 11.181ms는 참고값이며 운영 네트워크 E2E 수치는 아직 아님
+- 로컬 p95 15.057ms는 참고값이며 운영 네트워크 E2E 수치는 아직 아님
 
 ## 실패 시 복구
 

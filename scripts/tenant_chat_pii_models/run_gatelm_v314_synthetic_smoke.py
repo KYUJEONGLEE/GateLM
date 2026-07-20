@@ -75,6 +75,12 @@ def main() -> None:
             "서울특별시 강남구 테헤란로 123",
         ),
         (
+            "postal_address_no_space",
+            "배송지는 서울특별시 강남구테헤란로 123입니다.",
+            "postal_address",
+            "서울특별시 강남구테헤란로 123",
+        ),
+        (
             "resident_registration_number",
             "확인용 주민등록번호는 900101-1234567입니다.",
             "resident_registration_number",

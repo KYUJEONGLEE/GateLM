@@ -25,16 +25,17 @@
     "singleKoreanSyllablePersonFragmentRejected": true,
     "adjacentAddressFragmentRepair": true,
     "immediateAdministrativeSuffixRepair": true,
+    "noWhitespaceAdministrativeSuffixRepair": true,
     "commonOrganizationSuffixExclusion": true
   },
   "productAdapterFrozenGate": {
-    "reportSha256": "1f188fcf4637747675a83752deeab555798123a7a0e8563cdd4510328b5ebb0f",
+    "reportSha256": "4030b035301be197198312004d0349a454c011f8ca8e7b25f365774013d1ae34",
     "datasetSha256": "64764cd4a99755c281691ad114098b6a0f33ad17cc358cb4aa9ef03ab860ba1c",
     "recordCount": 5000,
     "exactMatchRate": 0.9832,
     "microF1": 0.98716,
     "negativeFalsePositiveCount": 0,
-    "p95MsLocalReference": 11.181,
+    "p95MsLocalReference": 15.057,
     "decision": "pass",
     "byType": {
       "organization_name": {"precision": 0.920844, "recall": 0.930667, "f1": 0.925729},
@@ -44,7 +45,7 @@
     }
   },
   "sixTypeValidation": {
-    "reportSha256": "0f1046775dd61ded9286a451b221c8475a907409893458be0dcfdc61df2fdb6e",
+    "reportSha256": "276b3c6df7b45f21adffe8a622bf1f68b57cfe65b514fca61189fbcac3bcde4",
     "recordCount": 4270,
     "exactMatchRate": 0.989461,
     "microF1": 0.989862,
@@ -57,6 +58,16 @@
       "postal_address": 0.985834,
       "resident_registration_number": 0.947368
     }
+  },
+  "privateRegression": {
+    "reportSha256": "514daef6620af4f13276d78941c48a93690e5d258c8f7e85472296f337617bec",
+    "datasetSha256": "8ea3a2c945abac99858420b32c7a89db0ac6eefd20a794b1235145d38e7a7b63",
+    "recordCount": 1000,
+    "exactMatchRate": 0.991,
+    "microF1": 0.994595,
+    "negativeFalsePositiveCount": 0,
+    "postalAddressF1": 1.0,
+    "p95MsLocalReference": 18.118
   },
   "releaseDecision": "deployment-package-ready",
   "productionActivationPerformed": false,
