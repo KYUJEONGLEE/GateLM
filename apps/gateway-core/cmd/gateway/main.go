@@ -576,7 +576,7 @@ func initializeDifficultyE5Shadow(
 		ctx,
 		cfg,
 		factory,
-		routingdomain.DifficultySemanticShadowModelCompatible,
+		routingdomain.DifficultyB1ShadowModelCompatible,
 	)
 }
 
@@ -586,6 +586,8 @@ func initializeDifficultyE5ShadowWithCompatibility(
 	factory difficultyE5EncoderFactory,
 	compatible difficultyE5ModelCompatibility,
 ) (*routingdomain.DifficultySemanticShadowEvaluator, error) {
+	_ = ctx
+	_ = factory
 	if !cfg.HasAllowedScopes() {
 		return nil, nil
 	}
@@ -593,16 +595,13 @@ func initializeDifficultyE5ShadowWithCompatibility(
 		(!compatible() && !routingdomain.DifficultySemanticShadowBaselineWaiverAccepted(cfg.BaselineWaiver)) {
 		return nil, errors.New("unavailable")
 	}
-	if factory == nil {
-		return nil, errors.New("unavailable")
+	evaluator := routingdomain.NewDifficultyB1ShadowEvaluator()
+	features := routingdomain.ExtractPromptFeatures(difficultyE5StartupSmokeInstruction)
+	category := routingdomain.NewRuleBasedCategoryClassifier().ClassifyFeatures(features).Category
+	if result := evaluator.Evaluate(context.Background(), features, category); result.Status != routingdomain.DifficultySemanticShadowReady {
+		return nil, fmt.Errorf("startup_smoke_%s", result.Status)
 	}
-	return initializeDifficultyE5Evaluator(
-		ctx,
-		cfg.ArtifactRoot,
-		cfg.EncoderManifestPath,
-		cfg.RuntimeLockPath,
-		factory,
-	)
+	return evaluator, nil
 }
 
 func initializeDifficultyE5Evaluator(

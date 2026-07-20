@@ -1,0 +1,434 @@
+{
+  "schemaVersion": "gatelm.difficulty-independent-ood-gpt-review-packet-manifest.v1",
+  "datasetVersion": "difficulty_independent_ood_5000_2026_07_18_candidate_v1",
+  "reviewMode": "blind_independent_automated_annotation",
+  "sourceBlindReviewPath": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/difficulty-independent-ood-5000.v1.blind-review.jsonl",
+  "sourceBlindReviewSha256": "bb253b94e7e107cd7ba09cb727070dea2addd3801956fe50f35ad779c394b9ea",
+  "instructionsPath": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/chatgpt-review-kit/GPT-REVIEW-INSTRUCTIONS.md",
+  "instructionsSha256": "6600b19e62fc21e75bfd188362a9accf2f791245b41b9f6bb3acbba2bfe552fe",
+  "labelGuidePath": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/chatgpt-review-kit/LABEL-GUIDE.md",
+  "labelGuideSha256": "75163e58171bbf14b8d2ae8d0fa4c9129591786c0c5a55c102e0a92db0cc20ac",
+  "reviewerCommands": {
+    "reviewer_a": {
+      "path": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/chatgpt-review-kit/CHATGPT-COMMAND-REVIEWER-A.md",
+      "sha256": "ae468ca34c85a73e66a0fbed5ef682a6b4847763be05609777ddf91a889024cb"
+    },
+    "reviewer_b": {
+      "path": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/chatgpt-review-kit/CHATGPT-COMMAND-REVIEWER-B.md",
+      "sha256": "c7fee1b6092503447330e8ad21a6e60e0de93a25e285ab3f4adc3d3b95945fe8"
+    }
+  },
+  "batchSize": 100,
+  "batchCount": 50,
+  "records": 5000,
+  "provisionalLabelsIncluded": false,
+  "promptFamilyIncluded": false,
+  "datasetSplitIncluded": false,
+  "classifierOutputsIncluded": false,
+  "automatedReviewOnly": true,
+  "confersHumanReviewStatus": false,
+  "trainingEligible": false,
+  "packets": [
+    {
+      "batchId": "batch-001",
+      "records": 100,
+      "inputPath": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/chatgpt-review-kit/packets/difficulty-independent-ood-5000.gpt-review.batch-001.input.jsonl",
+      "inputSha256": "317c74c077c4849e57079e549219a7e76ea183a2ad2913311b5049a185be1f4f",
+      "reviewerAOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-a.batch-001.output.jsonl",
+      "reviewerBOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-b.batch-001.output.jsonl"
+    },
+    {
+      "batchId": "batch-002",
+      "records": 100,
+      "inputPath": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/chatgpt-review-kit/packets/difficulty-independent-ood-5000.gpt-review.batch-002.input.jsonl",
+      "inputSha256": "1a94e0383a4c4b07d196291756a713c4a05f0e7594b49bbbc95689d0e07c60d1",
+      "reviewerAOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-a.batch-002.output.jsonl",
+      "reviewerBOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-b.batch-002.output.jsonl"
+    },
+    {
+      "batchId": "batch-003",
+      "records": 100,
+      "inputPath": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/chatgpt-review-kit/packets/difficulty-independent-ood-5000.gpt-review.batch-003.input.jsonl",
+      "inputSha256": "c7882e7da75e63abed4ae9b92c23002efdd20531f91f0ef644118f864ede7a4d",
+      "reviewerAOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-a.batch-003.output.jsonl",
+      "reviewerBOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-b.batch-003.output.jsonl"
+    },
+    {
+      "batchId": "batch-004",
+      "records": 100,
+      "inputPath": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/chatgpt-review-kit/packets/difficulty-independent-ood-5000.gpt-review.batch-004.input.jsonl",
+      "inputSha256": "e46e3bcf47738feae22f44c5469115cc2127e6df803f797896c99fd528331dd0",
+      "reviewerAOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-a.batch-004.output.jsonl",
+      "reviewerBOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-b.batch-004.output.jsonl"
+    },
+    {
+      "batchId": "batch-005",
+      "records": 100,
+      "inputPath": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/chatgpt-review-kit/packets/difficulty-independent-ood-5000.gpt-review.batch-005.input.jsonl",
+      "inputSha256": "d54467442bef61aa08291c18983052c4ffe1d877105e82fd7f77aa3961890616",
+      "reviewerAOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-a.batch-005.output.jsonl",
+      "reviewerBOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-b.batch-005.output.jsonl"
+    },
+    {
+      "batchId": "batch-006",
+      "records": 100,
+      "inputPath": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/chatgpt-review-kit/packets/difficulty-independent-ood-5000.gpt-review.batch-006.input.jsonl",
+      "inputSha256": "912309a4b5594940fc1e84b264367aeec6abc4e90e2408869c6713bf9a8286b8",
+      "reviewerAOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-a.batch-006.output.jsonl",
+      "reviewerBOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-b.batch-006.output.jsonl"
+    },
+    {
+      "batchId": "batch-007",
+      "records": 100,
+      "inputPath": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/chatgpt-review-kit/packets/difficulty-independent-ood-5000.gpt-review.batch-007.input.jsonl",
+      "inputSha256": "94bc673b3d2ae62c311936e783370415a052599aa862ad1202dbc945fd13d92c",
+      "reviewerAOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-a.batch-007.output.jsonl",
+      "reviewerBOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-b.batch-007.output.jsonl"
+    },
+    {
+      "batchId": "batch-008",
+      "records": 100,
+      "inputPath": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/chatgpt-review-kit/packets/difficulty-independent-ood-5000.gpt-review.batch-008.input.jsonl",
+      "inputSha256": "4550cd262e9210ea66e37d622cb2cb27cbdaa614e21920d5effac3d84ab8b73f",
+      "reviewerAOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-a.batch-008.output.jsonl",
+      "reviewerBOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-b.batch-008.output.jsonl"
+    },
+    {
+      "batchId": "batch-009",
+      "records": 100,
+      "inputPath": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/chatgpt-review-kit/packets/difficulty-independent-ood-5000.gpt-review.batch-009.input.jsonl",
+      "inputSha256": "2c1aa07524619d5821f149560ca7210fb2ea609265e124e86f51ab0bec3d61ed",
+      "reviewerAOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-a.batch-009.output.jsonl",
+      "reviewerBOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-b.batch-009.output.jsonl"
+    },
+    {
+      "batchId": "batch-010",
+      "records": 100,
+      "inputPath": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/chatgpt-review-kit/packets/difficulty-independent-ood-5000.gpt-review.batch-010.input.jsonl",
+      "inputSha256": "6d9513c9c653766330cee98f3e03e0b9ffe101dd78c97c31afc93efb7b2e1c9a",
+      "reviewerAOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-a.batch-010.output.jsonl",
+      "reviewerBOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-b.batch-010.output.jsonl"
+    },
+    {
+      "batchId": "batch-011",
+      "records": 100,
+      "inputPath": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/chatgpt-review-kit/packets/difficulty-independent-ood-5000.gpt-review.batch-011.input.jsonl",
+      "inputSha256": "5415940efa47714308f40a308f2a4bd15ed1dd58bc4c47d3aa79a8c7ff69a377",
+      "reviewerAOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-a.batch-011.output.jsonl",
+      "reviewerBOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-b.batch-011.output.jsonl"
+    },
+    {
+      "batchId": "batch-012",
+      "records": 100,
+      "inputPath": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/chatgpt-review-kit/packets/difficulty-independent-ood-5000.gpt-review.batch-012.input.jsonl",
+      "inputSha256": "07f235b9ad0d2b0613705eaa3cdf949baab2dac7fa584bd3eadb47bdde0dd85f",
+      "reviewerAOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-a.batch-012.output.jsonl",
+      "reviewerBOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-b.batch-012.output.jsonl"
+    },
+    {
+      "batchId": "batch-013",
+      "records": 100,
+      "inputPath": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/chatgpt-review-kit/packets/difficulty-independent-ood-5000.gpt-review.batch-013.input.jsonl",
+      "inputSha256": "d5f5a2a7dc4e1e528e7cbd418eb9ab86f4a215f81093fbe12499f478a2a15c0a",
+      "reviewerAOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-a.batch-013.output.jsonl",
+      "reviewerBOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-b.batch-013.output.jsonl"
+    },
+    {
+      "batchId": "batch-014",
+      "records": 100,
+      "inputPath": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/chatgpt-review-kit/packets/difficulty-independent-ood-5000.gpt-review.batch-014.input.jsonl",
+      "inputSha256": "b35087460e76cb43fb88cafd2a4b7db21853b18f5beedf2693c32e156b6ae559",
+      "reviewerAOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-a.batch-014.output.jsonl",
+      "reviewerBOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-b.batch-014.output.jsonl"
+    },
+    {
+      "batchId": "batch-015",
+      "records": 100,
+      "inputPath": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/chatgpt-review-kit/packets/difficulty-independent-ood-5000.gpt-review.batch-015.input.jsonl",
+      "inputSha256": "2fc693f59ad6605e88eb293b27a3281b59e510ed547eea4609c49bee1db7650a",
+      "reviewerAOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-a.batch-015.output.jsonl",
+      "reviewerBOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-b.batch-015.output.jsonl"
+    },
+    {
+      "batchId": "batch-016",
+      "records": 100,
+      "inputPath": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/chatgpt-review-kit/packets/difficulty-independent-ood-5000.gpt-review.batch-016.input.jsonl",
+      "inputSha256": "d8bb492bde20eae12652b05b90e77829b4a2473699c2af43890c5ff0a0635fb6",
+      "reviewerAOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-a.batch-016.output.jsonl",
+      "reviewerBOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-b.batch-016.output.jsonl"
+    },
+    {
+      "batchId": "batch-017",
+      "records": 100,
+      "inputPath": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/chatgpt-review-kit/packets/difficulty-independent-ood-5000.gpt-review.batch-017.input.jsonl",
+      "inputSha256": "6919b87dc395b3f556e7a0e1a6ca0dc0d46e8f4a03ce52fc1522264d085804a0",
+      "reviewerAOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-a.batch-017.output.jsonl",
+      "reviewerBOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-b.batch-017.output.jsonl"
+    },
+    {
+      "batchId": "batch-018",
+      "records": 100,
+      "inputPath": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/chatgpt-review-kit/packets/difficulty-independent-ood-5000.gpt-review.batch-018.input.jsonl",
+      "inputSha256": "07073a3b7286f6596361bfaf2c0d9301f99ad753882bbaffffb5d814db9a156e",
+      "reviewerAOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-a.batch-018.output.jsonl",
+      "reviewerBOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-b.batch-018.output.jsonl"
+    },
+    {
+      "batchId": "batch-019",
+      "records": 100,
+      "inputPath": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/chatgpt-review-kit/packets/difficulty-independent-ood-5000.gpt-review.batch-019.input.jsonl",
+      "inputSha256": "2df7b1bbb1626d25fed666f22ac13e8e153c022be7bc01dd52f269806b1a3202",
+      "reviewerAOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-a.batch-019.output.jsonl",
+      "reviewerBOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-b.batch-019.output.jsonl"
+    },
+    {
+      "batchId": "batch-020",
+      "records": 100,
+      "inputPath": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/chatgpt-review-kit/packets/difficulty-independent-ood-5000.gpt-review.batch-020.input.jsonl",
+      "inputSha256": "b4b4770ceb7044de9a124a04ca0523fe364f2ba3b8c3faed24e7a18f1669a7f3",
+      "reviewerAOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-a.batch-020.output.jsonl",
+      "reviewerBOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-b.batch-020.output.jsonl"
+    },
+    {
+      "batchId": "batch-021",
+      "records": 100,
+      "inputPath": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/chatgpt-review-kit/packets/difficulty-independent-ood-5000.gpt-review.batch-021.input.jsonl",
+      "inputSha256": "123a3ade87f178c25263fa900f69150b6cec1541e564e66589980df4b29aa0e2",
+      "reviewerAOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-a.batch-021.output.jsonl",
+      "reviewerBOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-b.batch-021.output.jsonl"
+    },
+    {
+      "batchId": "batch-022",
+      "records": 100,
+      "inputPath": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/chatgpt-review-kit/packets/difficulty-independent-ood-5000.gpt-review.batch-022.input.jsonl",
+      "inputSha256": "66c947d4d2d3f607344b14a7438571c2a23b2f26d9b9d19a9dd0c74c70378f5b",
+      "reviewerAOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-a.batch-022.output.jsonl",
+      "reviewerBOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-b.batch-022.output.jsonl"
+    },
+    {
+      "batchId": "batch-023",
+      "records": 100,
+      "inputPath": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/chatgpt-review-kit/packets/difficulty-independent-ood-5000.gpt-review.batch-023.input.jsonl",
+      "inputSha256": "7154b322ea92253869ea56cf1289bf29ecf173faf85774890e744087de990c52",
+      "reviewerAOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-a.batch-023.output.jsonl",
+      "reviewerBOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-b.batch-023.output.jsonl"
+    },
+    {
+      "batchId": "batch-024",
+      "records": 100,
+      "inputPath": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/chatgpt-review-kit/packets/difficulty-independent-ood-5000.gpt-review.batch-024.input.jsonl",
+      "inputSha256": "f23a8c5e725dac6054107963ba91bf198d84baaf2fa310dcdf29f99bb5f019a0",
+      "reviewerAOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-a.batch-024.output.jsonl",
+      "reviewerBOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-b.batch-024.output.jsonl"
+    },
+    {
+      "batchId": "batch-025",
+      "records": 100,
+      "inputPath": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/chatgpt-review-kit/packets/difficulty-independent-ood-5000.gpt-review.batch-025.input.jsonl",
+      "inputSha256": "7431440668cb59871f0fad6910d2dd0a7d21c33b9c9910c6c7de2e2f47df1700",
+      "reviewerAOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-a.batch-025.output.jsonl",
+      "reviewerBOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-b.batch-025.output.jsonl"
+    },
+    {
+      "batchId": "batch-026",
+      "records": 100,
+      "inputPath": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/chatgpt-review-kit/packets/difficulty-independent-ood-5000.gpt-review.batch-026.input.jsonl",
+      "inputSha256": "990868a8e60624682c5eb7e2933a39faddcdd6e56f0fcffb4786ee17fbc5052f",
+      "reviewerAOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-a.batch-026.output.jsonl",
+      "reviewerBOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-b.batch-026.output.jsonl"
+    },
+    {
+      "batchId": "batch-027",
+      "records": 100,
+      "inputPath": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/chatgpt-review-kit/packets/difficulty-independent-ood-5000.gpt-review.batch-027.input.jsonl",
+      "inputSha256": "5332777d0944ef8eea2aadb3bd0736bf717d0f30350674eec03714de107482de",
+      "reviewerAOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-a.batch-027.output.jsonl",
+      "reviewerBOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-b.batch-027.output.jsonl"
+    },
+    {
+      "batchId": "batch-028",
+      "records": 100,
+      "inputPath": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/chatgpt-review-kit/packets/difficulty-independent-ood-5000.gpt-review.batch-028.input.jsonl",
+      "inputSha256": "c976a0a52893100fa2d8aada049e447431b4eb363bc1a11a452094e228d09750",
+      "reviewerAOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-a.batch-028.output.jsonl",
+      "reviewerBOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-b.batch-028.output.jsonl"
+    },
+    {
+      "batchId": "batch-029",
+      "records": 100,
+      "inputPath": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/chatgpt-review-kit/packets/difficulty-independent-ood-5000.gpt-review.batch-029.input.jsonl",
+      "inputSha256": "9498a47c678f72de80c8201a4511a2c331f792b595c958a21f823310f10edf61",
+      "reviewerAOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-a.batch-029.output.jsonl",
+      "reviewerBOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-b.batch-029.output.jsonl"
+    },
+    {
+      "batchId": "batch-030",
+      "records": 100,
+      "inputPath": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/chatgpt-review-kit/packets/difficulty-independent-ood-5000.gpt-review.batch-030.input.jsonl",
+      "inputSha256": "e1c74f64f084755d1b17ff6ea75161beadeceb80c031210b991af3ff83420d5c",
+      "reviewerAOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-a.batch-030.output.jsonl",
+      "reviewerBOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-b.batch-030.output.jsonl"
+    },
+    {
+      "batchId": "batch-031",
+      "records": 100,
+      "inputPath": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/chatgpt-review-kit/packets/difficulty-independent-ood-5000.gpt-review.batch-031.input.jsonl",
+      "inputSha256": "dfdc4acaf2b24cdcb519040182e125f72388d4d459b8f22aeda0caf28db20d69",
+      "reviewerAOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-a.batch-031.output.jsonl",
+      "reviewerBOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-b.batch-031.output.jsonl"
+    },
+    {
+      "batchId": "batch-032",
+      "records": 100,
+      "inputPath": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/chatgpt-review-kit/packets/difficulty-independent-ood-5000.gpt-review.batch-032.input.jsonl",
+      "inputSha256": "046ed05a3ee221f1136a1bf5e582be6201938bda668f94d8426d637aaaa55c95",
+      "reviewerAOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-a.batch-032.output.jsonl",
+      "reviewerBOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-b.batch-032.output.jsonl"
+    },
+    {
+      "batchId": "batch-033",
+      "records": 100,
+      "inputPath": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/chatgpt-review-kit/packets/difficulty-independent-ood-5000.gpt-review.batch-033.input.jsonl",
+      "inputSha256": "73f0966f74719e1b3f5fb508d324f86398923375b8f4cbd93df9bd35be43af90",
+      "reviewerAOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-a.batch-033.output.jsonl",
+      "reviewerBOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-b.batch-033.output.jsonl"
+    },
+    {
+      "batchId": "batch-034",
+      "records": 100,
+      "inputPath": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/chatgpt-review-kit/packets/difficulty-independent-ood-5000.gpt-review.batch-034.input.jsonl",
+      "inputSha256": "005ce3df98511911cb864e1d33461d90484b0e92057a627af144f88e9455c2cc",
+      "reviewerAOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-a.batch-034.output.jsonl",
+      "reviewerBOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-b.batch-034.output.jsonl"
+    },
+    {
+      "batchId": "batch-035",
+      "records": 100,
+      "inputPath": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/chatgpt-review-kit/packets/difficulty-independent-ood-5000.gpt-review.batch-035.input.jsonl",
+      "inputSha256": "5ad6e165b7728662ce60286ef8963d5d4143b9322779a6f93bea8c0609fc3150",
+      "reviewerAOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-a.batch-035.output.jsonl",
+      "reviewerBOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-b.batch-035.output.jsonl"
+    },
+    {
+      "batchId": "batch-036",
+      "records": 100,
+      "inputPath": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/chatgpt-review-kit/packets/difficulty-independent-ood-5000.gpt-review.batch-036.input.jsonl",
+      "inputSha256": "99bf0c2a54f536a56cc03b484588c991b46c74d9bde3cf1b7cfdc91146024e0c",
+      "reviewerAOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-a.batch-036.output.jsonl",
+      "reviewerBOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-b.batch-036.output.jsonl"
+    },
+    {
+      "batchId": "batch-037",
+      "records": 100,
+      "inputPath": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/chatgpt-review-kit/packets/difficulty-independent-ood-5000.gpt-review.batch-037.input.jsonl",
+      "inputSha256": "bfd4a2351a5c319aa099a7d6c91c52c7b9d81703518c0f18c14f24293dbea1bd",
+      "reviewerAOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-a.batch-037.output.jsonl",
+      "reviewerBOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-b.batch-037.output.jsonl"
+    },
+    {
+      "batchId": "batch-038",
+      "records": 100,
+      "inputPath": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/chatgpt-review-kit/packets/difficulty-independent-ood-5000.gpt-review.batch-038.input.jsonl",
+      "inputSha256": "dab0d111ca463753511c0611c6a9a14cda1412d7f27e830d2d5657bc0b369a7e",
+      "reviewerAOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-a.batch-038.output.jsonl",
+      "reviewerBOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-b.batch-038.output.jsonl"
+    },
+    {
+      "batchId": "batch-039",
+      "records": 100,
+      "inputPath": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/chatgpt-review-kit/packets/difficulty-independent-ood-5000.gpt-review.batch-039.input.jsonl",
+      "inputSha256": "4fee0ffc80b5cd745ddf8b310726a6b967ac2e020e0ba37aa04026913bcc16c4",
+      "reviewerAOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-a.batch-039.output.jsonl",
+      "reviewerBOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-b.batch-039.output.jsonl"
+    },
+    {
+      "batchId": "batch-040",
+      "records": 100,
+      "inputPath": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/chatgpt-review-kit/packets/difficulty-independent-ood-5000.gpt-review.batch-040.input.jsonl",
+      "inputSha256": "8e36199f6a828c80230ee046d9081aa8191acc3a79293ba77732a97b1156a8bb",
+      "reviewerAOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-a.batch-040.output.jsonl",
+      "reviewerBOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-b.batch-040.output.jsonl"
+    },
+    {
+      "batchId": "batch-041",
+      "records": 100,
+      "inputPath": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/chatgpt-review-kit/packets/difficulty-independent-ood-5000.gpt-review.batch-041.input.jsonl",
+      "inputSha256": "4e780d5141c44963f3dbf35deb56a0d242344713c8c733e2d94a58fdacc7da59",
+      "reviewerAOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-a.batch-041.output.jsonl",
+      "reviewerBOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-b.batch-041.output.jsonl"
+    },
+    {
+      "batchId": "batch-042",
+      "records": 100,
+      "inputPath": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/chatgpt-review-kit/packets/difficulty-independent-ood-5000.gpt-review.batch-042.input.jsonl",
+      "inputSha256": "3e8dd177cad5ab1dd69be31d854e5792888b184726702962c658796251110bc5",
+      "reviewerAOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-a.batch-042.output.jsonl",
+      "reviewerBOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-b.batch-042.output.jsonl"
+    },
+    {
+      "batchId": "batch-043",
+      "records": 100,
+      "inputPath": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/chatgpt-review-kit/packets/difficulty-independent-ood-5000.gpt-review.batch-043.input.jsonl",
+      "inputSha256": "9d1d1fafb337f0a61cb8dffd24a7d06730736e3d59bb1970422e88acc387e1cd",
+      "reviewerAOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-a.batch-043.output.jsonl",
+      "reviewerBOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-b.batch-043.output.jsonl"
+    },
+    {
+      "batchId": "batch-044",
+      "records": 100,
+      "inputPath": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/chatgpt-review-kit/packets/difficulty-independent-ood-5000.gpt-review.batch-044.input.jsonl",
+      "inputSha256": "60f8eccbed14df550ddce9fd49e055e862d05a679c807b105729c0abe74c648f",
+      "reviewerAOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-a.batch-044.output.jsonl",
+      "reviewerBOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-b.batch-044.output.jsonl"
+    },
+    {
+      "batchId": "batch-045",
+      "records": 100,
+      "inputPath": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/chatgpt-review-kit/packets/difficulty-independent-ood-5000.gpt-review.batch-045.input.jsonl",
+      "inputSha256": "71ab793b1dddaf21dc9c15855af2e5f3c7d126d1e04e84703f9d50d445c67aa9",
+      "reviewerAOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-a.batch-045.output.jsonl",
+      "reviewerBOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-b.batch-045.output.jsonl"
+    },
+    {
+      "batchId": "batch-046",
+      "records": 100,
+      "inputPath": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/chatgpt-review-kit/packets/difficulty-independent-ood-5000.gpt-review.batch-046.input.jsonl",
+      "inputSha256": "671b5db410714b517c99a3deccdc6dea7a2e16a297c36075f1f03af88b80841f",
+      "reviewerAOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-a.batch-046.output.jsonl",
+      "reviewerBOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-b.batch-046.output.jsonl"
+    },
+    {
+      "batchId": "batch-047",
+      "records": 100,
+      "inputPath": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/chatgpt-review-kit/packets/difficulty-independent-ood-5000.gpt-review.batch-047.input.jsonl",
+      "inputSha256": "be9b3633e4bf1fd5ed063f6c51767e79337cefdd81c704f3a4d292e684466b2f",
+      "reviewerAOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-a.batch-047.output.jsonl",
+      "reviewerBOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-b.batch-047.output.jsonl"
+    },
+    {
+      "batchId": "batch-048",
+      "records": 100,
+      "inputPath": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/chatgpt-review-kit/packets/difficulty-independent-ood-5000.gpt-review.batch-048.input.jsonl",
+      "inputSha256": "d3eb764e9084d23dc7f990f9658b072af2d3e621a803af5622ed815deaa232b8",
+      "reviewerAOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-a.batch-048.output.jsonl",
+      "reviewerBOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-b.batch-048.output.jsonl"
+    },
+    {
+      "batchId": "batch-049",
+      "records": 100,
+      "inputPath": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/chatgpt-review-kit/packets/difficulty-independent-ood-5000.gpt-review.batch-049.input.jsonl",
+      "inputSha256": "9758d8ec3ff446b667091057ac00883b1e9f82397072c12fdb320b3e2b46f781",
+      "reviewerAOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-a.batch-049.output.jsonl",
+      "reviewerBOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-b.batch-049.output.jsonl"
+    },
+    {
+      "batchId": "batch-050",
+      "records": 100,
+      "inputPath": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/chatgpt-review-kit/packets/difficulty-independent-ood-5000.gpt-review.batch-050.input.jsonl",
+      "inputSha256": "ec992f32632ed048066c2e0ddccda5781de5f3a6ab98437995c5273dd059fa67",
+      "reviewerAOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-a.batch-050.output.jsonl",
+      "reviewerBOutputName": "difficulty-independent-ood-5000.gpt-review.reviewer-b.batch-050.output.jsonl"
+    }
+  ],
+  "createdAt": "2026-07-19T00:00:00Z"
+}

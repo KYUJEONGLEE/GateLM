@@ -35,6 +35,7 @@ Self-host 계획과 산출물이 존재한다는 사실만으로 current HEAD의
 | `schemas/difficulty-label-record.schema.json` | 4-head·12차원 target class order와 empty-instruction fail-closed를 포함하는 canonical v2 annotation schema |
 | `schemas/difficulty-label-dataset-manifest.schema.json` | Semantic-head eligibility, family 수, slice coverage와 training gate를 관리하는 canonical v2 manifest schema |
 | `schemas/difficulty-model-path-role-manifest.schema.json` | Owner-approved model-path 5,000건의 weight-fit, calibration, evaluation holdout, promotion holdout 역할과 freeze 경계를 고정하는 schema |
+| `schemas/difficulty-independent-dataset-split-manifest.schema.json` | Dataset 2의 train/validation/test family split, Dataset 1 generation isolation과 blind review artifact hash를 고정하는 schema |
 | `schemas/difficulty-label-record.v1.schema.json` | 이전 bucket taxonomy의 non-active historical snapshot |
 | `schemas/difficulty-label-dataset-manifest.v1.schema.json` | 이전 label manifest의 non-active historical snapshot |
 | `fixtures/difficulty-label-contract-smoke.*` | 필수 label/slice를 검증하는 5개 family의 synthetic contract smoke와 manifest |
@@ -48,6 +49,16 @@ Self-host 계획과 산출물이 존재한다는 사실만으로 current HEAD의
 | `reviews/difficulty-training-candidate-expansion-2000.owner-approval.json` | 명시적 전체 승인, 3차 GPT 검토, synthetic provenance와 artifact hash를 분리 기록한 promotion evidence |
 | `evaluation/difficulty-promotion-holdout-100.v1.json` | Expansion holdout에서 score access 전에 category-balanced whole-family 100건과 v3 artifact·gate를 고정한 promotion freeze |
 | `../testing/difficulty-promotion-holdout-100-result.json` | 첫 single-request promotion evaluation의 aggregate-only 실패 evidence; accuracy 0.70, complex→simple 0, category 비악화 통과 |
+| `evaluation/difficulty-independent-ood-5000.v1.candidate.jsonl` | Dataset 1 생성기와 family namespace를 공유하지 않는 5,000건/1,000-family independent OOD review candidate; 학습 및 성능 evidence 불가 |
+| `evaluation/difficulty-independent-ood-5000.v1.candidate.manifest.json` | `independent_dataset_candidate`, pending review와 `trainingEligible=false`를 고정하는 canonical v2 manifest |
+| `evaluation/difficulty-independent-ood-5000.v1.train.jsonl` | Human approval 이후에만 weight fit 후보가 되는 3,000건/600-family split |
+| `evaluation/difficulty-independent-ood-5000.v1.validation.jsonl` | Human approval 이후에만 model·calibrator·threshold 선택 후보가 되는 1,000건/200-family split |
+| `evaluation/difficulty-independent-ood-5000.v1.test.jsonl` | 모든 선택이 끝난 뒤 final evaluation에만 사용하는 1,000건/200-family split |
+| `evaluation/difficulty-independent-ood-5000.v1.splits.json` | 600/200/200 family assignment, split hash와 validation→calibration/test→holdout 표준 projection |
+| `evaluation/difficulty-independent-ood-5000.v1.diversity-report.json` | Dataset 1 exact/normalized/family overlap, post-generation word 4-gram 감사와 Dataset 2 표현 다양성 집계 |
+| `reviews/difficulty-independent-ood-5000/difficulty-independent-ood-5000.v1.blind-review.jsonl` | provisional label·category·family·split을 제거한 2인 독립 검토 입력 |
+| `reviews/difficulty-independent-ood-5000/chatgpt-review-kit/` | Blind input을 100건×50 batch로 나눈 ChatGPT 직접 전달용 AI 보조 검토 package; human approval이나 training eligibility를 단독으로 의미하지 않음 |
+| `reviews/difficulty-independent-ood-5000/chatgpt-review-kit/results/reviewer-a/` | Reviewer A 5,000건의 검증된 raw evidence, provisional agreement report와 core/quality/structure/slice 우선순위 owner queue |
 | `../routing/difficulty-e5-encoder.md` | Pinned E5 QInt8, masked mean, train-only PCA 384→64와 local cache/Docker packaging을 고정하는 canonical offline component contract |
 | `../../scripts/routing_difficulty_model/artifacts/difficulty-e5-*` | Committed PCA NPZ와 immutable encoder/PCA manifest; large tokenizer/ONNX artifact는 제외 |
 | `schemas/difficulty-training-split-manifest.schema.json` | 500건 smoke tooling의 family-disjoint partition manifest schema |
@@ -55,6 +66,7 @@ Self-host 계획과 산출물이 존재한다는 사실만으로 current HEAD의
 | `schemas/difficulty-model-artifact.schema.json` | Offline Logistic Regression·calibrator candidate artifact schema |
 | `schemas/difficulty-offline-model-artifact.schema.json` | Canonical P=64 semantic candidate `42 / 106 / 118`의 component parameter, classifier/calibrator와 dataset/split/training provenance를 고정하는 별도 offline/shadow artifact schema; v1 parser와 runtime은 수용하지 않음 |
 | `routing-advanced-plan.md` | Evaluation-based routing plan |
+| `difficulty-continuous-improvement-plan.md` | 현재 synthetic evidence의 한계와 opt-in 데이터 확보, prompt 관리, 반복 재학습·승격·rollback 계획 |
 | `routing-performance-test-scenario.md` | Performance evidence scenario |
 | `routing-random-probe.md` | Unlabeled synthetic distribution probe |
 
@@ -65,6 +77,8 @@ Self-host 계획과 산출물이 존재한다는 사실만으로 current HEAD의
 `difficulty-label-record.v2`는 두 evaluator schema를 합친 record가 아니라 difficulty용 human annotation source다. 네 bucket은 `semanticTaskBucket`, `semanticConstraintBucket`, `semanticScopeBucket`, `semanticDependencyBucket`의 고정 12-class output order와 일치한다. Empty instruction의 `not_applicable`은 head class가 아니며 initial offline candidate에서 fail closed한다. Category-only evaluator에는 계속 category projection만 전달한다. 원본 500건 pilot과 기존 train/calibration/holdout 이름은 tooling smoke에만 사용한다. 별도 owner-approved 파생 candidate만 `difficulty-training-minimum-family-policy.2026-07-14.v1`과 canonical manifest를 충족해 offline training input으로 사용할 수 있다. 이 candidate는 `difficulty-family-constrained-split.2026-07-15.v1`, seed `20260715`로 family-disjoint train 300/calibration 100/holdout 100을 고정한다. 이는 downstream model 성능이나 runtime promotion을 자동 승인하지 않는다.
 
 2026-07-15 전체 승인을 기록한 2,000건 expansion 파생 candidate도 offline training input으로 사용할 수 있다. 이 candidate는 `difficulty-training-expansion-minimum-family-policy.2026-07-15.v1`과 원본 expansion의 `difficulty-expansion-family-split.2026-07-15.v1`, seed `20260715`, family-disjoint train 1,200/calibration 400/holdout 400을 그대로 고정한다. GPT 검토는 보조 evidence이고 human approval의 근거는 현재 작업에서 dataset owner가 명시한 전체 승인이다. 이 승인도 model 성능, calibrator·threshold 선택, runtime promotion 또는 GA를 승인하지 않는다.
+
+Dataset 2 5,000건은 기존 owner-approved model-path 5,000건에 합치지 않는다. 신규 generator는 먼저 structural scenario를 문장으로 렌더링하고, 그 뒤 별도 annotation 단계가 provisional bucket과 difficulty를 계산한다. 기존 Dataset 1은 생성 완료 뒤 exact/normalized/family/word 4-gram overlap audit에만 읽는다. 5,000건 모두 `synthetic_fixture + pending + reviewerCount=0`이고 `trainingEligible=false`이므로 두 명의 독립 human review와 불일치 adjudication이 끝나기 전에는 학습, model 평가, threshold 선택 또는 성능 주장에 사용할 수 없다. Split manifest는 category × difficulty cell마다 60/20/20 family를 배정해 train 3,000/validation 1,000/test 1,000을 고정하며, validation은 canonical `calibration`, test는 `holdout`으로 projection한다.
 
 ## Inherited Compatibility
 

@@ -1,0 +1,66 @@
+{
+  "schemaVersion": "gatelm.difficulty-independent-ood-owner-group-policy-approval.v1",
+  "datasetVersion": "difficulty_independent_ood_5000_2026_07_18_candidate_v1",
+  "approvalVersion": "difficulty-independent-ood-owner-group-policy.2026-07-20.v1",
+  "approvedAt": "2026-07-20T00:00:00+09:00",
+  "approvedByRole": "dataset_owner",
+  "approvalEvidence": "The dataset owner explicitly answered yes to each of the four enumerated policy questions in the current task.",
+  "approvalScope": "group_policy_only",
+  "policies": [
+    {
+      "policyId": "structured_summary_multifacet_complex",
+      "question": "결정·근거·후속 조치 구조화는 complex인가",
+      "decision": "yes",
+      "finalDifficulty": "complex",
+      "semanticLabels": [
+        "summarization_structured"
+      ],
+      "expectedCount": 113
+    },
+    {
+      "policyId": "single_localization_or_style_constraint_simple",
+      "question": "현지화·말투 보존 조건 하나뿐인 bounded 번역은 simple인가",
+      "decision": "yes",
+      "finalDifficulty": "simple",
+      "semanticLabels": [
+        "translation_localization",
+        "translation_style_preserving"
+      ],
+      "expectedCount": 42
+    },
+    {
+      "policyId": "single_scope_bounded_two_action_code_simple",
+      "question": "한 scope의 독립적인 bounded code 작업 두 개는 simple인가",
+      "decision": "yes",
+      "finalDifficulty": "simple",
+      "semanticLabels": [
+        "code_debugging",
+        "code_refactoring",
+        "code_explanation"
+      ],
+      "expectedCount": 27
+    },
+    {
+      "policyId": "single_choice_without_multi_factor_evidence_simple",
+      "question": "판단 요소가 드러나지 않은 단일 선택 요청은 simple인가",
+      "decision": "yes",
+      "finalDifficulty": "simple",
+      "semanticLabels": [
+        "reasoning_decision"
+      ],
+      "expectedCount": 9
+    }
+  ],
+  "appliesTo": {
+    "residualRecords": 191,
+    "sourceAdjudicationSha256": "90dab016b08940a57d980c704efba73a6ed59c89c2e62f964edd5b02f0ea0dfd",
+    "sourceResidualQueueSha256": "974b77e62477a4605a4978498715fd48731933553163837edcc487b0f6c87d85",
+    "candidateDatasetSha256": "045d1cd1072d5e5ea7c4bb445898627e8fe3a937b20a3dc076c07b04ce81b70d"
+  },
+  "claims": {
+    "unresolvedCoreResidualRecords": 0,
+    "recordLevelHumanReview": false,
+    "humanApprovedLabelClaimed": false,
+    "trainingEligibilityChanged": false
+  }
+}

@@ -1,0 +1,100 @@
+{
+  "schemaVersion": "gatelm.difficulty-independent-ood-codex-adjudication-manifest.v1",
+  "datasetVersion": "difficulty_independent_ood_5000_2026_07_18_candidate_v1",
+  "adjudicationPolicyVersion": "difficulty-independent-ood-codex-adjudication.2026-07-20.v1",
+  "generatedAt": "2026-07-20T00:00:00Z",
+  "source": {
+    "coreConflictQueue": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/chatgpt-review-kit/results/reviewer-a/priority/02-core-label-conflicts.jsonl",
+    "coreConflictQueueSha256": "3b8bcbbdb99003182d439be5341bc039c4bc0a6d9919fde3e74546247d3267d5",
+    "candidateDataset": "docs/v2.1.0/evaluation/difficulty-independent-ood-5000.v1.candidate.jsonl",
+    "candidateDatasetSha256": "045d1cd1072d5e5ea7c4bb445898627e8fe3a937b20a3dc076c07b04ce81b70d"
+  },
+  "counts": {
+    "adjudicatedRecords": 1353,
+    "uniqueSampleIds": 1353,
+    "residualHumanReviewRecords": 191,
+    "humanApprovedRecords": 0,
+    "trainingEligibleRecords": 0,
+    "coreDecisionSource": {
+      "reviewer_a": 747,
+      "provisional": 479,
+      "neither": 113,
+      "mixed": 14
+    },
+    "structureDecisionSource": {
+      "neither": 560,
+      "reviewer_a": 481,
+      "provisional": 139,
+      "mixed": 97,
+      "consensus": 76
+    },
+    "overallDecisionSource": {
+      "neither": 637,
+      "mixed": 420,
+      "reviewer_a": 289,
+      "provisional": 7
+    },
+    "fieldDecisionSource": {
+      "expectedCategory": {
+        "consensus": 1100,
+        "provisional": 253
+      },
+      "expectedDifficulty": {
+        "reviewer_a": 761,
+        "provisional": 378,
+        "neither": 113,
+        "consensus": 101
+      },
+      "semanticInputStatus": {
+        "consensus": 1353
+      },
+      "expectedSemanticLabel": {
+        "consensus": 1092,
+        "provisional": 261
+      },
+      "taskBucket": {
+        "consensus": 950,
+        "provisional": 167,
+        "neither": 121,
+        "reviewer_a": 115
+      },
+      "constraintBucket": {
+        "consensus": 481,
+        "reviewer_a": 449,
+        "neither": 342,
+        "provisional": 81
+      },
+      "scopeBucket": {
+        "reviewer_a": 796,
+        "neither": 222,
+        "provisional": 184,
+        "consensus": 151
+      },
+      "dependencyBucket": {
+        "reviewer_a": 800,
+        "consensus": 512,
+        "neither": 33,
+        "provisional": 8
+      }
+    }
+  },
+  "outputs": {
+    "adjudication": {
+      "path": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/chatgpt-review-kit/results/codex-adjudication/difficulty-independent-ood-5000.codex-core-adjudication.jsonl",
+      "sha256": "90dab016b08940a57d980c704efba73a6ed59c89c2e62f964edd5b02f0ea0dfd"
+    },
+    "residualHumanReviewQueue": {
+      "path": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/chatgpt-review-kit/results/codex-adjudication/difficulty-independent-ood-5000.codex-residual-human-review-queue.jsonl",
+      "sha256": "974b77e62477a4605a4978498715fd48731933553163837edcc487b0f6c87d85"
+    },
+    "policy": {
+      "path": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/chatgpt-review-kit/results/codex-adjudication/ADJUDICATION-POLICY.md",
+      "sha256": "68356b29374171ee45986117a721c27427bc21d2b2beb8484181f27ef6518020"
+    },
+    "report": {
+      "path": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/chatgpt-review-kit/results/codex-adjudication/ADJUDICATION-REPORT.md",
+      "sha256": "d955e3a86d3f9c8b1001e577bee1967c4fbf31ecbc41734c4b8e4c4dff6ccf00"
+    }
+  },
+  "approvalState": "codex_proposed_not_human_approved"
+}

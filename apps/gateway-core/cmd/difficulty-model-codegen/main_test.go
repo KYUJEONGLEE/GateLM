@@ -46,6 +46,39 @@ func TestRunGeneratesAndChecksGatewayShadow106DBundle(t *testing.T) {
 	}
 }
 
+func TestRunGeneratesAndChecksSemanticB142DBundle(t *testing.T) {
+	artifactPath := filepath.Join(
+		"..", "..", "..", "..",
+		"scripts", "routing_difficulty_model", "artifacts",
+		"difficulty-logistic.semantic-b1.model-path-5000.v1.json",
+	)
+	outputPath := filepath.Join(t.TempDir(), "difficulty_model_b1_generated.go")
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	args := []string{"-artifact", artifactPath, "-output", outputPath}
+	if exitCode := run(args, &stdout, &stderr); exitCode != 0 {
+		t.Fatalf("generate exit=%d stderr=%s", exitCode, stderr.String())
+	}
+	generated, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, expected := range [][]byte{
+		[]byte("generatedDifficultyLogisticModelV1"),
+		[]byte("difficultyCalibratorIsotonic"),
+		[]byte("threshold: 0.5"),
+		[]byte("sha256:6fdd46325175cb36189f33c2e590841165be13f081c44b982400da13f17d38a9"),
+	} {
+		if !bytes.Contains(generated, expected) {
+			t.Fatalf("generated B1 output omitted %q", expected)
+		}
+	}
+	stderr.Reset()
+	if exitCode := run(append(args, "-check"), &stdout, &stderr); exitCode != 0 {
+		t.Fatalf("check exit=%d stderr=%s", exitCode, stderr.String())
+	}
+}
+
 func TestRunGeneratesAndChecksGatewayShadow118DBundle(t *testing.T) {
 	artifactPath := filepath.Join(
 		"..", "..", "..", "..",

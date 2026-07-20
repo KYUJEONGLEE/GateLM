@@ -16,13 +16,15 @@ import (
 )
 
 const (
-	ArtifactSchemaVersion  = "gatelm.difficulty-model-artifact.v1"
-	ModelVersion           = "difficulty-logistic-v1"
-	CalibrationVersion     = "difficulty-calibration-v1"
-	ThresholdPolicyVersion = "difficulty-threshold-v1"
-	ThresholdValue         = 0.45
-	ContentHashAlgorithm   = "difficulty-model-inference-material.v1"
-	GeneratedVariableName  = "generatedDifficultyLogisticModelV1"
+	ArtifactSchemaVersion            = "gatelm.difficulty-model-artifact.v1"
+	ModelVersion                     = "difficulty-logistic-v1"
+	CalibrationVersion               = "difficulty-calibration-v1"
+	ThresholdPolicyVersion           = "difficulty-threshold-v1"
+	ThresholdValue                   = 0.45
+	SemanticB1ThresholdPolicyVersion = "difficulty-threshold.semantic-b1-fixed-0_5.2026-07-19.v1"
+	SemanticB1ThresholdValue         = 0.5
+	ContentHashAlgorithm             = "difficulty-model-inference-material.v1"
+	GeneratedVariableName            = "generatedDifficultyLogisticModelV1"
 )
 
 type Artifact struct {
@@ -147,8 +149,8 @@ func ValidateArtifact(artifact Artifact) error {
 	if err := validateCalibrator(artifact.Calibrator); err != nil {
 		return err
 	}
-	if artifact.ThresholdPolicyVersion != ThresholdPolicyVersion || artifact.Threshold != ThresholdValue {
-		return errors.New("model artifact threshold policy must remain global 0.45")
+	if !validThresholdPolicy(artifact.ThresholdPolicyVersion, artifact.Threshold) {
+		return errors.New("model artifact threshold policy/value pair is unsupported")
 	}
 	if artifact.ContentHashAlgorithm != ContentHashAlgorithm {
 		return errors.New("model artifact content hash algorithm mismatch")
@@ -158,6 +160,11 @@ func ValidateArtifact(artifact Artifact) error {
 		return errors.New("model artifact content hash mismatch")
 	}
 	return nil
+}
+
+func validThresholdPolicy(version string, value float64) bool {
+	return (version == ThresholdPolicyVersion && value == ThresholdValue) ||
+		(version == SemanticB1ThresholdPolicyVersion && value == SemanticB1ThresholdValue)
 }
 
 func validateCalibrator(calibrator Calibrator) error {

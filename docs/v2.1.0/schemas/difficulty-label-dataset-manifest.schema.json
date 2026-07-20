@@ -27,7 +27,12 @@
       "pattern": "^[0-9a-f]{64}$"
     },
     "datasetPurpose": {
-      "enum": ["label_contract_smoke", "training_tooling_smoke", "training_candidate"]
+      "enum": [
+        "label_contract_smoke",
+        "training_tooling_smoke",
+        "training_candidate",
+        "independent_dataset_candidate"
+      ]
     },
     "trainingEligible": {
       "type": "boolean"
@@ -196,6 +201,21 @@
           "datasetPurpose": { "const": "training_candidate" },
           "labelCoverageStatus": { "const": "complete" },
           "trainingGate": { "properties": { "minimumFamilyPolicyStatus": { "const": "versioned" } } }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "datasetPurpose": { "const": "independent_dataset_candidate" } },
+        "required": ["datasetPurpose"]
+      },
+      "then": {
+        "properties": {
+          "trainingEligible": { "const": false },
+          "labelCoverageStatus": { "const": "complete" },
+          "trainingGate": {
+            "properties": { "minimumFamilyPolicyStatus": { "const": "decision_required" } }
+          }
         }
       }
     }

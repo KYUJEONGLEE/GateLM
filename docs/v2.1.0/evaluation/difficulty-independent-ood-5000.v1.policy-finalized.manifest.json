@@ -1,0 +1,111 @@
+{
+  "schemaVersion": "gatelm.difficulty-independent-ood-policy-finalized-manifest.v1",
+  "sourceDatasetVersion": "difficulty_independent_ood_5000_2026_07_18_candidate_v1",
+  "datasetVersion": "difficulty_independent_ood_5000_2026_07_20_owner_approved_v1",
+  "policyVersion": "difficulty-independent-ood-owner-approval.2026-07-20.v1",
+  "labelState": "owner_approved_training_candidate",
+  "trainingEligible": true,
+  "recordLevelHumanReview": true,
+  "ownerApproval": {
+    "approvalType": "dataset_owner_full_approval",
+    "approvedAt": "2026-07-20",
+    "scope": "training_input_eligibility_only",
+    "basis": "explicit_owner_instruction_after_reviewer_a_comparison_and_policy_adjudication"
+  },
+  "records": 5000,
+  "families": 1000,
+  "splits": {
+    "train": {
+      "path": "docs/v2.1.0/evaluation/difficulty-independent-ood-5000.v1.policy-finalized.train.jsonl",
+      "records": 3000,
+      "families": 600,
+      "sha256": "bbfd0e20289a0cd84d81fa4a0f2f0609ac25703289bdadb55376c591b9df0ec4"
+    },
+    "validation": {
+      "path": "docs/v2.1.0/evaluation/difficulty-independent-ood-5000.v1.policy-finalized.validation.jsonl",
+      "records": 1000,
+      "families": 200,
+      "sha256": "3bcf3152536cce5e02180db35ef9dd12e8b820e0282841da9a527746857a6d24"
+    },
+    "test": {
+      "path": "docs/v2.1.0/evaluation/difficulty-independent-ood-5000.v1.policy-finalized.test.jsonl",
+      "records": 1000,
+      "families": 200,
+      "sha256": "fb645fd615468e6ce3d383871310102bb91bd6d3794da6363110ab6940e42e8d"
+    }
+  },
+  "trainingUsePolicy": {
+    "modelFit": [
+      "train"
+    ],
+    "modelSelectionAndCalibration": [
+      "validation"
+    ],
+    "evaluationOnly": [
+      "test"
+    ],
+    "testExcludedFromTraining": true
+  },
+  "source": {
+    "candidate": {
+      "path": "docs/v2.1.0/evaluation/difficulty-independent-ood-5000.v1.candidate.jsonl",
+      "sha256": "045d1cd1072d5e5ea7c4bb445898627e8fe3a937b20a3dc076c07b04ce81b70d",
+      "unchanged": true
+    },
+    "reviewerA": {
+      "path": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/chatgpt-review-kit/results/reviewer-a/difficulty-independent-ood-5000.gpt-review.reviewer-a.combined.validated.jsonl",
+      "sha256": "83c6a3aec3edf87aa931f4182e939c22c91459ed3a4d5f5b6af2970908a24215"
+    },
+    "resolvedCore": {
+      "path": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/chatgpt-review-kit/results/codex-adjudication/owner-policy-resolution/difficulty-independent-ood-5000.resolved-core-decisions-1353.jsonl",
+      "sha256": "221bfec946c4633927bd700565bd8cdeabf6037a1942f55e7b5870fe95f585cc"
+    },
+    "splitManifest": {
+      "path": "docs/v2.1.0/evaluation/difficulty-independent-ood-5000.v1.splits.json",
+      "sha256": "a3a14b2f406bed5e06c048aae276c1b94b5da36d1de11f88b3e629ce74df8693"
+    },
+    "diversityReport": {
+      "path": "docs/v2.1.0/evaluation/difficulty-independent-ood-5000.v1.diversity-report.json",
+      "sha256": "8c3c28a698c21da1f190693278175c2f9ab16a2a0028e49f85e70f535a9c8bf2"
+    }
+  },
+  "output": {
+    "path": "docs/v2.1.0/evaluation/difficulty-independent-ood-5000.v1.policy-finalized.jsonl",
+    "sha256": "60921fca6c26e02fba26e3b770b471c0fb683f96f074bf76561770bae13c6af0"
+  },
+  "summary": {
+    "difficultyAgreement": 3861,
+    "difficultyConflict": 1139,
+    "nonCore": 3314,
+    "exactAgreement": 367,
+    "exactAuditConfirmed": 201,
+    "exactAuditCorrected": 166,
+    "awkwardButLabelable": 517,
+    "changedRecords": 4136,
+    "changedFields": 10823,
+    "fieldChanges": {
+      "expectedCategory": 0,
+      "expectedDifficulty": 761,
+      "semanticInputStatus": 0,
+      "taskBucket": 452,
+      "constraintBucket": 2200,
+      "scopeBucket": 3307,
+      "dependencyBucket": 2473,
+      "expectedSemanticLabel": 0,
+      "expectedInstructionPayloadBoundary": 0,
+      "evaluationSlices": 1630
+    },
+    "simple": 2257,
+    "complex": 2743
+  },
+  "integrity": {
+    "schemaFailures": 0,
+    "crossSplitFamilyOverlap": 0,
+    "exactDuplicatePrompts": 0,
+    "normalizedDuplicatePrompts": 0,
+    "dataset1ExactPromptOverlap": 0,
+    "dataset1NormalizedPromptOverlap": 0,
+    "dataset1PromptFamilyOverlap": 0,
+    "fourGramNearDuplicateGates": "pass_unchanged_prompt_content"
+  }
+}

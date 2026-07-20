@@ -1,0 +1,102 @@
+{
+  "schemaVersion": "gatelm.difficulty-independent-ood-gpt-review-import-manifest.v1",
+  "datasetVersion": "difficulty_independent_ood_5000_2026_07_18_candidate_v1",
+  "reviewerPass": "reviewer_a",
+  "sourceArchiveFileName": "difficulty-independent-ood-5000.gpt-review.reviewer-a.batch-001-050.outputs.zip",
+  "sourceArchiveSha256": "755376669223ac42a4002ada4dd95b1338d0fa4a77f5d1a07ab6b0db21534348",
+  "candidate": {
+    "path": "docs/v2.1.0/evaluation/difficulty-independent-ood-5000.v1.candidate.jsonl",
+    "sha256": "045d1cd1072d5e5ea7c4bb445898627e8fe3a937b20a3dc076c07b04ce81b70d",
+    "records": 5000
+  },
+  "packetManifest": {
+    "path": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/chatgpt-review-kit/PACKET-MANIFEST.json",
+    "sha256": "e39189f7a7c02e2d551ff71b0facfba5b948da662644b4bdf948357b5f9dbc29"
+  },
+  "comparisonPolicy": {
+    "labelFields": [
+      "expectedCategory",
+      "expectedDifficulty",
+      "semanticInputStatus",
+      "taskBucket",
+      "constraintBucket",
+      "scopeBucket",
+      "dependencyBucket",
+      "expectedSemanticLabel",
+      "expectedInstructionPayloadBoundary",
+      "evaluationSlices"
+    ],
+    "evaluationSlicesComparedAsSet": true,
+    "lowConfidenceThreshold": 0.9,
+    "queueOnNonCompleteDecision": true,
+    "queueOnIssueCode": true,
+    "preserveCandidate": true
+  },
+  "outputs": {
+    "archive": {
+      "path": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/chatgpt-review-kit/results/reviewer-a/difficulty-independent-ood-5000.gpt-review.reviewer-a.batch-001-050.outputs.zip",
+      "bytes": 266399,
+      "sha256": "755376669223ac42a4002ada4dd95b1338d0fa4a77f5d1a07ab6b0db21534348"
+    },
+    "combinedValidated": {
+      "path": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/chatgpt-review-kit/results/reviewer-a/difficulty-independent-ood-5000.gpt-review.reviewer-a.combined.validated.jsonl",
+      "records": 5000,
+      "sha256": "83c6a3aec3edf87aa931f4182e939c22c91459ed3a4d5f5b6af2970908a24215"
+    },
+    "recordAdjudicationQueue": {
+      "path": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/chatgpt-review-kit/results/reviewer-a/difficulty-independent-ood-5000.gpt-review.reviewer-a.record-adjudication-queue.jsonl",
+      "records": 4667,
+      "sha256": "0a184aaea7ce073d17ebee4379b81578f79005a131d4eb86f3c7915ac2e1f82e"
+    },
+    "familyContextQueue": {
+      "path": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/chatgpt-review-kit/results/reviewer-a/difficulty-independent-ood-5000.gpt-review.reviewer-a.family-context-queue.jsonl",
+      "families": 1000,
+      "sha256": "68582c20b03ac8c24ea037db52ee3630901c4945247fb3961c62ccc45707f29e"
+    },
+    "coreFamilyContextQueue": {
+      "path": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/chatgpt-review-kit/results/reviewer-a/priority/02-core-label-family-context.jsonl",
+      "families": 527,
+      "sha256": "c97602982cf776c4d047b2a77ab20d590a388fc0d399ac8b39880e4cf000c55e"
+    },
+    "priorityQueues": {
+      "priority_0_gpt_escalation": {
+        "path": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/chatgpt-review-kit/results/reviewer-a/priority/01-gpt-escalation.jsonl",
+        "records": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "priority_1_core_label_conflict": {
+        "path": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/chatgpt-review-kit/results/reviewer-a/priority/02-core-label-conflicts.jsonl",
+        "records": 1353,
+        "sha256": "3b8bcbbdb99003182d439be5341bc039c4bc0a6d9919fde3e74546247d3267d5"
+      },
+      "priority_2_low_confidence_or_quality": {
+        "path": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/chatgpt-review-kit/results/reviewer-a/priority/03-low-confidence-or-quality.jsonl",
+        "records": 354,
+        "sha256": "ff880e350ed43707ce9dffcbb73e6d47a6ff43ee4448247a9e30fb39035a3603"
+      },
+      "priority_3_structure_conflict": {
+        "path": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/chatgpt-review-kit/results/reviewer-a/priority/04-structure-conflicts.jsonl",
+        "records": 2564,
+        "sha256": "80cb3d6aa8ada1e78f40e5dd48643b22b84dd16fda73a84b76bb373521470dc4"
+      },
+      "priority_4_slice_only_conflict": {
+        "path": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/chatgpt-review-kit/results/reviewer-a/priority/05-slice-only-conflicts.jsonl",
+        "records": 396,
+        "sha256": "59097bccd5dfe41ba9577e36ec87f9019b46be6b7c4bb096fe8bb565b51879b3"
+      }
+    },
+    "comparisonSummary": {
+      "path": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/chatgpt-review-kit/results/reviewer-a/difficulty-independent-ood-5000.gpt-review.reviewer-a.comparison-summary.json",
+      "sha256": "e87fd9052b0d3d9dd1098cd883dd471998d84c2d69922580df38912d18199d02"
+    },
+    "comparisonReport": {
+      "path": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/chatgpt-review-kit/results/reviewer-a/COMPARISON-REPORT.md",
+      "sha256": "68734616be7f2f4043c463590675003dea9a63381fb040aaaf7ca0ab8b6b521b"
+    }
+  },
+  "automatedReviewOnly": true,
+  "confersHumanReviewStatus": false,
+  "humanApprovalStatus": "pending",
+  "trainingEligible": false,
+  "importedAt": "2026-07-20T00:00:00Z"
+}

@@ -1,0 +1,1 @@
+첨부한 `GPT-REVIEW-INSTRUCTIONS.md`, `LABEL-GUIDE.md`와 batch JSONL을 읽고 100건 전부를 검토해 주세요. Reviewer A의 대화나 결과를 보지 말고 독립적으로 판정하세요. `automatedReviewerPass`는 모든 행에서 `reviewer_b`를 사용하세요. 입력 batch 번호를 유지하고, 결과를 `difficulty-independent-ood-5000.gpt-review.reviewer-b.batch-NNN.output.jsonl`이라는 다운로드 가능한 JSONL 파일로 반환하세요. 파일 생성이 불가능할 때만 설명이나 Markdown 없이 JSONL 100줄만 반환하세요.

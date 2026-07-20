@@ -1549,15 +1549,6 @@ html[data-theme="dark"] .gatelm-logo[data-surface="light"] .gatelm-logo-wordmark
   box-shadow: var(--shadow-xs);
 }
 
-.dashboard-summary-form button.secondary-button.dashboard-summary-apply-button {
-  min-height: 42px;
-  padding: 0 var(--space-5);
-  align-self: end;
-  border-radius: var(--radius-sm);
-  line-height: 1;
-  box-shadow: var(--shadow-xs);
-}
-
 .dashboard-summary-actions {
   display: flex;
   align-items: center;
@@ -13529,10 +13520,6 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
   .dashboard-summary-form,
   .dashboard-kpi-grid {
     grid-template-columns: 1fr;
-  }
-
-  .dashboard-summary-actions .secondary-button {
-    flex: 1;
   }
 
   .dashboard-overview-workspace .dashboard-kpi-grid {

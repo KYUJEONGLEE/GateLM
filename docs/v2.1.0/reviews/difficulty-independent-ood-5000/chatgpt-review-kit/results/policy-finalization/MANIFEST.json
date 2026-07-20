@@ -1,0 +1,69 @@
+{
+  "schemaVersion": "gatelm.difficulty-independent-ood-policy-finalization-audit-manifest.v1",
+  "sourceDatasetVersion": "difficulty_independent_ood_5000_2026_07_18_candidate_v1",
+  "finalDatasetVersion": "difficulty_independent_ood_5000_2026_07_20_owner_approved_v1",
+  "policyVersion": "difficulty-independent-ood-owner-approval.2026-07-20.v1",
+  "counts": {
+    "difficultyAgreement": 3861,
+    "difficultyConflict": 1139,
+    "nonCore": 3314,
+    "exactAgreement": 367,
+    "exactAuditConfirmed": 201,
+    "exactAuditCorrected": 166,
+    "awkwardButLabelable": 517,
+    "changedRecords": 4136,
+    "changedFields": 10823,
+    "fieldChanges": {
+      "expectedCategory": 0,
+      "expectedDifficulty": 761,
+      "semanticInputStatus": 0,
+      "taskBucket": 452,
+      "constraintBucket": 2200,
+      "scopeBucket": 3307,
+      "dependencyBucket": 2473,
+      "expectedSemanticLabel": 0,
+      "expectedInstructionPayloadBoundary": 0,
+      "evaluationSlices": 1630
+    },
+    "simple": 2257,
+    "complex": 2743
+  },
+  "outputs": {
+    "difficultyConsensus": {
+      "path": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/chatgpt-review-kit/results/policy-finalization/difficulty-independent-ood-5000.difficulty-consensus-confirmed-3861.jsonl",
+      "sha256": "42f48bc619975c475d602ddb7a200f6207069c44ebad320b876668db649194a3"
+    },
+    "nonCoreAdjudication": {
+      "path": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/chatgpt-review-kit/results/policy-finalization/difficulty-independent-ood-5000.non-core-adjudication-3314.jsonl",
+      "sha256": "adf611b8803bcf9e65196da4179e1da551328df3380ee19f5f724ffdd81a5224"
+    },
+    "exactAgreementAudit": {
+      "path": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/chatgpt-review-kit/results/policy-finalization/difficulty-independent-ood-5000.exact-agreement-audit-367.jsonl",
+      "sha256": "b5385dc3f8d329cc8f0de1b8183846033777088a91dfb561383694a69a17f776"
+    },
+    "report": {
+      "path": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/chatgpt-review-kit/results/policy-finalization/FINALIZATION-REPORT.md",
+      "sha256": "02502ca2298c3d10ec3e00da76b4c0a0f9e6696e857f7dea2b2441b3a4695954"
+    },
+    "finalDataset": {
+      "path": "docs/v2.1.0/evaluation/difficulty-independent-ood-5000.v1.policy-finalized.jsonl",
+      "sha256": "60921fca6c26e02fba26e3b770b471c0fb683f96f074bf76561770bae13c6af0"
+    },
+    "finalManifest": {
+      "path": "docs/v2.1.0/evaluation/difficulty-independent-ood-5000.v1.policy-finalized.manifest.json",
+      "sha256": "ae2944c6f518c0bd55dee37df8b8db67f1e628a8c5d8b7fbb829ca83201bde17"
+    }
+  },
+  "supersedesForDifficultyAgreement": {
+    "approvalVersion": "difficulty-independent-ood-owner-group-policy.2026-07-20.v1",
+    "affectedPolicyId": "structured_summary_multifacet_complex",
+    "affectedRecords": 113,
+    "reason": "latest owner rule confirms every provisional/Reviewer A difficulty agreement"
+  },
+  "ownerApproval": {
+    "approvalType": "dataset_owner_full_approval",
+    "approvedAt": "2026-07-20",
+    "scope": "training_input_eligibility_only"
+  },
+  "trainingEligible": true
+}

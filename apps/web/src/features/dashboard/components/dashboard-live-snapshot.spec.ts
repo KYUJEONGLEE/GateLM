@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { expect, test } from "@playwright/test";
 
 const overviewSourceUrl = new URL("./dashboard-overview.tsx", import.meta.url);
+const filterSourceUrl = new URL("./dashboard-filter-form.tsx", import.meta.url);
 const chartSourceUrl = new URL("./dashboard-echarts.tsx", import.meta.url);
 const costSourceUrl = new URL("./cost-over-time-card.tsx", import.meta.url);
 const dashboardStylesSourceUrl = new URL("../../../app/globals.css", import.meta.url);
@@ -24,6 +25,24 @@ test("dashboard replaces all cards from one visibility-aware snapshot poll", asy
   expect(source).toContain("controller?.abort()");
   expect(source).toContain("setSnapshot(payload.data)");
   expect(source.match(/pollingEnabled=\{false\}/g)).toHaveLength(2);
+});
+
+test("dashboard summary filters navigate immediately without an apply button", async () => {
+  const [filterSource, overviewSource] = await Promise.all([
+    readFile(filterSourceUrl, "utf8"),
+    readFile(overviewSourceUrl, "utf8")
+  ]);
+
+  expect(filterSource.match(/onChange=/g)).toHaveLength(3);
+  expect(filterSource).toContain("navigateToFilters({ ...draftFilters, range })");
+  expect(filterSource).toContain(
+    'projectId: surface === "project_application" ? draftFilters.projectId : ""'
+  );
+  expect(filterSource).toContain("router.replace(href, { scroll: false })");
+  expect(filterSource).not.toContain("applyLabel");
+  expect(filterSource).not.toContain('type="submit"');
+  expect(overviewSource).not.toContain("applyLabel={text.filter.apply}");
+  expect(overviewSource).toContain('key={`${filters.range}:${filters.surface}:${filters.projectId}`}');
 });
 
 test("snapshot-managed cards render their incoming payload without an effect-delayed copy", async () => {

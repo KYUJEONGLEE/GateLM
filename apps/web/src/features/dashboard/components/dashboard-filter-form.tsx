@@ -3,7 +3,7 @@
 import { Building2, Calendar, Layers3, RotateCcw } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { type FormEvent, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import type {
   DashboardFilterState,
   DashboardRange
@@ -20,7 +20,6 @@ type DashboardFilterFormProps = {
   actionPath: string;
   allowAllProjects?: boolean;
   allowTenantChat?: boolean;
-  applyLabel: string;
   filters: DashboardFilterState;
   locale: Locale;
   projects: ProjectRecord[];
@@ -33,7 +32,6 @@ export function DashboardFilterForm({
   actionPath,
   allowAllProjects = true,
   allowTenantChat = true,
-  applyLabel,
   filters,
   locale,
   projects,
@@ -43,20 +41,23 @@ export function DashboardFilterForm({
 }: DashboardFilterFormProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
-  const [surface, setSurface] = useState(filters.surface);
+  const [draftFilters, setDraftFilters] = useState(() => ({
+    projectId: filters.projectId,
+    range: filters.range,
+    surface: filters.surface
+  }));
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  function navigateToFilters(nextFilters: typeof draftFilters) {
+    setDraftFilters(nextFilters);
 
-    const formData = new FormData(event.currentTarget);
     const query = new URLSearchParams();
 
-    setQueryParam(query, "range", formData.get("range"));
-    setQueryParam(query, "surface", formData.get("surface"));
-    setQueryParam(query, "projectId", formData.get("projectId"));
-    setQueryParam(query, "budgetScopeType", formData.get("budgetScopeType"));
-    setQueryParam(query, "budgetScopeId", formData.get("budgetScopeId"));
-    setQueryParam(query, "resolvedBy", formData.get("resolvedBy"));
+    setQueryParam(query, "range", nextFilters.range);
+    setQueryParam(query, "surface", nextFilters.surface);
+    setQueryParam(query, "projectId", nextFilters.projectId);
+    setQueryParam(query, "budgetScopeType", filters.budgetScopeType);
+    setQueryParam(query, "budgetScopeId", filters.budgetScopeId);
+    setQueryParam(query, "resolvedBy", filters.resolvedBy);
     setQueryParam(query, "motion", "none");
 
     const queryString = query.toString();
@@ -67,13 +68,33 @@ export function DashboardFilterForm({
     });
   }
 
+  function updateRange(range: DashboardRange) {
+    navigateToFilters({ ...draftFilters, range });
+  }
+
+  function updateSurface(surface: DashboardFilterState["surface"]) {
+    navigateToFilters({
+      ...draftFilters,
+      projectId: surface === "project_application" ? draftFilters.projectId : "",
+      surface
+    });
+  }
+
+  function updateProject(projectId: string) {
+    navigateToFilters({ ...draftFilters, projectId });
+  }
+
   return (
-    <form className="dashboard-summary-form" onSubmit={handleSubmit}>
+    <div aria-busy={isPending} className="dashboard-summary-form">
       <label>
         <span>{locale === "ko" ? "시간 범위" : "Time range"}</span>
         <div className="dashboard-filter-input">
           <Calendar aria-hidden="true" size={16} strokeWidth={2.1} />
-          <select defaultValue={filters.range} name="range">
+          <select
+            name="range"
+            onChange={(event) => updateRange(event.target.value as DashboardRange)}
+            value={draftFilters.range}
+          >
             {rangeOptions.map((range) => (
               <option key={range.value} value={range.value}>
                 {range.label}
@@ -88,8 +109,10 @@ export function DashboardFilterForm({
           <Layers3 aria-hidden="true" size={16} strokeWidth={2.1} />
           <select
             name="surface"
-            onChange={(event) => setSurface(event.target.value as DashboardFilterState["surface"])}
-            value={surface}
+            onChange={(event) =>
+              updateSurface(event.target.value as DashboardFilterState["surface"])
+            }
+            value={draftFilters.surface}
           >
             {allowTenantChat ? (
               <option value="all">{locale === "ko" ? "전체 사용량" : "All usage"}</option>
@@ -108,9 +131,10 @@ export function DashboardFilterForm({
         <div className="dashboard-filter-input">
           <Building2 aria-hidden="true" size={16} strokeWidth={2.1} />
           <select
-            defaultValue={filters.projectId}
-            disabled={surface === "tenant_chat"}
+            disabled={draftFilters.surface === "tenant_chat"}
             name="projectId"
+            onChange={(event) => updateProject(event.target.value)}
+            value={draftFilters.projectId}
           >
             {allowAllProjects ? (
               <option value="">{locale === "ko" ? "전체 프로젝트" : "All projects"}</option>
@@ -123,27 +147,17 @@ export function DashboardFilterForm({
           </select>
         </div>
       </label>
-      <input name="budgetScopeType" type="hidden" value={filters.budgetScopeType} />
-      <input name="budgetScopeId" type="hidden" value={filters.budgetScopeId} />
-      <input name="resolvedBy" type="hidden" value={filters.resolvedBy} />
       <div className="dashboard-summary-actions">
-        <button
-          className="secondary-button dashboard-summary-apply-button"
-          disabled={isPending}
-          type="submit"
-        >
-          {applyLabel}
-        </button>
         <Link aria-label={refreshLabel} className="dashboard-refresh-link" href={refreshHref}>
           <RotateCcw aria-hidden="true" size={18} strokeWidth={2.3} />
         </Link>
       </div>
-    </form>
+    </div>
   );
 }
 
-function setQueryParam(query: URLSearchParams, key: string, value: FormDataEntryValue | string | null) {
-  const normalizedValue = typeof value === "string" ? value.trim() : "";
+function setQueryParam(query: URLSearchParams, key: string, value: string | null) {
+  const normalizedValue = value?.trim() ?? "";
 
   if (normalizedValue === "") {
     query.delete(key);

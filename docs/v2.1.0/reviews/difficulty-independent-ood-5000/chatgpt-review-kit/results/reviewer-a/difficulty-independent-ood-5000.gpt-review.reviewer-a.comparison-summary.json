@@ -1,0 +1,174 @@
+{
+  "schemaVersion": "gatelm.difficulty-independent-ood-gpt-review-comparison-summary.v1",
+  "datasetVersion": "difficulty_independent_ood_5000_2026_07_18_candidate_v1",
+  "reviewerPass": "reviewer_a",
+  "records": 5000,
+  "families": 1000,
+  "lowConfidenceThreshold": 0.9,
+  "exactLabelAgreementRecords": 367,
+  "exactLabelAgreementRate": 0.0734,
+  "cleanHighConfidenceAgreementRecords": 333,
+  "cleanHighConfidenceAgreementRate": 0.0666,
+  "adjudicationQueueRecords": 4667,
+  "adjudicationQueueFamilies": 1000,
+  "coreConflictRecords": 1353,
+  "coreConflictFamilies": 527,
+  "priorityQueueRecords": {
+    "priority_1_core_label_conflict": 1353,
+    "priority_2_low_confidence_or_quality": 354,
+    "priority_3_structure_conflict": 2564,
+    "priority_4_slice_only_conflict": 396
+  },
+  "lowConfidenceRecords": 517,
+  "reviewerDecisionRecords": {
+    "label_complete": 5000
+  },
+  "issueCodeRecords": {
+    "unnatural_language": 517
+  },
+  "queueReasonRecords": {
+    "gpt_issue_code": 517,
+    "low_confidence": 517,
+    "provisional_label_mismatch": 4633
+  },
+  "fieldMismatchRecords": {
+    "expectedCategory": 253,
+    "expectedDifficulty": 1139,
+    "semanticInputStatus": 0,
+    "taskBucket": 913,
+    "constraintBucket": 1518,
+    "scopeBucket": 3190,
+    "dependencyBucket": 2480,
+    "expectedSemanticLabel": 261,
+    "expectedInstructionPayloadBoundary": 1042,
+    "evaluationSlices": 3067
+  },
+  "confidence": {
+    "minimum": 0.88,
+    "maximum": 0.98,
+    "mean": 0.9688759999999622,
+    "below_0_80": 0,
+    "from_0_80_to_below_0_90": 517,
+    "from_0_90_to_below_0_95": 3,
+    "at_least_0_95": 4480
+  },
+  "difficultyAgreementMatrix": {
+    "simple": {
+      "simple": 1988,
+      "complex": 512
+    },
+    "complex": {
+      "simple": 627,
+      "complex": 1873
+    }
+  },
+  "categoryAgreementMatrix": {
+    "general": {
+      "general": 1000,
+      "code": 0,
+      "translation": 0,
+      "summarization": 0,
+      "reasoning": 0
+    },
+    "code": {
+      "general": 0,
+      "code": 1000,
+      "translation": 0,
+      "summarization": 0,
+      "reasoning": 0
+    },
+    "translation": {
+      "general": 0,
+      "code": 0,
+      "translation": 1000,
+      "summarization": 0,
+      "reasoning": 0
+    },
+    "summarization": {
+      "general": 0,
+      "code": 0,
+      "translation": 0,
+      "summarization": 747,
+      "reasoning": 253
+    },
+    "reasoning": {
+      "general": 0,
+      "code": 0,
+      "translation": 0,
+      "summarization": 0,
+      "reasoning": 1000
+    }
+  },
+  "sourceValidationSummary": {
+    "schemaVersion": "gatelm.difficulty-independent-ood-gpt-review-validation-summary.v1",
+    "datasetVersion": "difficulty_independent_ood_5000_2026_07_18_candidate_v1",
+    "automatedReviewerPass": "reviewer_a",
+    "batchRange": {
+      "from": "batch-001",
+      "to": "batch-050"
+    },
+    "batchCount": 50,
+    "recordCount": 5000,
+    "uniqueSampleIdCount": 5000,
+    "allBatchesPresent": true,
+    "allBatchesHave100Rows": true,
+    "valid": true,
+    "errors": [],
+    "batchRows": {
+      "batch-001": 100,
+      "batch-002": 100,
+      "batch-003": 100,
+      "batch-004": 100,
+      "batch-005": 100,
+      "batch-006": 100,
+      "batch-007": 100,
+      "batch-008": 100,
+      "batch-009": 100,
+      "batch-010": 100,
+      "batch-011": 100,
+      "batch-012": 100,
+      "batch-013": 100,
+      "batch-014": 100,
+      "batch-015": 100,
+      "batch-016": 100,
+      "batch-017": 100,
+      "batch-018": 100,
+      "batch-019": 100,
+      "batch-020": 100,
+      "batch-021": 100,
+      "batch-022": 100,
+      "batch-023": 100,
+      "batch-024": 100,
+      "batch-025": 100,
+      "batch-026": 100,
+      "batch-027": 100,
+      "batch-028": 100,
+      "batch-029": 100,
+      "batch-030": 100,
+      "batch-031": 100,
+      "batch-032": 100,
+      "batch-033": 100,
+      "batch-034": 100,
+      "batch-035": 100,
+      "batch-036": 100,
+      "batch-037": 100,
+      "batch-038": 100,
+      "batch-039": 100,
+      "batch-040": 100,
+      "batch-041": 100,
+      "batch-042": 100,
+      "batch-043": 100,
+      "batch-044": 100,
+      "batch-045": 100,
+      "batch-046": 100,
+      "batch-047": 100,
+      "batch-048": 100,
+      "batch-049": 100,
+      "batch-050": 100
+    }
+  },
+  "agreementIsAccuracy": false,
+  "humanApprovalStatus": "pending",
+  "trainingEligible": false,
+  "createdAt": "2026-07-20T00:00:00Z"
+}

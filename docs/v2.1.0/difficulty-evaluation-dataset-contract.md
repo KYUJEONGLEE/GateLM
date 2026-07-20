@@ -114,6 +114,23 @@ Provenance enum과 조합은 category evaluation 계약과 같은 안전한 offl
 
 [`evaluation/difficulty-promotion-holdout-100.v1.json`](evaluation/difficulty-promotion-holdout-100.v1.json)은 위 expansion의 아직 보지 않은 holdout 400건에서 category마다 SHA-256 rank가 앞선 whole family 2개씩을 model score access 전에 선택해 10 family/100건을 고정한다. 이전 500건과 family overlap은 0이며 category별 20건, simple/complex 각 10건이다. 기존 v3 118D artifact identity와 accuracy `>=0.91`, 전체 `complex -> simple <=1`, category별 rule baseline 비악화 gate를 동시에 고정한다. 첫 결과는 [`../testing/difficulty-promotion-holdout-100-result.json`](../testing/difficulty-promotion-holdout-100-result.json)에 aggregate로만 남겼고 accuracy `0.70`, `complex -> simple=0`, category directional 비악화 통과로 accuracy gate를 실패했다. 이 Holdout은 소비됐으며 이후 tuning·selection·threshold 변경에 사용할 수 없다.
 
+### 6.4 Independent OOD Dataset 2 candidate 5,000건
+
+[`evaluation/difficulty-independent-ood-5000.v1.candidate.jsonl`](evaluation/difficulty-independent-ood-5000.v1.candidate.jsonl)은 기존 owner-approved model-path 5,000건과 합치지 않는 별도 review candidate다. 두 dataset은 파일, dataset version, `independent2` family namespace와 generator를 공유하지 않는다. Dataset 1은 신규 prompt를 모두 렌더링한 뒤 overlap audit에서만 읽을 수 있고 생성 사전, scenario, template 또는 label input으로 사용할 수 없다.
+
+생성·검토 경계는 다음을 고정한다.
+
+- 업무 scenario의 task, constraint, scope, source와 dependency를 먼저 구성하고 prompt renderer에는 `expectedDifficulty`를 전달하지 않는다.
+- Prompt가 완성된 뒤 별도 annotation 단계가 네 bucket과 provisional difficulty를 기록한다.
+- 모든 record는 `synthetic_fixture + pending + reviewerCount=0`이며 manifest는 `datasetPurpose=independent_dataset_candidate`, `trainingEligible=false`, `minimumFamilyPolicyStatus=decision_required`다.
+- [`reviews/difficulty-independent-ood-5000/difficulty-independent-ood-5000.v1.blind-review.jsonl`](reviews/difficulty-independent-ood-5000/difficulty-independent-ood-5000.v1.blind-review.jsonl)은 category, difficulty, bucket, semantic label, family와 split을 제거한다. 두 reviewer는 이 blind input만 독립적으로 검토하고 불일치는 별도로 adjudicate한다.
+- [`evaluation/difficulty-independent-ood-5000.v1.splits.json`](evaluation/difficulty-independent-ood-5000.v1.splits.json)은 category × difficulty cell마다 60/20/20 family를 배정해 train 600 family/3,000건, validation 200 family/1,000건, test 200 family/1,000건을 사전 고정한다. Family는 split을 가로지를 수 없다.
+- Validation은 canonical manifest의 `calibration`, test는 `holdout`으로 projection한다. 사용자-facing split 파일과 role 이름은 `validation`, `test`를 유지한다.
+- Human approval 전에는 세 split 모두 model 실행, 학습, score 열람, threshold/model/calibrator 선택, accuracy 주장 또는 Dataset 1과의 merge에 사용할 수 없다.
+- Human approval 이후 train은 weight fit, validation은 model·calibrator·threshold 선택에만 사용할 수 있다. Test는 모든 선택과 artifact freeze가 끝난 뒤 한 번만 사용한다.
+
+[`evaluation/difficulty-independent-ood-5000.v1.diversity-report.json`](evaluation/difficulty-independent-ood-5000.v1.diversity-report.json)은 per-row embedding이나 score를 저장하지 않는다. Dataset 1과의 exact/normalized/family overlap, inverted-index word 4-gram Jaccard, Dataset 2 내부 duplicate, renderer/format/voice, length counterfactual과 slice aggregate만 기록한다.
+
 ## 7. Evaluation Report
 
 Difficulty 평가는 다음 명령으로 실행한다.
@@ -189,6 +206,7 @@ Difficulty 계약, schema 또는 fixture를 변경하면 다음을 실행한다.
 
 ```powershell
 node scripts/dev/generate-v2.1-difficulty-expansion-2000.mjs --check
+corepack pnpm run verify:v2.1-difficulty-independent-ood-5000
 corepack pnpm run verify:v2.1-difficulty-expansion-training-candidate
 corepack pnpm run verify:v2.1-difficulty-eval
 corepack pnpm run verify:v2.1-category-eval

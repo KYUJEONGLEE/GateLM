@@ -395,6 +395,18 @@ if (!verifyNativeScript.includes("--user 1000:1000")) {
 
 const commands = [
   {
+    name: "semantic experiment B1 42D generated bundle drift",
+    args: [
+      "run",
+      "./apps/gateway-core/cmd/difficulty-model-codegen",
+      "-artifact",
+      "scripts/routing_difficulty_model/artifacts/difficulty-logistic.semantic-b1.model-path-5000.v1.json",
+      "-output",
+      "apps/gateway-core/internal/domain/routing/difficulty_model_b1_generated.go",
+      "-check",
+    ],
+  },
+  {
     name: "selected 106D generated bundle drift",
     args: [
       "run",
@@ -439,4 +451,4 @@ for (const command of commands) {
   }
 }
 
-console.log("\nGateway 106D bundle and authoritative optional E5 runtime verification passed.");
+console.log("\nGateway 42D B1 shadow plus authoritative optional 106D E5 runtime verification passed.");

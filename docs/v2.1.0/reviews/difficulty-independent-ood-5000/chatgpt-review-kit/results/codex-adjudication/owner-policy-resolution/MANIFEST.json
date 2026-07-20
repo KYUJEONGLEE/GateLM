@@ -1,0 +1,51 @@
+{
+  "schemaVersion": "gatelm.difficulty-independent-ood-owner-policy-resolution-manifest.v1",
+  "datasetVersion": "difficulty_independent_ood_5000_2026_07_18_candidate_v1",
+  "approvalVersion": "difficulty-independent-ood-owner-group-policy.2026-07-20.v1",
+  "counts": {
+    "coreAdjudicationRecords": 1353,
+    "ownerGroupPolicyResolvedRecords": 191,
+    "unresolvedCoreResidualRecords": 0,
+    "recordLevelHumanReviewedRecords": 0,
+    "humanApprovedLabelRecords": 0,
+    "trainingEligibleRecords": 0,
+    "policyResolution": {
+      "structured_summary_multifacet_complex": 113,
+      "single_localization_or_style_constraint_simple": 42,
+      "single_scope_bounded_two_action_code_simple": 27,
+      "single_choice_without_multi_factor_evidence_simple": 9
+    }
+  },
+  "source": {
+    "adjudication": {
+      "path": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/chatgpt-review-kit/results/codex-adjudication/difficulty-independent-ood-5000.codex-core-adjudication.jsonl",
+      "sha256": "90dab016b08940a57d980c704efba73a6ed59c89c2e62f964edd5b02f0ea0dfd"
+    },
+    "residualQueue": {
+      "path": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/chatgpt-review-kit/results/codex-adjudication/difficulty-independent-ood-5000.codex-residual-human-review-queue.jsonl",
+      "sha256": "974b77e62477a4605a4978498715fd48731933553163837edcc487b0f6c87d85"
+    },
+    "candidateDataset": {
+      "path": "docs/v2.1.0/evaluation/difficulty-independent-ood-5000.v1.candidate.jsonl",
+      "sha256": "045d1cd1072d5e5ea7c4bb445898627e8fe3a937b20a3dc076c07b04ce81b70d"
+    }
+  },
+  "outputs": {
+    "approval": {
+      "path": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/chatgpt-review-kit/results/codex-adjudication/owner-policy-resolution/OWNER-POLICY-APPROVAL.json",
+      "sha256": "46d9f345a8d993a00d9e1d9859ab1784a4a6aa0467817abdb68bf2a9b6c22ded"
+    },
+    "resolvedResiduals": {
+      "path": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/chatgpt-review-kit/results/codex-adjudication/owner-policy-resolution/difficulty-independent-ood-5000.owner-policy-resolved-191.jsonl",
+      "sha256": "cc617aee660e9473f87020ed8adfe492b9e2b5072daf4f76ae7f2f75a4658253"
+    },
+    "resolvedCoreDecisions": {
+      "path": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/chatgpt-review-kit/results/codex-adjudication/owner-policy-resolution/difficulty-independent-ood-5000.resolved-core-decisions-1353.jsonl",
+      "sha256": "221bfec946c4633927bd700565bd8cdeabf6037a1942f55e7b5870fe95f585cc"
+    },
+    "report": {
+      "path": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/chatgpt-review-kit/results/codex-adjudication/owner-policy-resolution/OWNER-POLICY-RESOLUTION-REPORT.md",
+      "sha256": "12048f31737da87e60f716d2ce9a3da484abb59a6ef050a4acab5efcbbc287ad"
+    }
+  }
+}

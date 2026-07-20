@@ -6,6 +6,9 @@
 > [!IMPORTANT]
 > 일반 Gateway hot path의 현재 category × difficulty 정책은 [`../routing/contracts.md`](../routing/contracts.md)가 정의한다. 이 문서는 category classifier offline evidence 계획만 설명하며 runtime policy 계약이 아니다.
 
+> [!IMPORTANT]
+> 현재 모델 데이터는 운영 고객 데이터가 아니라 synthetic offline evidence다. 향후 opt-in 데이터 확보, prompt 관리, 반복 재학습·shadow·canary·rollback의 전체 수명주기는 [`difficulty-continuous-improvement-plan.md`](difficulty-continuous-improvement-plan.md)를 따른다. 해당 계획은 아직 고객 prompt 수집이나 새 제품 surface를 승인하지 않는다.
+
 ## 목표
 
 v2.1 라우팅 고도화의 1차 목표는 외부 모델을 추가 호출하지 않고, 룰 기반 category 분류의 품질과 판단 시간을 측정 가능한 형태로 만드는 것이다.
@@ -104,13 +107,15 @@ corepack pnpm run v2.1:routing:evaluate -- -latency-iterations 100
 
 ## 다음 단계
 
-평가셋과 리포트가 준비된 뒤에는 아래 순서로 진행한다.
+평가셋과 리포트가 준비된 뒤의 단기 category rule 개선은 아래 순서로 진행한다.
 
 1. 평가셋을 늘린다.
 2. 실패 sample을 보고 룰을 수동으로 보강한다.
 3. confusion matrix와 category diagnostics로 과대·과소 분류 원인을 확인한다.
 4. 같은 평가셋으로 accuracy와 classifier latency가 개선됐는지 비교한다.
 5. 실제 성능 테스트 시나리오에서 Gateway 전체 latency와 category-classifier latency를 분리해 본다.
+
+중장기 model 개선은 같은 평가셋에 정답을 맞추는 반복으로 끝내지 않는다. 운영 분포를 반영한 데이터 확보, family/time-disjoint split, blind evaluation, untouched promotion holdout, request shadow, 제한적 canary와 rollback을 매 dataset version마다 반복한다. 구체적인 데이터 동의·redaction, 합성/리뷰 prompt provenance와 gated batch retraining 절차는 [`difficulty-continuous-improvement-plan.md`](difficulty-continuous-improvement-plan.md)에 정의한다.
 
 ## 주의사항
 

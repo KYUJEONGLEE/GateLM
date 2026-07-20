@@ -468,8 +468,8 @@ export function DashboardOverviewView({
           actionPath={`/tenants/${overview.filters.tenantId}/dashboard`}
           allowAllProjects={allowAllProjects}
           allowTenantChat={allowAllProjects}
-          applyLabel={text.filter.apply}
           filters={filters}
+          key={`${filters.range}:${filters.surface}:${filters.projectId}`}
           locale={locale}
           projects={projects}
           refreshHref={dashboardHref(overview.filters.tenantId, filters, undefined, { motion: "none" })}

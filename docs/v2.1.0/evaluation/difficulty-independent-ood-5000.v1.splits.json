@@ -1,0 +1,5051 @@
+{
+  "schemaVersion": "gatelm.difficulty-independent-dataset-split-manifest.v1",
+  "datasetVersion": "difficulty_independent_ood_5000_2026_07_18_candidate_v1",
+  "masterDatasetPath": "docs/v2.1.0/evaluation/difficulty-independent-ood-5000.v1.candidate.jsonl",
+  "masterDatasetSha256": "045d1cd1072d5e5ea7c4bb445898627e8fe3a937b20a3dc076c07b04ce81b70d",
+  "blindReviewPath": "docs/v2.1.0/reviews/difficulty-independent-ood-5000/difficulty-independent-ood-5000.v1.blind-review.jsonl",
+  "blindReviewSha256": "bb253b94e7e107cd7ba09cb727070dea2addd3801956fe50f35ad779c394b9ea",
+  "splitPolicyVersion": "difficulty-independent-ood-family-split.2026-07-18.v1",
+  "splitSeed": 2026071803,
+  "assignmentUnit": "prompt_family",
+  "labelState": "labels_pending_human_review",
+  "trainingEligible": false,
+  "dataset1Isolation": {
+    "dataset1Path": "docs/v2.1.0/training/difficulty-model-path-5000.owner-approved.jsonl",
+    "usedAsGenerationInput": false,
+    "usedForPostGenerationOverlapAudit": true,
+    "sharedGeneratorModules": [],
+    "familyNamespace": "independent2"
+  },
+  "standardManifestProjection": {
+    "train": "train",
+    "validation": "calibration",
+    "test": "holdout"
+  },
+  "splits": {
+    "train": {
+      "datasetPath": "docs/v2.1.0/evaluation/difficulty-independent-ood-5000.v1.train.jsonl",
+      "datasetSha256": "e1fa428c4d10ec3e06cbc8598ef99d896f26c7c8adccbe60f6d365446b4f0e09",
+      "records": 3000,
+      "families": 600,
+      "purpose": "future_weight_fit_after_human_approval"
+    },
+    "validation": {
+      "datasetPath": "docs/v2.1.0/evaluation/difficulty-independent-ood-5000.v1.validation.jsonl",
+      "datasetSha256": "6de2709c584e8a9bc4ed2c09f80bdf77bb5253cb8c940d230f8a4b087e974c81",
+      "records": 1000,
+      "families": 200,
+      "purpose": "future_model_selection_after_human_approval"
+    },
+    "test": {
+      "datasetPath": "docs/v2.1.0/evaluation/difficulty-independent-ood-5000.v1.test.jsonl",
+      "datasetSha256": "9ec29d055f06e5e8dba5bc59cc32a0f677ad242786a745bbe83097ba1c8aefd4",
+      "records": 1000,
+      "families": 200,
+      "purpose": "untouched_final_evaluation_after_human_approval"
+    }
+  },
+  "assignments": [
+    {
+      "promptFamily": "independent2.code.debugging.scenario.f006",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.debugging.scenario.f012",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.debugging.scenario.f018",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.debugging.scenario.f024",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.debugging.scenario.f030",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.debugging.scenario.f036",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.debugging.scenario.f042",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.debugging.scenario.f048",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.debugging.scenario.f054",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.debugging.scenario.f060",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.debugging.scenario.f066",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.debugging.scenario.f072",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.debugging.scenario.f078",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.debugging.scenario.f084",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.debugging.scenario.f090",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.debugging.scenario.f096",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.debugging.scenario.f102",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.debugging.scenario.f108",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.debugging.scenario.f114",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.debugging.scenario.f120",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.debugging.scenario.f126",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.debugging.scenario.f132",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.debugging.scenario.f138",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.debugging.scenario.f144",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.debugging.scenario.f150",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.debugging.scenario.f156",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.debugging.scenario.f162",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.debugging.scenario.f168",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.debugging.scenario.f174",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.debugging.scenario.f180",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.debugging.scenario.f186",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.debugging.scenario.f192",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.debugging.scenario.f198",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.design.scenario.f002",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.design.scenario.f008",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.design.scenario.f014",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.design.scenario.f020",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.design.scenario.f026",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.design.scenario.f032",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.design.scenario.f038",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.design.scenario.f044",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.design.scenario.f050",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.design.scenario.f056",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.design.scenario.f062",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.design.scenario.f068",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.design.scenario.f074",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.design.scenario.f080",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.design.scenario.f086",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.design.scenario.f092",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.design.scenario.f098",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.design.scenario.f104",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.design.scenario.f110",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.design.scenario.f116",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.design.scenario.f122",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.design.scenario.f128",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.design.scenario.f134",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.design.scenario.f140",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.design.scenario.f146",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.design.scenario.f152",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.design.scenario.f158",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.design.scenario.f164",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.design.scenario.f170",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.design.scenario.f176",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.design.scenario.f182",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.design.scenario.f188",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.design.scenario.f194",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.design.scenario.f200",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.explanation.scenario.f003",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.explanation.scenario.f009",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.explanation.scenario.f015",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.explanation.scenario.f021",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.explanation.scenario.f027",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.explanation.scenario.f033",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.explanation.scenario.f039",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.explanation.scenario.f045",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.explanation.scenario.f051",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.explanation.scenario.f057",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.explanation.scenario.f063",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.explanation.scenario.f069",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.explanation.scenario.f075",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.explanation.scenario.f081",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.explanation.scenario.f087",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.explanation.scenario.f093",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.explanation.scenario.f099",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.explanation.scenario.f105",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.explanation.scenario.f111",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.explanation.scenario.f117",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.explanation.scenario.f123",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.explanation.scenario.f129",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.explanation.scenario.f135",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.explanation.scenario.f141",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.explanation.scenario.f147",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.explanation.scenario.f153",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.explanation.scenario.f159",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.explanation.scenario.f165",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.explanation.scenario.f171",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.explanation.scenario.f177",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.explanation.scenario.f183",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.explanation.scenario.f189",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.explanation.scenario.f195",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.generation.scenario.f001",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.generation.scenario.f007",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.generation.scenario.f013",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.generation.scenario.f019",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.generation.scenario.f025",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.generation.scenario.f031",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.generation.scenario.f037",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.generation.scenario.f043",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.generation.scenario.f049",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.generation.scenario.f055",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.generation.scenario.f061",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.generation.scenario.f067",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.generation.scenario.f073",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.generation.scenario.f079",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.generation.scenario.f085",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.generation.scenario.f091",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.generation.scenario.f097",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.generation.scenario.f103",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.generation.scenario.f109",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.generation.scenario.f115",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.generation.scenario.f121",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.generation.scenario.f127",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.generation.scenario.f133",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.generation.scenario.f139",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.generation.scenario.f145",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.generation.scenario.f151",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.generation.scenario.f157",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.generation.scenario.f163",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.generation.scenario.f169",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.generation.scenario.f175",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.generation.scenario.f181",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.generation.scenario.f187",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.generation.scenario.f193",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.generation.scenario.f199",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.refactoring.scenario.f005",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.refactoring.scenario.f011",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.refactoring.scenario.f017",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.refactoring.scenario.f023",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.refactoring.scenario.f029",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.refactoring.scenario.f035",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.refactoring.scenario.f041",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.refactoring.scenario.f047",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.refactoring.scenario.f053",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.refactoring.scenario.f059",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.refactoring.scenario.f065",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.refactoring.scenario.f071",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.refactoring.scenario.f077",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.refactoring.scenario.f083",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.refactoring.scenario.f089",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.refactoring.scenario.f095",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.refactoring.scenario.f101",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.refactoring.scenario.f107",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.refactoring.scenario.f113",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.refactoring.scenario.f119",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.refactoring.scenario.f125",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.refactoring.scenario.f131",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.refactoring.scenario.f137",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.refactoring.scenario.f143",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.refactoring.scenario.f149",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.refactoring.scenario.f155",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.refactoring.scenario.f161",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.refactoring.scenario.f167",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.refactoring.scenario.f173",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.refactoring.scenario.f179",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.refactoring.scenario.f185",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.refactoring.scenario.f191",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.refactoring.scenario.f197",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.review.scenario.f004",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.review.scenario.f010",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.review.scenario.f016",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.review.scenario.f022",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.review.scenario.f028",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.review.scenario.f034",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.review.scenario.f040",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.review.scenario.f046",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.review.scenario.f052",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.review.scenario.f058",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.review.scenario.f064",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.review.scenario.f070",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.review.scenario.f076",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.review.scenario.f082",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.review.scenario.f088",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.review.scenario.f094",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.review.scenario.f100",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.review.scenario.f106",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.review.scenario.f112",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.review.scenario.f118",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.review.scenario.f124",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.review.scenario.f130",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.review.scenario.f136",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.review.scenario.f142",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.review.scenario.f148",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.review.scenario.f154",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.review.scenario.f160",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.review.scenario.f166",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.review.scenario.f172",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.review.scenario.f178",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.review.scenario.f184",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.review.scenario.f190",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.code.review.scenario.f196",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.explanation.scenario.f006",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.explanation.scenario.f012",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.explanation.scenario.f018",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.explanation.scenario.f024",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.explanation.scenario.f030",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.explanation.scenario.f036",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.explanation.scenario.f042",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.explanation.scenario.f048",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.explanation.scenario.f054",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.explanation.scenario.f060",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.explanation.scenario.f066",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.explanation.scenario.f072",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.explanation.scenario.f078",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.explanation.scenario.f084",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.explanation.scenario.f090",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.explanation.scenario.f096",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.explanation.scenario.f102",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.explanation.scenario.f108",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.explanation.scenario.f114",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.explanation.scenario.f120",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.explanation.scenario.f126",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.explanation.scenario.f132",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.explanation.scenario.f138",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.explanation.scenario.f144",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.explanation.scenario.f150",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.explanation.scenario.f156",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.explanation.scenario.f162",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.explanation.scenario.f168",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.explanation.scenario.f174",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.explanation.scenario.f180",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.explanation.scenario.f186",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.explanation.scenario.f192",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.explanation.scenario.f198",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.extraction.scenario.f005",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.extraction.scenario.f011",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.extraction.scenario.f017",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.extraction.scenario.f023",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.extraction.scenario.f029",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.extraction.scenario.f035",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.extraction.scenario.f041",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.extraction.scenario.f047",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.extraction.scenario.f053",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.extraction.scenario.f059",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.extraction.scenario.f065",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.extraction.scenario.f071",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.extraction.scenario.f077",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.extraction.scenario.f083",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.extraction.scenario.f089",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.extraction.scenario.f095",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.extraction.scenario.f101",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.extraction.scenario.f107",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.extraction.scenario.f113",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.extraction.scenario.f119",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.extraction.scenario.f125",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.extraction.scenario.f131",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.extraction.scenario.f137",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.extraction.scenario.f143",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.extraction.scenario.f149",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.extraction.scenario.f155",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.extraction.scenario.f161",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.extraction.scenario.f167",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.extraction.scenario.f173",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.extraction.scenario.f179",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.extraction.scenario.f185",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.extraction.scenario.f191",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.extraction.scenario.f197",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.other.scenario.f002",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.other.scenario.f008",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.other.scenario.f014",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.other.scenario.f020",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.other.scenario.f026",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.other.scenario.f032",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.other.scenario.f038",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.other.scenario.f044",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.other.scenario.f050",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.other.scenario.f056",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.other.scenario.f062",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.other.scenario.f068",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.other.scenario.f074",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.other.scenario.f080",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.other.scenario.f086",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.other.scenario.f092",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.other.scenario.f098",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.other.scenario.f104",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.other.scenario.f110",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.other.scenario.f116",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.other.scenario.f122",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.other.scenario.f128",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.other.scenario.f134",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.other.scenario.f140",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.other.scenario.f146",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.other.scenario.f152",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.other.scenario.f158",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.other.scenario.f164",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.other.scenario.f170",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.other.scenario.f176",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.other.scenario.f182",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.other.scenario.f188",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.other.scenario.f194",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.other.scenario.f200",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.qa.scenario.f001",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.qa.scenario.f007",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.qa.scenario.f013",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.qa.scenario.f019",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.qa.scenario.f025",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.qa.scenario.f031",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.qa.scenario.f037",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.qa.scenario.f043",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.qa.scenario.f049",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.qa.scenario.f055",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.qa.scenario.f061",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.qa.scenario.f067",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.qa.scenario.f073",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.qa.scenario.f079",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.qa.scenario.f085",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.qa.scenario.f091",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.qa.scenario.f097",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.qa.scenario.f103",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.qa.scenario.f109",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.qa.scenario.f115",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.qa.scenario.f121",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.qa.scenario.f127",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.qa.scenario.f133",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.qa.scenario.f139",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.qa.scenario.f145",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.qa.scenario.f151",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.qa.scenario.f157",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.qa.scenario.f163",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.qa.scenario.f169",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.qa.scenario.f175",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.qa.scenario.f181",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.qa.scenario.f187",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.qa.scenario.f193",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.qa.scenario.f199",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.support.scenario.f004",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.support.scenario.f010",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.support.scenario.f016",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.support.scenario.f022",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.support.scenario.f028",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.support.scenario.f034",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.support.scenario.f040",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.support.scenario.f046",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.support.scenario.f052",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.support.scenario.f058",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.support.scenario.f064",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.support.scenario.f070",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.support.scenario.f076",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.support.scenario.f082",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.support.scenario.f088",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.support.scenario.f094",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.support.scenario.f100",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.support.scenario.f106",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.support.scenario.f112",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.support.scenario.f118",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.support.scenario.f124",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.support.scenario.f130",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.support.scenario.f136",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.support.scenario.f142",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.support.scenario.f148",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.support.scenario.f154",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.support.scenario.f160",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.support.scenario.f166",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.support.scenario.f172",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.support.scenario.f178",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.support.scenario.f184",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.support.scenario.f190",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.support.scenario.f196",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.transformation.scenario.f003",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.transformation.scenario.f009",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.transformation.scenario.f015",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.transformation.scenario.f021",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.transformation.scenario.f027",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.transformation.scenario.f033",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.transformation.scenario.f039",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.transformation.scenario.f045",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.transformation.scenario.f051",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.transformation.scenario.f057",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.transformation.scenario.f063",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.transformation.scenario.f069",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.transformation.scenario.f075",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.transformation.scenario.f081",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.transformation.scenario.f087",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.transformation.scenario.f093",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.transformation.scenario.f099",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.transformation.scenario.f105",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.transformation.scenario.f111",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.transformation.scenario.f117",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.transformation.scenario.f123",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.transformation.scenario.f129",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.transformation.scenario.f135",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.transformation.scenario.f141",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.transformation.scenario.f147",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.transformation.scenario.f153",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.transformation.scenario.f159",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.transformation.scenario.f165",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.transformation.scenario.f171",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.transformation.scenario.f177",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.transformation.scenario.f183",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.transformation.scenario.f189",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.general.transformation.scenario.f195",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f001",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f002",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f003",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f004",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f005",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f006",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f007",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f008",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f009",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f010",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f011",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f012",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f013",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f014",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f015",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f016",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f017",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f018",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f019",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f020",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f021",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f022",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f023",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f024",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f025",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f026",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f027",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f028",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f029",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f030",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f031",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f032",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f033",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f034",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f035",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f036",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f037",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f038",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f039",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f040",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f041",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f042",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f043",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f044",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f045",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f046",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f047",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f048",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f049",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f050",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f051",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f052",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f053",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f054",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f055",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f056",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f057",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f058",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f059",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f060",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f061",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f062",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f063",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f064",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f065",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f066",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f067",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f068",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f069",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f070",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f071",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f072",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f073",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f074",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f075",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f076",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f077",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f078",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f079",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f080",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f081",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f082",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f083",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f084",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f085",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f086",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f087",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f088",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f089",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f090",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f091",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f092",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f093",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f094",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f095",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f096",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f097",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f098",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f099",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.comparison.scenario.f100",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f101",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f102",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f103",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f104",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f105",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f106",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f107",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f108",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f109",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f110",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f111",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f112",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f113",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f114",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f115",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f116",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f117",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f118",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f119",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f120",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f121",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f122",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f123",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f124",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f125",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f126",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f127",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f128",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f129",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f130",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f131",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f132",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f133",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f134",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f135",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f136",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f137",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f138",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f139",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f140",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f141",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f142",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f143",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f144",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f145",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f146",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f147",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f148",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f149",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f150",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f151",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f152",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f153",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f154",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f155",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f156",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f157",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f158",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f159",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f160",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f161",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f162",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f163",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f164",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f165",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f166",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f167",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f168",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f169",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f170",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f171",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f172",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f173",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f174",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f175",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f176",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f177",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f178",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f179",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f180",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f181",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f182",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f183",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f184",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f185",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f186",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f187",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f188",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f189",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f190",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f191",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f192",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f193",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f194",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f195",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f196",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f197",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f198",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f199",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.reasoning.decision.scenario.f200",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.direct.scenario.f001",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.direct.scenario.f005",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.direct.scenario.f009",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.direct.scenario.f013",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.direct.scenario.f017",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.direct.scenario.f021",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.direct.scenario.f025",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.direct.scenario.f029",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.direct.scenario.f033",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.direct.scenario.f037",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.direct.scenario.f041",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.direct.scenario.f045",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.direct.scenario.f049",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.direct.scenario.f053",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.direct.scenario.f057",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.direct.scenario.f061",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.direct.scenario.f065",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.direct.scenario.f069",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.direct.scenario.f073",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.direct.scenario.f077",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.direct.scenario.f081",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.direct.scenario.f085",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.direct.scenario.f089",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.direct.scenario.f093",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.direct.scenario.f097",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.direct.scenario.f103",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.direct.scenario.f107",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.direct.scenario.f111",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.direct.scenario.f115",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.direct.scenario.f119",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.direct.scenario.f123",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.direct.scenario.f127",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.direct.scenario.f131",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.direct.scenario.f135",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.direct.scenario.f139",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.direct.scenario.f143",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.direct.scenario.f147",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.direct.scenario.f151",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.direct.scenario.f155",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.direct.scenario.f159",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.direct.scenario.f163",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.direct.scenario.f167",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.direct.scenario.f171",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.direct.scenario.f175",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.direct.scenario.f179",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.direct.scenario.f183",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.direct.scenario.f187",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.direct.scenario.f191",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.direct.scenario.f195",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.direct.scenario.f199",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.key_points.scenario.f002",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.key_points.scenario.f006",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.key_points.scenario.f010",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.key_points.scenario.f014",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.key_points.scenario.f018",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.key_points.scenario.f022",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.key_points.scenario.f026",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.key_points.scenario.f030",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.key_points.scenario.f034",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.key_points.scenario.f038",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.key_points.scenario.f042",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.key_points.scenario.f046",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.key_points.scenario.f050",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.key_points.scenario.f054",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.key_points.scenario.f058",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.key_points.scenario.f062",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.key_points.scenario.f066",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.key_points.scenario.f070",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.key_points.scenario.f074",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.key_points.scenario.f078",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.key_points.scenario.f082",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.key_points.scenario.f086",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.key_points.scenario.f090",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.key_points.scenario.f094",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.key_points.scenario.f098",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.key_points.scenario.f104",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.key_points.scenario.f108",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.key_points.scenario.f112",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.key_points.scenario.f116",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.key_points.scenario.f120",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.key_points.scenario.f124",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.key_points.scenario.f128",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.key_points.scenario.f132",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.key_points.scenario.f136",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.key_points.scenario.f140",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.key_points.scenario.f144",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.key_points.scenario.f148",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.key_points.scenario.f152",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.key_points.scenario.f156",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.key_points.scenario.f160",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.key_points.scenario.f164",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.key_points.scenario.f168",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.key_points.scenario.f172",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.key_points.scenario.f176",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.key_points.scenario.f180",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.key_points.scenario.f184",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.key_points.scenario.f188",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.key_points.scenario.f192",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.key_points.scenario.f196",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.key_points.scenario.f200",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.multi_source.scenario.f004",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.multi_source.scenario.f008",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.multi_source.scenario.f012",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.multi_source.scenario.f016",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.multi_source.scenario.f020",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.multi_source.scenario.f024",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.multi_source.scenario.f028",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.multi_source.scenario.f032",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.multi_source.scenario.f036",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.multi_source.scenario.f040",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.multi_source.scenario.f044",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.multi_source.scenario.f048",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.multi_source.scenario.f052",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.multi_source.scenario.f056",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.multi_source.scenario.f060",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.multi_source.scenario.f064",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.multi_source.scenario.f068",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.multi_source.scenario.f072",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.multi_source.scenario.f076",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.multi_source.scenario.f080",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.multi_source.scenario.f084",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.multi_source.scenario.f088",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.multi_source.scenario.f092",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.multi_source.scenario.f096",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.multi_source.scenario.f100",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.multi_source.scenario.f102",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.multi_source.scenario.f106",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.multi_source.scenario.f110",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.multi_source.scenario.f114",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.multi_source.scenario.f118",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.multi_source.scenario.f122",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.multi_source.scenario.f126",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.multi_source.scenario.f130",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.multi_source.scenario.f134",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.multi_source.scenario.f138",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.multi_source.scenario.f142",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.multi_source.scenario.f146",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.multi_source.scenario.f150",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.multi_source.scenario.f154",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.multi_source.scenario.f158",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.multi_source.scenario.f162",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.multi_source.scenario.f166",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.multi_source.scenario.f170",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.multi_source.scenario.f174",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.multi_source.scenario.f178",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.multi_source.scenario.f182",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.multi_source.scenario.f186",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.multi_source.scenario.f190",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.multi_source.scenario.f194",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.multi_source.scenario.f198",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.structured.scenario.f003",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.structured.scenario.f007",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.structured.scenario.f011",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.structured.scenario.f015",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.structured.scenario.f019",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.structured.scenario.f023",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.structured.scenario.f027",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.structured.scenario.f031",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.structured.scenario.f035",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.structured.scenario.f039",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.structured.scenario.f043",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.structured.scenario.f047",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.structured.scenario.f051",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.structured.scenario.f055",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.structured.scenario.f059",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.structured.scenario.f063",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.structured.scenario.f067",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.structured.scenario.f071",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.structured.scenario.f075",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.structured.scenario.f079",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.structured.scenario.f083",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.structured.scenario.f087",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.structured.scenario.f091",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.structured.scenario.f095",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.structured.scenario.f099",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.structured.scenario.f101",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.structured.scenario.f105",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.structured.scenario.f109",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.structured.scenario.f113",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.structured.scenario.f117",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.structured.scenario.f121",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.structured.scenario.f125",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.structured.scenario.f129",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.structured.scenario.f133",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.structured.scenario.f137",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.structured.scenario.f141",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.structured.scenario.f145",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.structured.scenario.f149",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.structured.scenario.f153",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.structured.scenario.f157",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.structured.scenario.f161",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.structured.scenario.f165",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.structured.scenario.f169",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.structured.scenario.f173",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.structured.scenario.f177",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.structured.scenario.f181",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.structured.scenario.f185",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.structured.scenario.f189",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.structured.scenario.f193",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.summarization.structured.scenario.f197",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.direct.scenario.f001",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.direct.scenario.f004",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.direct.scenario.f007",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.direct.scenario.f010",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.direct.scenario.f013",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.direct.scenario.f016",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.direct.scenario.f019",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.direct.scenario.f022",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.direct.scenario.f025",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.direct.scenario.f028",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.direct.scenario.f031",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.direct.scenario.f034",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.direct.scenario.f037",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.direct.scenario.f040",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.direct.scenario.f043",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.direct.scenario.f046",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.direct.scenario.f049",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.direct.scenario.f052",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.direct.scenario.f055",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.direct.scenario.f058",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.direct.scenario.f061",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.direct.scenario.f064",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.direct.scenario.f067",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.direct.scenario.f070",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.direct.scenario.f073",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.direct.scenario.f076",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.direct.scenario.f079",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.direct.scenario.f082",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.direct.scenario.f085",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.direct.scenario.f088",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.direct.scenario.f091",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.direct.scenario.f094",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.direct.scenario.f097",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.direct.scenario.f100",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.direct.scenario.f103",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.direct.scenario.f106",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.direct.scenario.f109",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.direct.scenario.f112",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.direct.scenario.f115",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.direct.scenario.f118",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.direct.scenario.f121",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.direct.scenario.f124",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.direct.scenario.f127",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.direct.scenario.f130",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.direct.scenario.f133",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.direct.scenario.f136",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.direct.scenario.f139",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.direct.scenario.f142",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.direct.scenario.f145",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.direct.scenario.f148",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.direct.scenario.f151",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.direct.scenario.f154",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.direct.scenario.f157",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.direct.scenario.f160",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.direct.scenario.f163",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.direct.scenario.f166",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.direct.scenario.f169",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.direct.scenario.f172",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.direct.scenario.f175",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.direct.scenario.f178",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.direct.scenario.f181",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.direct.scenario.f184",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.direct.scenario.f187",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.direct.scenario.f190",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.direct.scenario.f193",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.direct.scenario.f196",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.direct.scenario.f199",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.localization.scenario.f003",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.localization.scenario.f006",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.localization.scenario.f009",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.localization.scenario.f012",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.localization.scenario.f015",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.localization.scenario.f018",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.localization.scenario.f021",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.localization.scenario.f024",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.localization.scenario.f027",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.localization.scenario.f030",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.localization.scenario.f033",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.localization.scenario.f036",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.localization.scenario.f039",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.localization.scenario.f042",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.localization.scenario.f045",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.localization.scenario.f048",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.localization.scenario.f051",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.localization.scenario.f054",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.localization.scenario.f057",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.localization.scenario.f060",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.localization.scenario.f063",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.localization.scenario.f066",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.localization.scenario.f069",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.localization.scenario.f072",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.localization.scenario.f075",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.localization.scenario.f078",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.localization.scenario.f081",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.localization.scenario.f084",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.localization.scenario.f087",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.localization.scenario.f090",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.localization.scenario.f093",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.localization.scenario.f096",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.localization.scenario.f099",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.localization.scenario.f102",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.localization.scenario.f105",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.localization.scenario.f108",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.localization.scenario.f111",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.localization.scenario.f114",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.localization.scenario.f117",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.localization.scenario.f120",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.localization.scenario.f123",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.localization.scenario.f126",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.localization.scenario.f129",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.localization.scenario.f132",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.localization.scenario.f135",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.localization.scenario.f138",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.localization.scenario.f141",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.localization.scenario.f144",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.localization.scenario.f147",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.localization.scenario.f150",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.localization.scenario.f153",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.localization.scenario.f156",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.localization.scenario.f159",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.localization.scenario.f162",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.localization.scenario.f165",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.localization.scenario.f168",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.localization.scenario.f171",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.localization.scenario.f174",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.localization.scenario.f177",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.localization.scenario.f180",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.localization.scenario.f183",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.localization.scenario.f186",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.localization.scenario.f189",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.localization.scenario.f192",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.localization.scenario.f195",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.localization.scenario.f198",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.style_preserving.scenario.f002",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.style_preserving.scenario.f005",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.style_preserving.scenario.f008",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.style_preserving.scenario.f011",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.style_preserving.scenario.f014",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.style_preserving.scenario.f017",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.style_preserving.scenario.f020",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.style_preserving.scenario.f023",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.style_preserving.scenario.f026",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.style_preserving.scenario.f029",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.style_preserving.scenario.f032",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.style_preserving.scenario.f035",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.style_preserving.scenario.f038",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.style_preserving.scenario.f041",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.style_preserving.scenario.f044",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.style_preserving.scenario.f047",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.style_preserving.scenario.f050",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.style_preserving.scenario.f053",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.style_preserving.scenario.f056",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.style_preserving.scenario.f059",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.style_preserving.scenario.f062",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.style_preserving.scenario.f065",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.style_preserving.scenario.f068",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.style_preserving.scenario.f071",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.style_preserving.scenario.f074",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.style_preserving.scenario.f077",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.style_preserving.scenario.f080",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.style_preserving.scenario.f083",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.style_preserving.scenario.f086",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.style_preserving.scenario.f089",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.style_preserving.scenario.f092",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.style_preserving.scenario.f095",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.style_preserving.scenario.f098",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.style_preserving.scenario.f101",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.style_preserving.scenario.f104",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.style_preserving.scenario.f107",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.style_preserving.scenario.f110",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.style_preserving.scenario.f113",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.style_preserving.scenario.f116",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.style_preserving.scenario.f119",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.style_preserving.scenario.f122",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.style_preserving.scenario.f125",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.style_preserving.scenario.f128",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.style_preserving.scenario.f131",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.style_preserving.scenario.f134",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.style_preserving.scenario.f137",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.style_preserving.scenario.f140",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.style_preserving.scenario.f143",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.style_preserving.scenario.f146",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.style_preserving.scenario.f149",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.style_preserving.scenario.f152",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.style_preserving.scenario.f155",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.style_preserving.scenario.f158",
+      "split": "train",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.style_preserving.scenario.f161",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.style_preserving.scenario.f164",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.style_preserving.scenario.f167",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.style_preserving.scenario.f170",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.style_preserving.scenario.f173",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.style_preserving.scenario.f176",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.style_preserving.scenario.f179",
+      "split": "validation",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.style_preserving.scenario.f182",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.style_preserving.scenario.f185",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.style_preserving.scenario.f188",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.style_preserving.scenario.f191",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.style_preserving.scenario.f194",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.style_preserving.scenario.f197",
+      "split": "test",
+      "records": 5
+    },
+    {
+      "promptFamily": "independent2.translation.style_preserving.scenario.f200",
+      "split": "test",
+      "records": 5
+    }
+  ],
+  "createdAt": "2026-07-18T00:00:00Z"
+}
