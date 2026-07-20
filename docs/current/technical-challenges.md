@@ -264,6 +264,10 @@ After deploying the query-plan patch, a bounded recovery compressed 274,083 undi
 
 The recovery also exposed a second failure mechanism: PostgreSQL preserved a source timestamp such as `12:47:21.705353`, while Node `Date` truncated it to `12:47:21.705`. Two tail rows were therefore rediscovered on every manual run, which could enqueue the already completed 180,008-row hour again. The follow-up implementation reads source and cursor timestamps as database text and casts them back to `timestamptz` only inside SQL, preserving the database cursor precision.
 
+The precision patch was deployed as main SHA `6e28c03235fb9ba86a352ebecf11635168d140f0`. Its first bounded run advanced the previously truncated Project/Application cursor to the exact `12:47:21.705353` value; every following recovery run reported `discovered=0`. The duplicate 180,008-row hour completed once in 37.353 seconds and PostgreSQL returned to 0.19% CPU with zero active queries. Six remaining parent or recent buckets completed in 0.403–0.431 seconds, after which the worker reported `aggregated=0 / discovered=0`, the dirty queue was empty, and all recorded bucket states were ready.
+
+The persistent worker was then re-enabled with a 60-second interval, discovery batch 500, bucket concurrency one, 60-second discovery lag, and one-hour reconciliation interval. After the first automatic interval, the dirty queue remained empty, Control Plane was healthy, and PostgreSQL was at 0.08% CPU with zero active queries. This is bounded recovery evidence, not proof that the current hour-rebuild and raw-fallback design has unlimited capacity.
+
 ### Evidence
 
 - [Production 300 RPS × 10 minute Rollup incident report](../../reports/perf/production-krafton-300rps-10m-dashboard-rollup-incident-20260720.ko.md)
@@ -276,7 +280,7 @@ The recovery also exposed a second failure mechanism: PostgreSQL preserved a sou
 
 ### Claim boundary
 
-The incident evidence was collected on 2026-07-20 with image tag `production-distributed-23c6e6d847de`; the bounded single-bucket recovery used main SHA `d2a06ab3d9922028c21ac3155d172a628cd03e2c`. It proves the diagnosed failure, query-plan improvement, and isolated completion of the measured buckets. It does not prove concurrent Dashboard safety or unlimited-scale capacity. The production Rollup worker remains temporarily disabled until the timestamp-precision patch is deployed and cursor convergence is verified; polling, raw fallback, query budgets, incremental aggregation, partitioning, and retention remain follow-up work.
+The incident evidence was collected on 2026-07-20 with image tag `production-distributed-23c6e6d847de`; query-plan recovery used main SHA `d2a06ab3d9922028c21ac3155d172a628cd03e2c`, and cursor convergence plus conservative worker re-enablement used main SHA `6e28c03235fb9ba86a352ebecf11635168d140f0`. It proves the diagnosed failure, measured query-plan improvement, completion of the bounded backlog, exact cursor convergence, and stable first automatic worker interval. It does not prove concurrent Dashboard safety or unlimited-scale capacity. Polling, raw fallback, query budgets, minute-level incremental aggregation, normalized ingestion dimensions, partitioning, and retention remain follow-up work.
 
 ## 11. Large-Scale Validation Still Required
 

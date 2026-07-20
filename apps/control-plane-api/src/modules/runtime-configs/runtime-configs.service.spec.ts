@@ -110,7 +110,7 @@ describe('RuntimeConfigsService', () => {
     );
 
     const result = await service.upsertDraft(applicationId, {
-      rateLimit: { limit: 30 },
+      rateLimit: { limit: 30, windowSeconds: 15 },
       budgetPolicy: {
         enabled: true,
         enforcementMode: 'warn',
@@ -141,6 +141,7 @@ describe('RuntimeConfigsService', () => {
     expect(result.publishState).toBe('draft');
     expect(result.runtimeConfig.publishState).toBe('draft');
     expect(result.runtimeConfig.rateLimit.limit).toBe(30);
+    expect(result.runtimeConfig.rateLimit.windowSeconds).toBe(15);
     expect(result.runtimeConfig.budgetPolicy).toEqual({
       enabled: true,
       enforcementMode: 'warn',
@@ -608,6 +609,10 @@ describe('RuntimeConfigsService', () => {
       Promise.resolve(runtimeConfigRecord(data.document, data)),
     );
     const draft = await service.upsertDraft(applicationId, {
+      rateLimit: {
+        limit: 60,
+        windowSeconds: 30,
+      },
       routingPolicy: {
         mode: 'auto',
         routes: routingRoutes('mock-balanced'),
@@ -674,6 +679,12 @@ describe('RuntimeConfigsService', () => {
             runtimeSnapshotId: '00000000-0000-4000-8000-000000000700',
             runtimeSnapshotVersion: 1,
             runtimeState: 'snapshot_active',
+            policies: expect.objectContaining({
+              rateLimit: expect.objectContaining({
+                limit: 60,
+                windowSeconds: 30,
+              }),
+            }),
           }),
           publishedAt: now,
           publishedBy: 'control_plane',
@@ -710,6 +721,7 @@ describe('RuntimeConfigsService', () => {
     );
     expect(result.configVersion).toBe('runtime_config_test_001');
     expect(result.publishState).toBe('active');
+    expect(result.rateLimit.windowSeconds).toBe(30);
     expect(result.schemaVersion).toBe('gatelm.active-runtime-config.v2');
     expect(result.providers[0]?.credentialRef).toEqual({
       credentialRefId: 'secret/provider/mock',

@@ -588,6 +588,19 @@ export function getRateLimitWindowSeconds(limit: number, refillTokensPerSecond: 
   return Math.max(1, Math.round(limit / Math.max(refillTokensPerSecond, 1)));
 }
 
+export function toRuntimePolicyRateLimitWriteInput(
+  values: Pick<
+    RuntimePolicyDraftValues,
+    "rateLimitEnabled" | "rateLimitLimit" | "rateLimitWindowSeconds"
+  >
+) {
+  return {
+    enabled: values.rateLimitEnabled,
+    limit: values.rateLimitLimit,
+    windowSeconds: values.rateLimitWindowSeconds
+  };
+}
+
 function mergeRuntimePolicyDetectors(
   detectors?: RuntimePolicyDetector[] | null
 ): RuntimePolicyDetector[] {

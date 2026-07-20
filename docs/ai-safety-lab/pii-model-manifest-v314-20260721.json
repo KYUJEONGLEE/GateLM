@@ -1,0 +1,23 @@
+{
+  "manifestVersion": "tenant-chat-pii-models.v1",
+  "generatedAt": "2026-07-21T00:00:00+09:00",
+  "hashAlgorithm": "SHA-256",
+  "models": [
+    {
+      "modelId": "gatelm/koelectra-small-v3-pii-ner",
+      "revision": "v3.14",
+      "runtimeDirectory": "models/gatelm--koelectra-small-v3-pii-ner-quantized",
+      "license": "Apache-2.0",
+      "conversion": "Optimum ONNX token-classification export followed by ONNX Runtime dynamic QInt8 quantization",
+      "trainingReportSha256": "536b2fe2a9e234a946e23d64c50da2cfb997f8373aa49a0a7a8ee81d5a8a30a7",
+      "files": [
+        {"path": "config.json", "bytes": 1285, "sha256": "d5b9b8e7a94eef5b40a3fcd60faf33528ad2fb29068110a535febee96b98c653"},
+        {"path": "model.onnx", "bytes": 14595587, "sha256": "8a5cb146e84d413910a423d304e662a6aba9f69e83db129f5061d007a6de9381"},
+        {"path": "special_tokens_map.json", "bytes": 732, "sha256": "5aa43c2f985a25296d5a5ce621c2f77376ca8091a47993c492fd5460b895b140"},
+        {"path": "tokenizer.json", "bytes": 814948, "sha256": "6234fb96e9031ec5e6a83b27ba1ade973e823d5e34a62a49c8d00a20f49e09eb"},
+        {"path": "tokenizer_config.json", "bytes": 1438, "sha256": "0fe0c81571b9833e8bf4d7cb4e44726d8d18063709139385e368316e8a1a88d6"},
+        {"path": "vocab.txt", "bytes": 263327, "sha256": "6e886927dfcecd22029b1ba80c10a1374740259c1067fc3a28d964b7ae2d55a7"}
+      ]
+    }
+  ]
+}
