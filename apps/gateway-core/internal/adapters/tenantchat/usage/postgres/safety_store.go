@@ -37,17 +37,27 @@ func (s *ReservationStore) ReadSafetySummary(
 		requestContext.ExecutionScope.Actor.UserID, requestContext.RequestID).Scan(
 		&action, &detectedTypesJSON, &detectedCount, &policyDigest,
 	)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, tenantchat.ErrAdmissionExpired
-	}
 	if err != nil {
-		return nil, tenantchat.ErrUsageGuardUnavailable
+		return nil, classifySafetySummaryReadError(ctx, err)
 	}
 	summary, err := safetySummaryFromColumns(action, detectedTypesJSON, detectedCount, policyDigest)
 	if err != nil {
 		return nil, tenantchat.ErrUsageGuardUnavailable
 	}
 	return summary, nil
+}
+
+func classifySafetySummaryReadError(ctx context.Context, err error) error {
+	if contextErr := ctx.Err(); contextErr != nil {
+		return contextErr
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return err
+	}
+	if errors.Is(err, pgx.ErrNoRows) {
+		return tenantchat.ErrAdmissionExpired
+	}
+	return tenantchat.ErrUsageGuardUnavailable
 }
 
 func (s *ReservationStore) RecordSafetySummary(
