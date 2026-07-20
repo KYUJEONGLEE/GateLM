@@ -38,21 +38,41 @@ describe('Tenant Chat projection event contract', () => {
     );
   });
 
-  it('accepts bounded cache provenance for policy-impact projection', () => {
+  it.each(['gpt-5.4-mini', 'models/gemini-2.5-flash', 'provider:model.v1'])(
+    'accepts the canonical model key %s in bounded cache provenance',
+    (modelKey) => {
+      const payload = {
+        ...terminalEvent(),
+        schemaVersion: 2,
+        terminalOutcome: 'cache_hit',
+        cacheOutcome: 'hit',
+        effectiveProviderId: 'provider_001',
+        effectiveModelKey: modelKey,
+        effectiveRouteTier: 'high_quality',
+        routingDifficulty: 'complex',
+        savedCostMicroUsd: 425,
+      };
+      delete (payload as { errorCode?: string }).errorCode;
+
+      expect(() => validateTenantChatProjectionEvent(payload)).not.toThrow();
+    },
+  );
+
+  it('rejects an unbounded cache model key', () => {
     const payload = {
       ...terminalEvent(),
       schemaVersion: 2,
       terminalOutcome: 'cache_hit',
       cacheOutcome: 'hit',
       effectiveProviderId: 'provider_001',
-      effectiveModelKey: 'model_001',
-      effectiveRouteTier: 'high_quality',
-      routingDifficulty: 'complex',
+      effectiveModelKey: 'gpt model',
       savedCostMicroUsd: 425,
     };
     delete (payload as { errorCode?: string }).errorCode;
 
-    expect(() => validateTenantChatProjectionEvent(payload)).not.toThrow();
+    expect(() => validateTenantChatProjectionEvent(payload)).toThrow(
+      'projection event schema validation failed',
+    );
   });
 
   it('accepts only simple or complex as routing difficulty', () => {
