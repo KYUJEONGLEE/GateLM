@@ -9,6 +9,7 @@ import { Prisma, TenantChatInvocationOutbox } from '@prisma/client';
 
 import { PrismaService } from '@/infrastructure/database/prisma/prisma.service';
 import {
+  type DashboardRollupBuildMode,
   enqueueDashboardRollupDirtyHierarchy,
   utcBucketStart,
 } from '@/modules/dashboard-rollup/dashboard-rollup.service';
@@ -521,20 +522,26 @@ export class TenantChatProjectionService
       },
     });
     if (this.config.get<string>('DASHBOARD_ROLLUP_ENABLED') === 'true') {
-      const dirtyHours = new Map<string, Date>();
+      const buildMode =
+        this.config.get<DashboardRollupBuildMode>(
+          'DASHBOARD_ROLLUP_BUILD_MODE',
+        ) ?? 'legacy';
+      const sourceGrain = buildMode === 'legacy' ? 'hour' : 'minute';
+      const dirtyBuckets = new Map<string, Date>();
       for (const completedAt of [existing?.completedAt, occurredAt]) {
         if (!completedAt) {
           continue;
         }
-        const hour = utcBucketStart(completedAt, 'hour');
-        dirtyHours.set(hour.toISOString(), hour);
+        const bucket = utcBucketStart(completedAt, sourceGrain);
+        dirtyBuckets.set(bucket.toISOString(), bucket);
       }
-      for (const hour of dirtyHours.values()) {
+      for (const bucket of dirtyBuckets.values()) {
         await enqueueDashboardRollupDirtyHierarchy(tx, {
           tenantId: event.executionScope.tenantId,
           surface: 'tenant_chat',
-          occurredAt: hour,
+          occurredAt: bucket,
           reasonCode: 'PROJECTION_CHANGED',
+          buildMode,
         });
       }
     }

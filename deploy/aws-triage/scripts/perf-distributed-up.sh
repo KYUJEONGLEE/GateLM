@@ -65,6 +65,9 @@ case "${role}" in
 
       perf_log "Applying Gateway and dashboard compatibility tables..."
       dist_apply_sql_file "${AWS_TRIAGE_DIR}/migrations/001_gateway_runtime_tables.sql"
+      dist_apply_sql_file "${AWS_TRIAGE_DIR}/migrations/003_add_p0_invocation_log_ttft.sql"
+      dist_apply_sql_file "${AWS_TRIAGE_DIR}/migrations/004_add_p0_dashboard_rollup_indexes.sql"
+      dist_apply_sql_file "${AWS_TRIAGE_DIR}/migrations/005_prepare_p0_monthly_partitioning.sql"
       dist_apply_sql_file "${REPO_ROOT}/db/migrations/012_create_model_pricing_catalog_compat.sql"
       dist_apply_sql_file "${REPO_ROOT}/db/migrations/013_seed_openai_canonical_pricing_aliases.sql"
       dist_apply_sql_file "${REPO_ROOT}/db/seeds/002_seed_dashboard_pricing_catalog.sql"

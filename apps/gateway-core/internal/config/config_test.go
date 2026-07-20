@@ -87,6 +87,8 @@ var databasePerformanceEnvKeys = []string{
 	"GATEWAY_PRICING_CACHE_ENABLED",
 	"GATEWAY_PRICING_CACHE_TTL_MS",
 	"GATEWAY_PRICING_CACHE_MAX_ENTRIES",
+	"GATEWAY_ANALYTICS_POLICY_IMPACT_READ_MODE",
+	"GATEWAY_ANALYTICS_POLICY_IMPACT_MAX_RAW_TAIL_MS",
 	"GATEWAY_EXACT_CACHE_KEY_SECRET",
 }
 
@@ -428,6 +430,10 @@ func TestDatabasePerformanceConfigDefaults(t *testing.T) {
 	if cfg.AuthCache.TTL != time.Second || cfg.PricingCache.TTL != 5*time.Second {
 		t.Fatalf("unexpected cache TTL defaults: auth=%s pricing=%s", cfg.AuthCache.TTL, cfg.PricingCache.TTL)
 	}
+	if cfg.AnalyticsPolicyImpactReadMode != "raw" ||
+		cfg.AnalyticsPolicyImpactMaxRawTail != 2*time.Minute {
+		t.Fatalf("unexpected policy impact read defaults: mode=%s tail=%s", cfg.AnalyticsPolicyImpactReadMode, cfg.AnalyticsPolicyImpactMaxRawTail)
+	}
 }
 
 func TestDatabasePerformanceConfigLoadsEnvOverrides(t *testing.T) {
@@ -446,6 +452,8 @@ func TestDatabasePerformanceConfigLoadsEnvOverrides(t *testing.T) {
 	t.Setenv("GATEWAY_PRICING_CACHE_ENABLED", "true")
 	t.Setenv("GATEWAY_PRICING_CACHE_TTL_MS", "7500")
 	t.Setenv("GATEWAY_PRICING_CACHE_MAX_ENTRIES", "512")
+	t.Setenv("GATEWAY_ANALYTICS_POLICY_IMPACT_READ_MODE", "rollup")
+	t.Setenv("GATEWAY_ANALYTICS_POLICY_IMPACT_MAX_RAW_TAIL_MS", "180000")
 
 	cfg, err := LoadWithError()
 	if err != nil {
@@ -463,6 +471,21 @@ func TestDatabasePerformanceConfigLoadsEnvOverrides(t *testing.T) {
 	}
 	if !cfg.PricingCache.Enabled || cfg.PricingCache.TTL != 7500*time.Millisecond || cfg.PricingCache.MaxEntries != 512 {
 		t.Fatalf("unexpected pricing cache config: %+v", cfg.PricingCache)
+	}
+	if cfg.AnalyticsPolicyImpactReadMode != "rollup" ||
+		cfg.AnalyticsPolicyImpactMaxRawTail != 3*time.Minute {
+		t.Fatalf("unexpected policy impact read config: mode=%s tail=%s", cfg.AnalyticsPolicyImpactReadMode, cfg.AnalyticsPolicyImpactMaxRawTail)
+	}
+}
+
+func TestDatabasePerformanceConfigRejectsUnknownPolicyImpactReadMode(t *testing.T) {
+	resetSemanticCacheEnv(t)
+	resetDatabasePerformanceEnv(t)
+	t.Setenv("GATEWAY_ANALYTICS_POLICY_IMPACT_READ_MODE", "full-raw-fallback")
+
+	_, err := LoadWithError()
+	if err == nil || !strings.Contains(err.Error(), "must be raw or rollup") {
+		t.Fatalf("expected invalid policy impact read mode error, got %v", err)
 	}
 }
 

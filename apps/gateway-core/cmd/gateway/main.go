@@ -264,7 +264,13 @@ func main() {
 		terminalLogWriter,
 		dailyTokenUsageStore,
 	)
-	invocationLogReader := postgresinvocationlog.NewQueryReader(invocationLogQueryer{pool: postgresPool})
+	invocationLogReader := postgresinvocationlog.NewQueryReaderWithOptions(
+		invocationLogQueryer{pool: postgresPool},
+		postgresinvocationlog.QueryReaderOptions{
+			AnalyticsPolicyImpactReadMode:   cfg.AnalyticsPolicyImpactReadMode,
+			AnalyticsPolicyImpactMaxRawTail: cfg.AnalyticsPolicyImpactMaxRawTail,
+		},
+	)
 	pricingCatalog := cachedpricing.NewReader(postgrespricing.NewReader(postgresPool), cachedpricing.Config{
 		Enabled:    cfg.PricingCache.Enabled,
 		TTL:        cfg.PricingCache.TTL,

@@ -21,7 +21,8 @@
     "test:e2e": "jest --config ./test/jest-e2e.json --passWithNoTests",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
-    "db:seed": "ts-node -r tsconfig-paths/register prisma/seed.ts"
+    "db:seed": "ts-node -r tsconfig-paths/register prisma/seed.ts",
+    "benchmark:dashboard-rollup": "ts-node -r tsconfig-paths/register src/dashboard-rollup-benchmark.ts"
   },
   "dependencies": {
     "@gatelm/rag-config": "workspace:*",

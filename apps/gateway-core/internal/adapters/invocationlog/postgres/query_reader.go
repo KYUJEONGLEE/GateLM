@@ -35,11 +35,34 @@ type Row interface {
 }
 
 type QueryReader struct {
-	db Queryer
+	db                              Queryer
+	analyticsPolicyImpactReadMode   string
+	analyticsPolicyImpactMaxRawTail time.Duration
 }
 
 func NewQueryReader(db Queryer) *QueryReader {
-	return &QueryReader{db: db}
+	return NewQueryReaderWithOptions(db, QueryReaderOptions{})
+}
+
+type QueryReaderOptions struct {
+	AnalyticsPolicyImpactReadMode   string
+	AnalyticsPolicyImpactMaxRawTail time.Duration
+}
+
+func NewQueryReaderWithOptions(db Queryer, options QueryReaderOptions) *QueryReader {
+	readMode := strings.ToLower(strings.TrimSpace(options.AnalyticsPolicyImpactReadMode))
+	if readMode != "rollup" {
+		readMode = "raw"
+	}
+	maxRawTail := options.AnalyticsPolicyImpactMaxRawTail
+	if maxRawTail <= 0 {
+		maxRawTail = 2 * time.Minute
+	}
+	return &QueryReader{
+		db:                              db,
+		analyticsPolicyImpactReadMode:   readMode,
+		analyticsPolicyImpactMaxRawTail: maxRawTail,
+	}
 }
 
 const (

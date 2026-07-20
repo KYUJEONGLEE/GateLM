@@ -250,7 +250,7 @@ insert into p0_llm_invocation_logs (
   $21, $22, $23, $24, $25, $26, $27, $28, $29, $30,
   $31, $32, $33, $34, $35, $36
 )
-on conflict (request_id) do nothing`
+on conflict do nothing`
 
 func nullableText(value string) any {
 	value = strings.TrimSpace(value)

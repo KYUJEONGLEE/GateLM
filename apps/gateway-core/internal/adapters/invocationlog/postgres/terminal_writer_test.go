@@ -38,6 +38,9 @@ func TestTerminalLogWriterSendsMultipleLogsInOnePostgresBatch(t *testing.T) {
 		if !strings.Contains(queued.SQL, "insert into p0_llm_invocation_logs") {
 			t.Fatalf("unexpected batched statement: %s", queued.SQL)
 		}
+		if !strings.Contains(queued.SQL, "on conflict do nothing") || strings.Contains(queued.SQL, "on conflict (request_id)") {
+			t.Fatalf("terminal writer must remain compatible with legacy and partitioned log constraints: %s", queued.SQL)
+		}
 		if len(queued.Arguments) != 45 {
 			t.Fatalf("expected 45 terminal insert arguments, got %d", len(queued.Arguments))
 		}
