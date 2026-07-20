@@ -258,7 +258,11 @@ On 2026-07-20, a Krafton-isolated `300 RPS × 10 minute` Mock run wrote 180,001 
 
 The active Rollup transaction was canceled and `DASHBOARD_ROLLUP_ENABLED` was temporarily changed to `false` before recreating only Control Plane. PostgreSQL CPU changed from `100.24%` to `0.07% / 0.06% / 0.29%` at the immediate, 15-second, and 45-second samples. Both Gateway NLB targets, the Control Plane health check, and the public Web and Chat boundaries remained healthy.
 
-Read-only profiling then isolated the failed hour bucket at 37,886 source rows with metadata averaging 3,518 bytes. The original light dimension plan expanded it to 303,088 intermediate rows, spilled a 72,680 kB external merge sort, and took 13,209.823 ms. Materializing the normalized source CTE reduced the same light comparison to 3,289.948 ms (75.1% lower); the full dimension histogram query completed in 5,341.990 ms. This is evidence for the query-plan fix on that bucket, not yet proof that the undiscovered 180,001-row Krafton bucket or concurrent Dashboard traffic is safe.
+Read-only profiling then isolated the failed hour bucket at 37,886 source rows with metadata averaging 3,518 bytes. The original light dimension plan expanded it to 303,088 intermediate rows, spilled a 72,680 kB external merge sort, and took 13,209.823 ms. Materializing the normalized source CTE reduced the same light comparison to 3,289.948 ms (75.1% lower); the full dimension histogram query completed in 5,341.990 ms.
+
+After deploying the query-plan patch, a bounded recovery compressed 274,083 undiscovered rows into three hour, two day, and two month dirty buckets without changing the raw logs. With the production worker still disabled and bucket concurrency fixed at one, the previous 37,886-row error bucket became ready in 7.857 seconds. The 82,123-row and 180,008-row hour buckets completed in 17.105 and 36.852 seconds. PostgreSQL returned to 2.03% and 4.11% CPU respectively with zero active queries at the post-run samples.
+
+The recovery also exposed a second failure mechanism: PostgreSQL preserved a source timestamp such as `12:47:21.705353`, while Node `Date` truncated it to `12:47:21.705`. Two tail rows were therefore rediscovered on every manual run, which could enqueue the already completed 180,008-row hour again. The follow-up implementation reads source and cursor timestamps as database text and casts them back to `timestamptz` only inside SQL, preserving the database cursor precision.
 
 ### Evidence
 
@@ -272,7 +276,7 @@ Read-only profiling then isolated the failed hour bucket at 37,886 source rows w
 
 ### Claim boundary
 
-The operational evidence was collected on 2026-07-20 with deployed image tag `production-distributed-23c6e6d847de`. It proves the diagnosed failure and the immediate containment on that environment. It does not prove a permanent fix: the production Rollup worker is temporarily disabled, and opening the dashboard can still reintroduce raw-query pressure until polling, fallback, query budgets, and Rollup backfill are changed and retested.
+The incident evidence was collected on 2026-07-20 with image tag `production-distributed-23c6e6d847de`; the bounded single-bucket recovery used main SHA `d2a06ab3d9922028c21ac3155d172a628cd03e2c`. It proves the diagnosed failure, query-plan improvement, and isolated completion of the measured buckets. It does not prove concurrent Dashboard safety or unlimited-scale capacity. The production Rollup worker remains temporarily disabled until the timestamp-precision patch is deployed and cursor convergence is verified; polling, raw fallback, query budgets, incremental aggregation, partitioning, and retention remain follow-up work.
 
 ## 11. Large-Scale Validation Still Required
 
