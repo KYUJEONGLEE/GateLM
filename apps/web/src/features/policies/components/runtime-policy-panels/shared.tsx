@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 
-import { parseOptionalBoundedInteger } from "../runtime-policy-editor-utils";
+import {
+  formatPolicyNumberInputValue,
+  parseOptionalBoundedInteger
+} from "../runtime-policy-editor-utils";
 
 export function PolicyNumberField({
   className,
@@ -19,12 +22,14 @@ export function PolicyNumberField({
   min: number;
   onChange: (value: number) => void;
   readOnly?: boolean;
-  value: number;
+  value: number | null | undefined;
 }) {
-  const [inputValue, setInputValue] = useState(() => String(value));
+  const [inputValue, setInputValue] = useState(() =>
+    formatPolicyNumberInputValue(value)
+  );
 
   useEffect(() => {
-    setInputValue(String(value));
+    setInputValue(formatPolicyNumberInputValue(value));
   }, [value]);
 
   return (
@@ -33,7 +38,7 @@ export function PolicyNumberField({
       <input
         max={max}
         min={min}
-        onBlur={() => setInputValue(String(value))}
+        onBlur={() => setInputValue(formatPolicyNumberInputValue(value))}
         onChange={(event) => {
           const nextInputValue = event.target.value;
           const nextValue = parseOptionalBoundedInteger(nextInputValue, min, max);

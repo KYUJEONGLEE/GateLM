@@ -298,6 +298,12 @@ export function parseOptionalBoundedInteger(
   return Math.min(Math.max(parsed, min), max);
 }
 
+export function formatPolicyNumberInputValue(
+  value: number | null | undefined
+) {
+  return typeof value === "number" && Number.isFinite(value) ? String(value) : "";
+}
+
 export function parseBoundedInteger(value: string, min: number, max: number) {
   return parseOptionalBoundedInteger(value, min, max) ?? min;
 }

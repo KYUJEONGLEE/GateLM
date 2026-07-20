@@ -3,10 +3,18 @@ import { expect, test } from "@playwright/test";
 import type { ProviderConnectionRecord } from "@/lib/control-plane/provider-connections-types";
 
 import {
+  formatPolicyNumberInputValue,
   getRoutingModelOptions,
   groupRoutingModelOptionsByProvider,
   parseOptionalBoundedInteger
 } from "./runtime-policy-editor-utils";
+
+test("formats missing policy number values as an empty input", () => {
+  expect(formatPolicyNumberInputValue(undefined)).toBe("");
+  expect(formatPolicyNumberInputValue(null)).toBe("");
+  expect(formatPolicyNumberInputValue(Number.NaN)).toBe("");
+  expect(formatPolicyNumberInputValue(12)).toBe("12");
+});
 
 test("allows a policy number field to be cleared while editing", () => {
   expect(parseOptionalBoundedInteger("", 1, 100000)).toBeNull();
