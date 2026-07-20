@@ -27,6 +27,7 @@ reports/*
 reports/perf/*
 !reports/perf/production-krafton-300rps-10m-dashboard-rollup-incident-20260720.ko.md
 !reports/perf/postgresql-monthly-partition-cutover-smoke-20260721.ko.md
+!reports/perf/dashboard-minute-rollup-benchmark-20260721.ko.md
 !reports/routing-difficulty-model/
 reports/routing-difficulty-model/*
 !reports/routing-difficulty-model/README.md
