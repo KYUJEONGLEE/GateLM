@@ -1501,11 +1501,11 @@ export function EmployeeControlManagement({
       usage.rows.slice(0, 10).map((row) => ({
         id: row.employeeId,
         label: row.name,
-        value: row.dailyCostMicroUsd ?? 0
+        value: row.monthlyCostMicroUsd ?? 0
       })),
     [usage.rows]
   );
-  const [employeeCostRange, setEmployeeCostRange] = useState<EmployeeCostRange>("24h");
+  const [employeeCostRange, setEmployeeCostRange] = useState<EmployeeCostRange>("30d");
   const [employeeCostChartRows, setEmployeeCostChartRows] = useState(
     initialEmployeeCostChartRows
   );
@@ -2337,7 +2337,7 @@ export function EmployeeControlManagement({
                 type="button"
                 variant={employeeCostRange === range ? "default" : "outline"}
               >
-                {range === "24h" ? (locale === "ko" ? "1일" : "24h") : range === "7d" ? (locale === "ko" ? "1주일" : "7d") : (locale === "ko" ? "1개월" : "30d")}
+                {range === "24h" ? (locale === "ko" ? "1일" : "24h") : range === "7d" ? (locale === "ko" ? "1주일" : "7d") : (locale === "ko" ? "30일" : "30d")}
               </Button>
             ))}
             <span>USD</span>
