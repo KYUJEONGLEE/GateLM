@@ -267,6 +267,7 @@ describe('DashboardRollupService', () => {
     expect(executeRaw).toHaveBeenCalledTimes(3);
     for (const [query] of executeRaw.mock.calls.slice(0, 2)) {
       const sql = rawQuery(query).sql;
+      expect(sql).toContain('WITH filtered AS MATERIALIZED');
       expect(sql).toContain('WHEN ttft_ms IS NOT NULL THEN ttft_ms::bigint');
       expect(sql).not.toContain('to_jsonb(p0_llm_invocation_logs)');
     }
