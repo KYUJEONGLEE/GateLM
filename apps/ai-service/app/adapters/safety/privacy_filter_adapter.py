@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import threading
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -141,6 +142,37 @@ DEFAULT_LABEL_MAP: Mapping[str, str] = {
     "webhook_url": "webhook_url",
 }
 
+_GATELM_ADDRESS_FRAGMENT_TYPES = frozenset(
+    {"organization_name", "postal_address"}
+)
+_GATELM_ADDRESS_ORGANIZATION_SUFFIX_EXCLUSIONS = (
+    "회사",
+    "법인",
+    "공사",
+    "공단",
+    "재단",
+    "협회",
+    "연구원",
+    "대학교",
+    "병원",
+    "은행",
+    "그룹",
+    "주식회사",
+    "유한회사",
+    "기술원",
+    "사업단",
+)
+_GATELM_ADDRESS_ADMIN_TOKEN = (
+    r"[가-힣]{1,10}(?:특별자치시|특별자치도|특별시|광역시|시|군|구|도)"
+)
+_GATELM_ADDRESS_ADMIN_SUFFIX_RE = re.compile(
+    r"(?<![가-힣])(?P<prefix>"
+    + _GATELM_ADDRESS_ADMIN_TOKEN
+    + r"(?:\s+"
+    + _GATELM_ADDRESS_ADMIN_TOKEN
+    + r"){0,2})\s+$"
+)
+
 
 @dataclass(frozen=True)
 class AdapterBatchResult:
@@ -194,10 +226,10 @@ class PrivacyFilterAdapter:
 
         detections: list[Detection] = []
         for item in self._run_classifier(text):
-            detection = self._detection_from_item(item, len(text))
+            detection = self._detection_from_item(item, text)
             if detection is not None:
                 detections.append(detection)
-        return detections
+        return self._postprocess_detections(text, detections)
 
     def detect_many(self, texts: list[str], *, batch_size: int = 4) -> AdapterBatchResult:
         if not texts:
@@ -222,9 +254,13 @@ class PrivacyFilterAdapter:
             invocation_count += 1 if supports_batch else len(chunk_texts)
             for (original_index, text), raw_items in zip(chunk, raw_results, strict=True):
                 for item in raw_items:
-                    detection = self._detection_from_item(item, len(text))
+                    detection = self._detection_from_item(item, text)
                     if detection is not None:
                         detected[original_index].append(detection)
+                detected[original_index] = self._postprocess_detections(
+                    text,
+                    detected[original_index],
+                )
         return AdapterBatchResult(
             detections=detected,
             model_invocation_count=invocation_count,
@@ -336,7 +372,7 @@ class PrivacyFilterAdapter:
             aggregation_strategy=self.aggregation_strategy,
         )
 
-    def _detection_from_item(self, item: Mapping[str, Any], text_length: int) -> Detection | None:
+    def _detection_from_item(self, item: Mapping[str, Any], text: str) -> Detection | None:
         raw_label = str(item.get("entity_group") or item.get("entity") or "")
         detector_type = normalize_label(raw_label, self.label_map)
         if detector_type is None or detector_type not in ALLOWED_DETECTOR_TYPES:
@@ -346,7 +382,15 @@ class PrivacyFilterAdapter:
         end = _coerce_int(item.get("end"))
         if start is None or end is None:
             return None
-        if start < 0 or end <= start or end > text_length:
+        if start < 0 or end <= start or end > len(text):
+            return None
+        detected_value = text[start:end]
+        if (
+            _is_gatelm_koelectra_pii_ner_model(self.model_name)
+            and detector_type == "person_name"
+            and len(detected_value) == 1
+            and "\uac00" <= detected_value <= "\ud7a3"
+        ):
             return None
 
         confidence = normalized_confidence(_coerce_float(item.get("score")))
@@ -365,6 +409,85 @@ class PrivacyFilterAdapter:
             end=end,
             confidence=confidence,
         )
+
+    def _postprocess_detections(
+        self,
+        text: str,
+        detections: list[Detection],
+    ) -> list[Detection]:
+        if not _is_gatelm_koelectra_pii_ner_model(self.model_name):
+            return detections
+        return _repair_gatelm_address_boundaries(text, detections)
+
+
+def _repair_gatelm_address_boundaries(
+    text: str,
+    detections: list[Detection],
+) -> list[Detection]:
+    output = list(detections)
+    addresses = sorted(
+        (item for item in output if item.detector_type == "postal_address"),
+        key=lambda item: (item.start, item.end),
+    )
+    for address in addresses:
+        if not any(item is address for item in output):
+            continue
+        new_start = address.start
+        candidates = sorted(
+            (
+                item
+                for item in output
+                if item is not address
+                and item.detector_type in _GATELM_ADDRESS_FRAGMENT_TYPES
+                and item.end <= new_start
+                and 0 <= new_start - item.end <= 2
+                and (item.end == new_start or text[item.end:new_start].isspace())
+                and item.length <= 10
+            ),
+            key=lambda item: item.end,
+            reverse=True,
+        )
+        for candidate in candidates:
+            candidate_text = text[candidate.start:candidate.end]
+            if (
+                candidate.detector_type == "organization_name"
+                and candidate_text.endswith(
+                    _GATELM_ADDRESS_ORGANIZATION_SUFFIX_EXCLUSIONS
+                )
+            ):
+                continue
+            new_start = candidate.start
+            break
+
+        match = _GATELM_ADDRESS_ADMIN_SUFFIX_RE.search(text[:new_start])
+        if match is not None:
+            new_start = min(new_start, match.start("prefix"))
+        if new_start >= address.start:
+            continue
+
+        output = [
+            item
+            for item in output
+            if not (
+                item is not address
+                and item.detector_type in _GATELM_ADDRESS_FRAGMENT_TYPES
+                and new_start <= item.start
+                and item.end <= address.start
+            )
+        ]
+        output = [item for item in output if item is not address]
+        output.append(replace(address, start=new_start))
+
+    unique: dict[tuple[str, int, int], Detection] = {}
+    for item in output:
+        key = (item.detector_type, item.start, item.end)
+        previous = unique.get(key)
+        if previous is None or item.confidence > previous.confidence:
+            unique[key] = item
+    return sorted(
+        unique.values(),
+        key=lambda item: (item.start, item.end, item.detector_type),
+    )
 
 
 class _OpenAIPrivacyFilterOnnxClassifier:
