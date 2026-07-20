@@ -74,6 +74,8 @@ test("overview keeps four live KPI cards with month-to-date cost in the final po
   expect(totalRequestsIndex).toBeGreaterThan(totalCostIndex);
   expect(averageLatencyIndex).toBeGreaterThan(totalRequestsIndex);
   expect(monthCostIndex).toBeGreaterThan(averageLatencyIndex);
+  expect(source).toContain('monthCost: "이번 달 총 비용"');
+  expect(source).not.toContain('monthCost: "이번 달 누적 비용"');
   expect(source).toContain("value: formatMicroUsd(overview.totalCostMicroUsd)");
   expect(source).toContain("value: formatLatency(overview.averageLatencyMs)");
   expect(source).toContain("snapshot.monthToDateCostMicroUsd");
@@ -212,7 +214,10 @@ test("dashboard keeps its compact default scale and enlarges operational labels 
     /html\[data-presentation-mode="true"\] \.dashboard-overview-content \.dashboard-kpi-label \{[^}]*font-size: calc\(26px \+ var\(--global-font-lift\)\);/
   );
   expect(readabilityStyles).toMatch(
-    /html\[data-presentation-mode="true"\] \.dashboard-overview-content \.dashboard-cost-range-tabs a \{[^}]*min-height: 46px;[^}]*font-size: calc\(20px \+ var\(--global-font-lift\)\);/
+    /html\[data-presentation-mode="true"\] \.dashboard-overview-content \.dashboard-cost-range-tabs a \{[^}]*min-width: 68px;[^}]*min-height: 38px;[^}]*font-size: calc\(16px \+ var\(--global-font-lift\)\);/
+  );
+  expect(readabilityStyles).toMatch(
+    /html\[data-presentation-mode="true"\] \.dashboard-overview-content \.dashboard-provider-usage-header select \{[^}]*width: fit-content;[^}]*min-width: 116px;[^}]*min-height: 38px;[^}]*font-size: calc\(15px \+ var\(--global-font-lift\)\);/
   );
   expect(readabilityStyles).toMatch(
     /html\[data-presentation-mode="true"\] \.dashboard-overview-content \.dashboard-cost-over-time-metrics span \{[^}]*font-size: calc\(24px \+ var\(--global-font-lift\)\);/

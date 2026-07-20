@@ -20810,68 +20810,98 @@ html[data-theme="dark"] .tenant-routing-provider-icon[data-family="claude"] img 
 }
 
 @media (min-width: 1101px) {
-  html[data-presentation-mode="true"] .tenant-management-content .tenant-routing-model-card,
-  html[data-presentation-mode="true"] .tenant-management-content .tenant-routing-fallback-card {
+  html[data-presentation-mode="true"]
+    .tenant-management-content:not(.tenant-chat-app-content)
+    .tenant-routing-model-card,
+  html[data-presentation-mode="true"]
+    .tenant-management-content:not(.tenant-chat-app-content)
+    .tenant-routing-fallback-card {
     padding: 30px 34px;
   }
 
-  html[data-presentation-mode="true"] .tenant-management-content .tenant-routing-model-heading h3,
-  html[data-presentation-mode="true"] .tenant-management-content .tenant-routing-fallback-heading h3 {
+  html[data-presentation-mode="true"]
+    .tenant-management-content:not(.tenant-chat-app-content)
+    .tenant-routing-model-heading h3,
+  html[data-presentation-mode="true"]
+    .tenant-management-content:not(.tenant-chat-app-content)
+    .tenant-routing-fallback-heading h3 {
     font-size: 28px;
   }
 
-  html[data-presentation-mode="true"] .tenant-management-content .tenant-routing-model-heading p,
-  html[data-presentation-mode="true"] .tenant-management-content .tenant-routing-fallback-heading p {
+  html[data-presentation-mode="true"]
+    .tenant-management-content:not(.tenant-chat-app-content)
+    .tenant-routing-model-heading p,
+  html[data-presentation-mode="true"]
+    .tenant-management-content:not(.tenant-chat-app-content)
+    .tenant-routing-fallback-heading p {
     font-size: 22px;
     line-height: 1.45;
   }
 
-  html[data-presentation-mode="true"] .tenant-management-content .tenant-routing-table-head {
+  html[data-presentation-mode="true"]
+    .tenant-management-content:not(.tenant-chat-app-content)
+    .tenant-routing-table-head {
     min-height: 64px;
     font-size: 22px;
   }
 
-  html[data-presentation-mode="true"] .tenant-management-content .tenant-routing-table-row {
+  html[data-presentation-mode="true"]
+    .tenant-management-content:not(.tenant-chat-app-content)
+    .tenant-routing-table-row {
     min-height: 124px;
   }
 
-  html[data-presentation-mode="true"] .tenant-management-content .tenant-routing-category {
+  html[data-presentation-mode="true"]
+    .tenant-management-content:not(.tenant-chat-app-content)
+    .tenant-routing-category {
     font-size: 24px;
   }
 
-  html[data-presentation-mode="true"] .tenant-management-content .tenant-routing-category svg {
+  html[data-presentation-mode="true"]
+    .tenant-management-content:not(.tenant-chat-app-content)
+    .tenant-routing-category svg {
     width: 28px;
     height: 28px;
   }
 
-  html[data-presentation-mode="true"] .tenant-management-content .tenant-routing-model-choice {
+  html[data-presentation-mode="true"]
+    .tenant-management-content:not(.tenant-chat-app-content)
+    .tenant-routing-model-choice {
     grid-template-columns: 58px minmax(0, 1fr);
     min-height: 88px;
     gap: 18px;
     padding: 14px 18px;
   }
 
-  html[data-presentation-mode="true"] .tenant-management-content .tenant-routing-provider-icon-large {
+  html[data-presentation-mode="true"]
+    .tenant-management-content:not(.tenant-chat-app-content)
+    .tenant-routing-provider-icon-large {
     width: 54px;
     height: 54px;
   }
 
-  html[data-presentation-mode="true"] .tenant-management-content .tenant-routing-provider-icon-large img {
+  html[data-presentation-mode="true"]
+    .tenant-management-content:not(.tenant-chat-app-content)
+    .tenant-routing-provider-icon-large img {
     width: 42px;
     height: 42px;
   }
 
-  html[data-presentation-mode="true"] .tenant-management-content .tenant-routing-model-provider {
+  html[data-presentation-mode="true"]
+    .tenant-management-content:not(.tenant-chat-app-content)
+    .tenant-routing-model-provider {
     font-size: 18px;
   }
 
-  html[data-presentation-mode="true"] .tenant-management-content .tenant-routing-model-choice select {
+  html[data-presentation-mode="true"]
+    .tenant-management-content:not(.tenant-chat-app-content)
+    .tenant-routing-model-choice select {
     min-height: 38px;
     font-size: 24px;
   }
 }
 
-/* Chat App routing uses the regular console density, independent from presentation UI. */
+/* Chat App routing keeps a dedicated density so presentation mode stays readable. */
 .tenant-chat-app-content .tenant-routing-panel {
   gap: 14px;
   padding-bottom: 12px;
@@ -21057,6 +21087,142 @@ html[data-theme="dark"] .tenant-routing-provider-icon[data-family="claude"] img 
 
   .tenant-chat-app-content .tenant-routing-model-selectors {
     grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (min-width: 1101px) {
+  html[data-presentation-mode="true"] .tenant-chat-app-content {
+    --global-font-lift: 5px;
+  }
+
+  html[data-presentation-mode="true"]
+    .tenant-chat-app-content
+    .tenant-management-tabs
+    button,
+  html[data-presentation-mode="true"]
+    .tenant-chat-app-content
+    :where(.tenant-routing-panel, .chat-app-policy-form, .tenant-chat-knowledge-panel)
+    :is(p, label, input, select, textarea, button, th, td, dt, dd) {
+    font-size: 18px;
+    line-height: 1.4;
+  }
+
+  html[data-presentation-mode="true"]
+    .tenant-chat-app-content
+    :where(.tenant-routing-panel, .chat-app-policy-form, .tenant-chat-knowledge-panel)
+    :is(small, .status-badge, .badge) {
+    font-size: 16px;
+  }
+
+  html[data-presentation-mode="true"]
+    .tenant-chat-app-content
+    :where(.tenant-routing-panel, .chat-app-policy-form, .tenant-chat-knowledge-panel)
+    strong {
+    font-size: 20px;
+    line-height: 1.35;
+  }
+
+  html[data-presentation-mode="true"]
+    .tenant-chat-app-content
+    :where(.tenant-routing-panel, .chat-app-policy-form, .tenant-chat-knowledge-panel)
+    :is(h3, .panel-heading h3) {
+    font-size: 25px;
+    line-height: 1.25;
+  }
+
+  html[data-presentation-mode="true"]
+    .tenant-chat-app-content
+    :where(.tenant-routing-panel, .chat-app-policy-form, .tenant-chat-knowledge-panel)
+    h4 {
+    font-size: 22px;
+    line-height: 1.3;
+  }
+
+  html[data-presentation-mode="true"]
+    .tenant-chat-app-content
+    .tenant-routing-model-card {
+    gap: 18px;
+    padding: 22px 24px 24px;
+  }
+
+  html[data-presentation-mode="true"]
+    .tenant-chat-app-content
+    .tenant-routing-table-head {
+    min-height: 50px;
+    font-size: 16px;
+  }
+
+  html[data-presentation-mode="true"]
+    .tenant-chat-app-content
+    .tenant-routing-table-row {
+    min-height: 90px;
+  }
+
+  html[data-presentation-mode="true"]
+    .tenant-chat-app-content
+    .tenant-routing-category {
+    font-size: 18px;
+  }
+
+  html[data-presentation-mode="true"]
+    .tenant-chat-app-content
+    .tenant-routing-category svg {
+    width: 22px;
+    height: 22px;
+  }
+
+  html[data-presentation-mode="true"]
+    .tenant-chat-app-content
+    .tenant-routing-provider-control,
+  html[data-presentation-mode="true"]
+    .tenant-chat-app-content
+    .tenant-routing-model-control {
+    min-height: 56px;
+  }
+
+  html[data-presentation-mode="true"]
+    .tenant-chat-app-content
+    .tenant-routing-provider-control select,
+  html[data-presentation-mode="true"]
+    .tenant-chat-app-content
+    .tenant-routing-model-control select {
+    min-height: 54px;
+    font-size: 17px;
+  }
+
+  html[data-presentation-mode="true"]
+    .tenant-chat-app-content
+    .tenant-routing-fallback-card,
+  html[data-presentation-mode="true"]
+    .tenant-chat-app-content
+    .tenant-routing-fixed-panel {
+    gap: 28px;
+    padding: 22px 24px;
+  }
+
+  html[data-presentation-mode="true"]
+    .tenant-chat-app-content
+    .tenant-routing-fallback-heading h3 {
+    font-size: 23px;
+  }
+
+  html[data-presentation-mode="true"]
+    .tenant-chat-app-content
+    .tenant-routing-fallback-heading p {
+    font-size: 16px;
+  }
+
+  html[data-presentation-mode="true"]
+    .tenant-chat-app-content
+    .tenant-routing-fallback-card
+    .tenant-routing-standalone-field {
+    font-size: 15px;
+  }
+
+  html[data-presentation-mode="true"]
+    .tenant-chat-app-content
+    .tenant-routing-actions button {
+    font-size: 18px;
   }
 }
 
@@ -22025,9 +22191,9 @@ html[data-theme="dark"] .dashboard-live-project-pill[data-project-tone="5"] {
   }
 
   html[data-presentation-mode="true"] .dashboard-overview-content .dashboard-cost-range-tabs a {
-    min-width: 78px;
-    min-height: 46px;
-    font-size: calc(20px + var(--global-font-lift));
+    min-width: 68px;
+    min-height: 38px;
+    font-size: calc(16px + var(--global-font-lift));
     font-weight: var(--font-weight-bold);
   }
 
@@ -22041,7 +22207,11 @@ html[data-theme="dark"] .dashboard-live-project-pill[data-project-tone="5"] {
   }
 
   html[data-presentation-mode="true"] .dashboard-overview-content .dashboard-provider-usage-header select {
-    min-height: 46px;
+    width: fit-content;
+    min-width: 116px;
+    min-height: 38px;
+    padding: 0 30px 0 10px;
+    font-size: calc(15px + var(--global-font-lift));
   }
 
   html[data-presentation-mode="true"] .dashboard-overview-content .dashboard-provider-usage-row {
@@ -23728,14 +23898,15 @@ html[data-theme="dark"] .request-detail-provider-icon[data-family="openai"] img 
     height: 40px;
   }
 
-  html[data-presentation-mode="true"] .management-line-content,
+  html[data-presentation-mode="true"]
+    .management-line-content:not(.tenant-chat-app-content),
   html[data-presentation-mode="true"] .policy-console-content {
     --global-font-lift: 6px;
     --presentation-content-width: 1680px;
   }
 
   html[data-presentation-mode="true"]
-    .management-line-content
+    .management-line-content:not(.tenant-chat-app-content)
     :is(p, label, input, select, textarea, button, th, td, dt, dd),
   html[data-presentation-mode="true"]
     .policy-console-content
@@ -23745,7 +23916,7 @@ html[data-theme="dark"] .request-detail-provider-icon[data-family="openai"] img 
   }
 
   html[data-presentation-mode="true"]
-    .management-line-content
+    .management-line-content:not(.tenant-chat-app-content)
     strong,
   html[data-presentation-mode="true"]
     .policy-console-content
@@ -23755,7 +23926,7 @@ html[data-theme="dark"] .request-detail-provider-icon[data-family="openai"] img 
   }
 
   html[data-presentation-mode="true"]
-    .management-line-content
+    .management-line-content:not(.tenant-chat-app-content)
     :is(small, .status-badge, .badge),
   html[data-presentation-mode="true"]
     .policy-console-content
@@ -23764,7 +23935,7 @@ html[data-theme="dark"] .request-detail-provider-icon[data-family="openai"] img 
   }
 
   html[data-presentation-mode="true"]
-    .management-line-content
+    .management-line-content:not(.tenant-chat-app-content)
     :is(h3, .panel-heading h3, .team-section-header h3),
   html[data-presentation-mode="true"]
     .policy-console-content
@@ -23774,7 +23945,7 @@ html[data-theme="dark"] .request-detail-provider-icon[data-family="openai"] img 
   }
 
   html[data-presentation-mode="true"]
-    .management-line-content
+    .management-line-content:not(.tenant-chat-app-content)
     :is(h4, .project-card-title),
   html[data-presentation-mode="true"]
     .policy-console-content

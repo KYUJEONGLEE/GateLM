@@ -264,7 +264,7 @@ const dashboardText: Record<
     keyMetrics: "대시보드 핵심 지표",
     kpi: {
       averageLatency: "평균 지연 시간",
-      monthCost: "이번 달 누적 비용",
+      monthCost: "이번 달 총 비용",
       totalCost: "총 비용",
       totalRequests: "총 요청"
     },
