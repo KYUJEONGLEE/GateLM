@@ -31,7 +31,8 @@ export const DASHBOARD_HISTOGRAM_UPPER_BOUNDS_MS = [
 ] as const;
 
 export type DashboardRollupSurface = 'project_application' | 'tenant_chat';
-export type DashboardRollupGrain = 'hour' | 'day' | 'month';
+export type DashboardRollupGrain = 'minute' | 'hour' | 'day' | 'month';
+export type DashboardRollupBuildMode = 'legacy' | 'shadow' | 'minute';
 
 type RollupTransaction = Prisma.TransactionClient;
 
@@ -132,6 +133,13 @@ export class DashboardRollupService
     }
   }
 
+  private buildMode(): DashboardRollupBuildMode {
+    return (
+      this.config.get<DashboardRollupBuildMode>('DASHBOARD_ROLLUP_BUILD_MODE') ??
+      'legacy'
+    );
+  }
+
   private schedule(delayMs: number): void {
     if (this.destroyed) {
       return;
@@ -204,14 +212,17 @@ export class DashboardRollupService
       ORDER BY ingested_at, request_id
       LIMIT ${batchSize}
     `);
-    for (const row of uniqueDirtyHours(
+    const buildMode = this.buildMode();
+    for (const row of uniqueDirtyBuckets(
       rows.map((item) => ({ tenantId: item.tenant_id, occurredAt: item.created_at })),
+      buildMode === 'legacy' ? 'hour' : 'minute',
     )) {
       await enqueueDashboardRollupDirtyHierarchy(tx, {
         tenantId: row.tenantId,
         surface: 'project_application',
         occurredAt: row.bucketStart,
         reasonCode: 'SOURCE_DISCOVERED',
+        buildMode,
       });
     }
     const last = rows.at(-1);
@@ -249,14 +260,17 @@ export class DashboardRollupService
       ORDER BY updated_at, request_id
       LIMIT ${batchSize}
     `);
-    for (const row of uniqueDirtyHours(
+    const buildMode = this.buildMode();
+    for (const row of uniqueDirtyBuckets(
       rows.map((item) => ({ tenantId: item.tenant_id, occurredAt: item.completed_at })),
+      buildMode === 'legacy' ? 'hour' : 'minute',
     )) {
       await enqueueDashboardRollupDirtyHierarchy(tx, {
         tenantId: row.tenantId,
         surface: 'tenant_chat',
         occurredAt: row.bucketStart,
         reasonCode: 'SOURCE_DISCOVERED',
+        buildMode,
       });
     }
     const last = rows.at(-1);
@@ -318,8 +332,11 @@ export class DashboardRollupService
     tx: RollupTransaction,
     cutoff: Date,
   ): Promise<void> {
+    const reconciliationGrain =
+      this.buildMode() === 'legacy' ? 'hour' : 'minute';
     const rows = await tx.$queryRaw<ReconciliationRow[]>(Prisma.sql`
-      SELECT DISTINCT tenant_id::text, date_trunc('hour', created_at) AS bucket_start
+      SELECT DISTINCT tenant_id::text,
+        date_trunc(${reconciliationGrain}, created_at) AS bucket_start
       FROM p0_llm_invocation_logs
       WHERE ingested_at >= ${this.reconciliationLowerBound(cutoff)}
         AND ingested_at <= ${cutoff}
@@ -332,8 +349,11 @@ export class DashboardRollupService
     tx: RollupTransaction,
     cutoff: Date,
   ): Promise<void> {
+    const reconciliationGrain =
+      this.buildMode() === 'legacy' ? 'hour' : 'minute';
     const rows = await tx.$queryRaw<ReconciliationRow[]>(Prisma.sql`
-      SELECT DISTINCT tenant_id::text, date_trunc('hour', completed_at) AS bucket_start
+      SELECT DISTINCT tenant_id::text,
+        date_trunc(${reconciliationGrain}, completed_at) AS bucket_start
       FROM tenant_chat_invocation_logs
       WHERE updated_at >= ${this.reconciliationLowerBound(cutoff)}
         AND updated_at <= ${cutoff}
@@ -347,12 +367,14 @@ export class DashboardRollupService
     surface: DashboardRollupSurface,
     rows: ReconciliationRow[],
   ): Promise<void> {
+    const buildMode = this.buildMode();
     for (const row of rows) {
       await enqueueDashboardRollupDirtyHierarchy(tx, {
         tenantId: row.tenant_id,
         surface,
         occurredAt: row.bucket_start,
         reasonCode: 'SOURCE_DISCOVERED',
+        buildMode,
       });
     }
   }
@@ -369,17 +391,67 @@ export class DashboardRollupService
   }
 
   private async processNextDirtyBucket(): Promise<boolean> {
+    const buildMode = this.buildMode();
     try {
       return await this.prisma.$transaction(
         async (tx) => {
         const rows = await tx.$queryRaw<DirtyBucketRow[]>(Prisma.sql`
-          SELECT tenant_id::text, surface, grain, bucket_start
-          FROM dashboard_rollup_dirty_buckets
-          WHERE available_at <= now()
-          ORDER BY available_at,
-            CASE grain WHEN 'hour' THEN 1 WHEN 'day' THEN 2 ELSE 3 END,
-            bucket_start,
-            tenant_id
+          SELECT dirty.tenant_id::text, dirty.surface, dirty.grain,
+                 dirty.bucket_start
+          FROM dashboard_rollup_dirty_buckets dirty
+          WHERE dirty.available_at <= now()
+            AND (
+              dirty.grain <> 'minute'
+              OR EXISTS (
+                SELECT 1
+                FROM dashboard_rollup_source_cursors cursor
+                WHERE cursor.source = dirty.surface
+                  AND cursor.caught_up_through >=
+                    dirty.bucket_start + interval '1 minute'
+              )
+            )
+            AND (
+              ${buildMode} = 'legacy'
+              OR dirty.grain = 'minute'
+              OR (
+                EXISTS (
+                  SELECT 1
+                  FROM dashboard_rollup_source_cursors cursor
+                  WHERE cursor.source = dirty.surface
+                    AND cursor.caught_up_through >= CASE dirty.grain
+                      WHEN 'hour' THEN dirty.bucket_start + interval '1 hour'
+                      WHEN 'day' THEN dirty.bucket_start + interval '1 day'
+                      ELSE date_trunc('month', dirty.bucket_start) + interval '1 month'
+                    END
+                )
+                AND NOT EXISTS (
+                  SELECT 1
+                  FROM dashboard_rollup_dirty_buckets child
+                  WHERE child.tenant_id = dirty.tenant_id
+                    AND child.surface = dirty.surface
+                    AND child.grain = CASE dirty.grain
+                      WHEN 'hour' THEN 'minute'
+                      WHEN 'day' THEN 'hour'
+                      ELSE 'day'
+                    END
+                    AND child.bucket_start >= dirty.bucket_start
+                    AND child.bucket_start < CASE dirty.grain
+                      WHEN 'hour' THEN dirty.bucket_start + interval '1 hour'
+                      WHEN 'day' THEN dirty.bucket_start + interval '1 day'
+                      ELSE date_trunc('month', dirty.bucket_start) + interval '1 month'
+                    END
+                )
+              )
+            )
+          ORDER BY dirty.available_at,
+            CASE dirty.grain
+              WHEN 'minute' THEN 1
+              WHEN 'hour' THEN 2
+              WHEN 'day' THEN 3
+              ELSE 4
+            END,
+            dirty.bucket_start,
+            dirty.tenant_id
           FOR UPDATE SKIP LOCKED
           LIMIT 1
         `);
@@ -390,8 +462,11 @@ export class DashboardRollupService
         try {
           await this.markBucketBuilding(tx, bucket);
           await this.clearBucket(tx, bucket);
-          if (bucket.grain === 'hour') {
-            await this.rebuildHour(tx, bucket);
+          if (
+            bucket.grain === 'minute' ||
+            (bucket.grain === 'hour' && buildMode !== 'minute')
+          ) {
+            await this.rebuildSourceBucket(tx, bucket);
           } else {
             await this.rebuildParentGrain(tx, bucket);
           }
@@ -506,16 +581,16 @@ export class DashboardRollupService
     `);
   }
 
-  private async rebuildHour(
+  private async rebuildSourceBucket(
     tx: RollupTransaction,
     bucket: DirtyBucketRow,
   ): Promise<void> {
-    const bucketEnd = utcBucketEnd(bucket.bucket_start, 'hour');
+    const bucketEnd = utcBucketEnd(bucket.bucket_start, bucket.grain);
     if (bucket.surface === 'project_application') {
-      await this.rebuildProjectApplicationHour(tx, bucket, bucketEnd);
+      await this.rebuildProjectApplicationSourceBucket(tx, bucket, bucketEnd);
       return;
     }
-    await this.rebuildTenantChatHour(tx, bucket, bucketEnd);
+    await this.rebuildTenantChatSourceBucket(tx, bucket, bucketEnd);
   }
 
   private async markBucketReady(
@@ -588,6 +663,9 @@ export class DashboardRollupService
     tx: RollupTransaction,
     bucket: DirtyBucketRow,
   ): Promise<void> {
+    if (bucket.grain === 'minute' && this.buildMode() !== 'minute') {
+      return;
+    }
     const parentGrain = parentGrainFor(bucket.grain);
     if (!parentGrain) {
       return;
@@ -603,7 +681,7 @@ export class DashboardRollupService
 
   // Raw-source and parent-grain replacement queries are kept below. Each query
   // reads the complete UTC bucket and inserts a fresh replacement after DELETE.
-  private async rebuildProjectApplicationHour(
+  private async rebuildProjectApplicationSourceBucket(
     tx: RollupTransaction,
     bucket: DirtyBucketRow,
     bucketEnd: Date,
@@ -657,6 +735,38 @@ export class DashboardRollupService
             nullif(metadata #>> '{gatewayStageOutcomes,domainOutcomes,fallback,outcome}', ''),
             'not_called'
           ) AS fallback_outcome,
+          coalesce(nullif(masking_action, ''), 'none') AS masking_action,
+          coalesce(
+            nullif(metadata #>> '{domainOutcomes,safety,outcome}', ''),
+            nullif(metadata #>> '{gatewayStageOutcomes,domainOutcomes,safety,outcome}', ''),
+            CASE coalesce(nullif(masking_action, ''), 'none')
+              WHEN 'blocked' THEN 'blocked'
+              WHEN 'redacted' THEN 'redacted'
+              ELSE 'passed'
+            END
+          ) AS safety_outcome,
+          coalesce(
+            nullif(metadata #>> '{domainOutcomes,budget,outcome}', ''),
+            nullif(metadata #>> '{gatewayStageOutcomes,domainOutcomes,budget,outcome}', ''),
+            'not_checked'
+          ) AS budget_outcome,
+          CASE lower(nullif(metadata ->> 'promptDifficulty', ''))
+            WHEN 'simple' THEN 'simple'
+            WHEN 'complex' THEN 'complex'
+            ELSE NULL
+          END AS routing_role,
+          nullif(provider, '') AS provider_key,
+          nullif(model, '') AS model_key,
+          (
+            CASE lower(nullif(metadata ->> 'providerCalled', ''))
+              WHEN 'true' THEN true
+              WHEN '1' THEN true
+              ELSE false
+            END
+            OR nullif(provider, '') IS NOT NULL
+            OR nullif(model, '') IS NOT NULL
+          ) AS model_observation_eligible,
+          created_at AS event_max_at,
           ingested_at AS source_max_at
         FROM p0_llm_invocation_logs
         WHERE tenant_id = ${bucket.tenant_id}::uuid
@@ -673,16 +783,23 @@ export class DashboardRollupService
         fallback_success_request_count,
         prompt_tokens, completion_tokens, total_tokens,
         cost_micro_usd, saved_cost_micro_usd,
+        saved_cost_known_request_count, saved_cost_unknown_request_count,
+        avoided_provider_call_request_count, protected_request_count,
+        high_performance_request_count,
+        high_performance_eligible_request_count,
+        masking_known_request_count, masking_unknown_request_count,
+        routing_known_request_count, routing_unknown_request_count,
+        model_known_request_count, model_unknown_request_count,
         attempt_count, billable_attempt_count, fallback_request_count,
         latency_count, latency_sum_ms, latency_histogram,
         gateway_internal_latency_count, gateway_internal_latency_sum_ms,
         gateway_internal_latency_histogram,
         provider_latency_count, provider_latency_sum_ms, provider_latency_histogram,
         stream_request_count, ttft_count, ttft_sum_ms, ttft_histogram,
-        histogram_version, source_max_at, created_at, updated_at
+        histogram_version, source_max_at, event_max_at, created_at, updated_at
       )
       SELECT
-        tenant_id, 'project_application', 'hour', ${bucket.bucket_start},
+        tenant_id, 'project_application', ${bucket.grain}, ${bucket.bucket_start},
         project_id, application_id,
         budget_scope_type, budget_scope_id, budget_scope_resolved_by,
         count(*)::bigint,
@@ -699,6 +816,33 @@ export class DashboardRollupService
         coalesce(sum(total_tokens), 0)::bigint,
         coalesce(sum(cost_micro_usd), 0)::bigint,
         coalesce(sum(saved_cost_micro_usd), 0)::bigint,
+        count(*) FILTER (WHERE saved_cost_micro_usd IS NOT NULL)::bigint,
+        count(*) FILTER (WHERE saved_cost_micro_usd IS NULL)::bigint,
+        count(*) FILTER (WHERE
+          cache_outcome = 'hit'
+          OR safety_outcome = 'blocked'
+          OR terminal_status = 'rate_limited'
+          OR budget_outcome IN ('blocked', 'hard_limit_exceeded', 'exceeded')
+        )::bigint,
+        count(*) FILTER (WHERE
+          masking_action IN ('redacted', 'blocked')
+          OR safety_outcome = 'blocked'
+        )::bigint,
+        count(*) FILTER (WHERE routing_role = 'complex')::bigint,
+        count(*) FILTER (WHERE routing_role IS NOT NULL)::bigint,
+        count(*)::bigint,
+        0::bigint,
+        count(*) FILTER (WHERE routing_role IS NOT NULL)::bigint,
+        count(*) FILTER (WHERE routing_role IS NULL)::bigint,
+        count(*) FILTER (WHERE
+          model_observation_eligible
+          AND provider_key IS NOT NULL
+          AND model_key IS NOT NULL
+        )::bigint,
+        count(*) FILTER (WHERE
+          model_observation_eligible
+          AND (provider_key IS NULL OR model_key IS NULL)
+        )::bigint,
         0::bigint, 0::bigint, 0::bigint,
         count(*) FILTER (WHERE ${Prisma.raw(latencyEligible)})::bigint,
         coalesce(sum(latency_ms) FILTER (WHERE ${Prisma.raw(latencyEligible)}), 0)::bigint,
@@ -713,7 +857,8 @@ export class DashboardRollupService
         count(*) FILTER (WHERE ${Prisma.raw(ttftEligible)})::bigint,
         coalesce(sum(ttft_ms) FILTER (WHERE ${Prisma.raw(ttftEligible)}), 0)::bigint,
         ${Prisma.raw(histogramAggregateSQL('ttft_ms', ttftEligible))},
-        ${DASHBOARD_HISTOGRAM_VERSION}, max(source_max_at), now(), now()
+        ${DASHBOARD_HISTOGRAM_VERSION}, max(source_max_at), max(event_max_at),
+        now(), now()
       FROM filtered
       GROUP BY
         tenant_id, project_id, application_id,
@@ -792,17 +937,26 @@ export class DashboardRollupService
         FROM filtered
         CROSS JOIN LATERAL (
           VALUES
-            ('terminal_status', terminal_status, '', ''),
-            ('provider_model', provider, model, ''),
-            ('masking_action', masking_action, '', ''),
-            ('safety_outcome', safety_outcome, '', ''),
-            ('cache_outcome', cache_outcome, cache_type, ''),
-            ('fallback_outcome', fallback_outcome, '', ''),
-            ('budget_outcome', budget_outcome, '', ''),
-            ('routing', prompt_category, prompt_difficulty, routing_reason)
-        ) AS dimension(dimension_type, dimension_value, dimension_value_2, dimension_value_3)
-        WHERE dimension.dimension_type <> 'provider_model'
-           OR (filtered.provider <> '' AND filtered.model <> '')
+            ('terminal_status', terminal_status, '', '', true),
+            ('provider_model', provider, model, '', provider <> '' AND model <> ''),
+            ('policy_model', provider, model, '', provider <> '' AND model <> ''),
+            ('masking_action', masking_action, '', '', true),
+            ('safety_outcome', safety_outcome, '', '', true),
+            ('cache_outcome', cache_outcome, cache_type, '', true),
+            ('fallback_outcome', fallback_outcome, '', '', true),
+            ('budget_outcome', budget_outcome, '', '', true),
+            ('routing', prompt_category, prompt_difficulty, routing_reason, true),
+            ('policy_outcome', 'cache_hit', '', '', cache_outcome = 'hit'),
+            ('policy_outcome', 'pii_masked', '', '', masking_action = 'redacted'),
+            ('policy_outcome', 'safety_blocked', '', '', safety_outcome = 'blocked'),
+            ('policy_outcome', 'rate_limited', '', '', terminal_status = 'rate_limited'),
+            ('policy_outcome', 'fallback_success', '', '', fallback_outcome = 'success'),
+            ('policy_outcome', 'budget_blocked', '', '', budget_outcome IN ('blocked', 'hard_limit_exceeded', 'exceeded'))
+        ) AS dimension(
+          dimension_type, dimension_value, dimension_value_2,
+          dimension_value_3, include_dimension
+        )
+        WHERE dimension.include_dimension
       )
       INSERT INTO dashboard_rollup_dimensions (
         tenant_id, surface, grain, bucket_start,
@@ -823,7 +977,7 @@ export class DashboardRollupService
         histogram_version, source_max_at, created_at, updated_at
       )
       SELECT
-        tenant_id, 'project_application', 'hour', ${bucket.bucket_start},
+        tenant_id, 'project_application', ${bucket.grain}, ${bucket.bucket_start},
         project_id, application_id,
         budget_scope_type, budget_scope_id, budget_scope_resolved_by,
         dimension_type, dimension_value, dimension_value_2, dimension_value_3,
@@ -920,7 +1074,7 @@ export class DashboardRollupService
         ${bucket.tenant_id}::uuid,
         employee_id,
         'project_application',
-        'hour',
+        ${bucket.grain},
         ${bucket.bucket_start},
         project_id,
         count(*)::bigint,
@@ -936,7 +1090,7 @@ export class DashboardRollupService
     `);
   }
 
-  private async rebuildTenantChatHour(
+  private async rebuildTenantChatSourceBucket(
     tx: RollupTransaction,
     bucket: DirtyBucketRow,
     bucketEnd: Date,
@@ -952,10 +1106,16 @@ export class DashboardRollupService
           confirmed_output_tokens,
           confirmed_total_tokens,
           confirmed_cost_micro_usd,
+          saved_cost_micro_usd,
+          masking_action,
+          routing_difficulty,
+          effective_provider_id,
+          effective_model_key,
           latency_ms,
           cache_outcome,
           true AS stream,
           ttft_ms,
+          completed_at AS event_max_at,
           updated_at AS source_max_at
         FROM tenant_chat_invocation_logs
         WHERE tenant_id = ${bucket.tenant_id}::uuid
@@ -972,7 +1132,8 @@ export class DashboardRollupService
             'runtime_unavailable', 'no_eligible_route'
           ))::bigint AS failed_request_count,
           count(*) FILTER (WHERE terminal_outcome IN (
-            'concurrency_limited', 'safety_blocked', 'quota_blocked', 'budget_blocked'
+            'concurrency_limited', 'safety_blocked', 'quota_blocked',
+            'budget_blocked', 'policy_ack_required'
           ))::bigint AS blocked_request_count,
           count(*) FILTER (WHERE terminal_outcome = 'rate_limited')::bigint AS rate_limited_request_count,
           count(*) FILTER (WHERE terminal_outcome = 'cancelled')::bigint AS cancelled_request_count,
@@ -982,6 +1143,40 @@ export class DashboardRollupService
           coalesce(sum(confirmed_output_tokens), 0)::bigint AS completion_tokens,
           coalesce(sum(confirmed_total_tokens), 0)::bigint AS total_tokens,
           coalesce(sum(confirmed_cost_micro_usd), 0)::bigint AS cost_micro_usd,
+          coalesce(sum(saved_cost_micro_usd), 0)::bigint AS saved_cost_micro_usd,
+          count(*) FILTER (WHERE saved_cost_micro_usd IS NOT NULL)::bigint AS saved_cost_known_request_count,
+          count(*) FILTER (WHERE saved_cost_micro_usd IS NULL)::bigint AS saved_cost_unknown_request_count,
+          count(*) FILTER (WHERE terminal_outcome IN (
+            'cache_hit', 'safety_blocked', 'rate_limited', 'quota_blocked',
+            'budget_blocked', 'concurrency_limited', 'policy_ack_required'
+          ))::bigint AS avoided_provider_call_request_count,
+          count(*) FILTER (WHERE
+            masking_action IN ('redacted', 'blocked')
+            OR terminal_outcome = 'safety_blocked'
+          )::bigint AS protected_request_count,
+          count(*) FILTER (WHERE routing_difficulty = 'complex')::bigint AS high_performance_request_count,
+          count(*) FILTER (WHERE routing_difficulty IS NOT NULL)::bigint AS high_performance_eligible_request_count,
+          count(*) FILTER (WHERE masking_action IS NOT NULL)::bigint AS masking_known_request_count,
+          count(*) FILTER (WHERE masking_action IS NULL)::bigint AS masking_unknown_request_count,
+          count(*) FILTER (WHERE routing_difficulty IS NOT NULL)::bigint AS routing_known_request_count,
+          count(*) FILTER (WHERE routing_difficulty IS NULL)::bigint AS routing_unknown_request_count,
+          count(*) FILTER (WHERE
+            (
+              effective_provider_id IS NOT NULL
+              OR effective_model_key IS NOT NULL
+              OR terminal_outcome IN ('succeeded', 'cache_hit', 'provider_failed', 'provider_timeout')
+            )
+            AND effective_provider_id IS NOT NULL
+            AND effective_model_key IS NOT NULL
+          )::bigint AS model_known_request_count,
+          count(*) FILTER (WHERE
+            (
+              effective_provider_id IS NOT NULL
+              OR effective_model_key IS NOT NULL
+              OR terminal_outcome IN ('succeeded', 'cache_hit', 'provider_failed', 'provider_timeout')
+            )
+            AND (effective_provider_id IS NULL OR effective_model_key IS NULL)
+          )::bigint AS model_unknown_request_count,
           count(*) FILTER (WHERE ${Prisma.raw(logLatencyEligible)})::bigint AS latency_count,
           coalesce(sum(latency_ms) FILTER (WHERE ${Prisma.raw(logLatencyEligible)}), 0)::bigint AS latency_sum_ms,
           ${Prisma.raw(histogramAggregateSQL('latency_ms', logLatencyEligible))} AS latency_histogram,
@@ -989,6 +1184,7 @@ export class DashboardRollupService
           count(*) FILTER (WHERE stream = true AND ttft_ms IS NOT NULL)::bigint AS ttft_count,
           coalesce(sum(ttft_ms) FILTER (WHERE stream = true AND ttft_ms IS NOT NULL), 0)::bigint AS ttft_sum_ms,
           ${Prisma.raw(histogramAggregateSQL('ttft_ms', 'stream = true AND ttft_ms IS NOT NULL'))} AS ttft_histogram,
+          max(event_max_at) AS event_max_at,
           max(source_max_at) AS source_max_at
         FROM log_rows
       ), attempt_rows AS (
@@ -1027,16 +1223,23 @@ export class DashboardRollupService
         fallback_success_request_count,
         prompt_tokens, completion_tokens, total_tokens,
         cost_micro_usd, saved_cost_micro_usd,
+        saved_cost_known_request_count, saved_cost_unknown_request_count,
+        avoided_provider_call_request_count, protected_request_count,
+        high_performance_request_count,
+        high_performance_eligible_request_count,
+        masking_known_request_count, masking_unknown_request_count,
+        routing_known_request_count, routing_unknown_request_count,
+        model_known_request_count, model_unknown_request_count,
         attempt_count, billable_attempt_count, fallback_request_count,
         latency_count, latency_sum_ms, latency_histogram,
         gateway_internal_latency_count, gateway_internal_latency_sum_ms,
         gateway_internal_latency_histogram,
         provider_latency_count, provider_latency_sum_ms, provider_latency_histogram,
         stream_request_count, ttft_count, ttft_sum_ms, ttft_histogram,
-        histogram_version, source_max_at, created_at, updated_at
+        histogram_version, source_max_at, event_max_at, created_at, updated_at
       )
       SELECT
-        ${bucket.tenant_id}::uuid, 'tenant_chat', 'hour', ${bucket.bucket_start},
+        ${bucket.tenant_id}::uuid, 'tenant_chat', ${bucket.grain}, ${bucket.bucket_start},
         '', '', '', '', '',
         logs.request_count,
         logs.successful_request_count,
@@ -1048,7 +1251,19 @@ export class DashboardRollupService
         logs.cache_eligible_request_count,
         attempts.fallback_success_request_count,
         logs.prompt_tokens, logs.completion_tokens, logs.total_tokens,
-        logs.cost_micro_usd, 0::bigint,
+        logs.cost_micro_usd, logs.saved_cost_micro_usd,
+        logs.saved_cost_known_request_count,
+        logs.saved_cost_unknown_request_count,
+        logs.avoided_provider_call_request_count,
+        logs.protected_request_count,
+        logs.high_performance_request_count,
+        logs.high_performance_eligible_request_count,
+        logs.masking_known_request_count,
+        logs.masking_unknown_request_count,
+        logs.routing_known_request_count,
+        logs.routing_unknown_request_count,
+        logs.model_known_request_count,
+        logs.model_unknown_request_count,
         attempts.attempt_count, attempts.billable_attempt_count,
         attempts.fallback_request_count,
         logs.latency_count, logs.latency_sum_ms, logs.latency_histogram,
@@ -1057,7 +1272,8 @@ export class DashboardRollupService
         attempts.provider_latency_histogram,
         logs.stream_request_count, logs.ttft_count, logs.ttft_sum_ms,
         logs.ttft_histogram,
-        ${DASHBOARD_HISTOGRAM_VERSION}, logs.source_max_at, now(), now()
+        ${DASHBOARD_HISTOGRAM_VERSION}, logs.source_max_at, logs.event_max_at,
+        now(), now()
       FROM log_aggregate logs
       CROSS JOIN attempt_aggregate attempts
       WHERE logs.request_count > 0 OR attempts.attempt_count > 0
@@ -1083,7 +1299,7 @@ export class DashboardRollupService
         logs.tenant_id,
         logs.employee_id,
         'tenant_chat',
-        'hour',
+        ${bucket.grain},
         ${bucket.bucket_start},
         '',
         count(*)::bigint,
@@ -1125,6 +1341,10 @@ export class DashboardRollupService
           confirmed_cost_micro_usd,
           latency_ms,
           cache_outcome,
+          masking_action,
+          routing_difficulty,
+          effective_provider_id,
+          effective_model_key,
           quota_state,
           budget_state,
           snapshot_version::text AS snapshot_version,
@@ -1145,12 +1365,26 @@ export class DashboardRollupService
         FROM filtered
         CROSS JOIN LATERAL (
           VALUES
-            ('terminal_status', terminal_outcome, '', ''),
-            ('cache_outcome', cache_outcome, '', ''),
-            ('quota_state', quota_state, '', ''),
-            ('budget_state', budget_state, '', ''),
-            ('snapshot_pricing', snapshot_version, pricing_version, '')
-        ) AS dimension(dimension_type, dimension_value, dimension_value_2, dimension_value_3)
+            ('terminal_status', terminal_outcome, '', '', true),
+            ('cache_outcome', cache_outcome, '', '', true),
+            ('quota_state', quota_state, '', '', true),
+            ('budget_state', budget_state, '', '', true),
+            ('snapshot_pricing', snapshot_version, pricing_version, '', true),
+            ('routing', 'general', coalesce(routing_difficulty, ''), '', routing_difficulty IS NOT NULL),
+            ('policy_model', coalesce(effective_provider_id::text, ''), coalesce(effective_model_key, ''), '', effective_provider_id IS NOT NULL AND effective_model_key IS NOT NULL),
+            ('policy_outcome', 'cache_hit', '', '', cache_outcome = 'hit' OR terminal_outcome = 'cache_hit'),
+            ('policy_outcome', 'pii_masked', '', '', masking_action = 'redacted'),
+            ('policy_outcome', 'safety_blocked', '', '', masking_action = 'blocked' OR terminal_outcome = 'safety_blocked'),
+            ('policy_outcome', 'rate_limited', '', '', terminal_outcome = 'rate_limited'),
+            ('policy_outcome', 'quota_blocked', '', '', terminal_outcome = 'quota_blocked'),
+            ('policy_outcome', 'budget_blocked', '', '', terminal_outcome = 'budget_blocked'),
+            ('policy_outcome', 'concurrency_limited', '', '', terminal_outcome = 'concurrency_limited'),
+            ('policy_outcome', 'policy_ack_required', '', '', terminal_outcome = 'policy_ack_required')
+        ) AS dimension(
+          dimension_type, dimension_value, dimension_value_2,
+          dimension_value_3, include_dimension
+        )
+        WHERE dimension.include_dimension
       )
       INSERT INTO dashboard_rollup_dimensions (
         tenant_id, surface, grain, bucket_start,
@@ -1171,7 +1405,7 @@ export class DashboardRollupService
         histogram_version, source_max_at, created_at, updated_at
       )
       SELECT
-        ${bucket.tenant_id}::uuid, 'tenant_chat', 'hour', ${bucket.bucket_start},
+        ${bucket.tenant_id}::uuid, 'tenant_chat', ${bucket.grain}, ${bucket.bucket_start},
         '', '', '', '', '',
         dimension_type, dimension_value, dimension_value_2, dimension_value_3,
         count(*)::bigint,
@@ -1270,7 +1504,7 @@ export class DashboardRollupService
         histogram_version, source_max_at, created_at, updated_at
       )
       SELECT
-        ${bucket.tenant_id}::uuid, 'tenant_chat', 'hour', ${bucket.bucket_start},
+        ${bucket.tenant_id}::uuid, 'tenant_chat', ${bucket.grain}, ${bucket.bucket_start},
         '', '', '', '', '',
         'provider_model', provider_id, model_key, route_tier,
         count(DISTINCT request_id)::bigint,
@@ -1296,6 +1530,48 @@ export class DashboardRollupService
       FROM attempt_rows attempts
       GROUP BY provider_id, model_key, route_tier
     `);
+
+    await tx.$executeRaw(Prisma.sql`
+      INSERT INTO dashboard_rollup_dimensions (
+        tenant_id, surface, grain, bucket_start,
+        project_id, application_id,
+        budget_scope_type, budget_scope_id, budget_scope_resolved_by,
+        dimension_type, dimension_value, dimension_value_2, dimension_value_3,
+        request_count, successful_request_count, failed_request_count,
+        cache_hit_request_count, cache_eligible_request_count,
+        fallback_success_request_count,
+        prompt_tokens, completion_tokens, total_tokens,
+        cost_micro_usd, saved_cost_micro_usd,
+        attempt_count, billable_attempt_count, fallback_request_count,
+        latency_count, latency_sum_ms, latency_histogram,
+        gateway_internal_latency_count, gateway_internal_latency_sum_ms,
+        gateway_internal_latency_histogram,
+        provider_latency_count, provider_latency_sum_ms, provider_latency_histogram,
+        stream_request_count, ttft_count, ttft_sum_ms, ttft_histogram,
+        histogram_version, source_max_at, created_at, updated_at
+      )
+      SELECT
+        ${bucket.tenant_id}::uuid, 'tenant_chat', ${bucket.grain},
+        ${bucket.bucket_start}, '', '', '', '', '',
+        'policy_outcome', 'fallback_success', '', '',
+        count(DISTINCT request_id)::bigint,
+        0::bigint, 0::bigint, 0::bigint, 0::bigint,
+        count(DISTINCT request_id)::bigint,
+        0::bigint, 0::bigint, 0::bigint, 0::bigint, 0::bigint,
+        0::bigint, 0::bigint, count(DISTINCT request_id)::bigint,
+        0::bigint, 0::bigint, ${Prisma.raw(zeroHistogramSQL())},
+        0::bigint, 0::bigint, ${Prisma.raw(zeroHistogramSQL())},
+        0::bigint, 0::bigint, ${Prisma.raw(zeroHistogramSQL())},
+        0::bigint, 0::bigint, 0::bigint, ${Prisma.raw(zeroHistogramSQL())},
+        ${DASHBOARD_HISTOGRAM_VERSION}, max(completed_at), now(), now()
+      FROM tenant_chat_provider_attempts
+      WHERE tenant_id = ${bucket.tenant_id}::uuid
+        AND completed_at >= ${bucket.bucket_start}
+        AND completed_at < ${bucketEnd}
+        AND kind = 'fallback'
+        AND outcome = 'succeeded'
+      HAVING count(DISTINCT request_id) > 0
+    `);
   }
 
   private async rebuildParentGrain(
@@ -1303,7 +1579,11 @@ export class DashboardRollupService
     bucket: DirtyBucketRow,
   ): Promise<void> {
     const childGrain: DashboardRollupGrain =
-      bucket.grain === 'day' ? 'hour' : 'day';
+      bucket.grain === 'hour'
+        ? 'minute'
+        : bucket.grain === 'day'
+          ? 'hour'
+          : 'day';
     const bucketEnd = utcBucketEnd(bucket.bucket_start, bucket.grain);
     await tx.$executeRaw(Prisma.sql`
       INSERT INTO dashboard_rollup_totals (
@@ -1316,13 +1596,20 @@ export class DashboardRollupService
         fallback_success_request_count,
         prompt_tokens, completion_tokens, total_tokens,
         cost_micro_usd, saved_cost_micro_usd,
+        saved_cost_known_request_count, saved_cost_unknown_request_count,
+        avoided_provider_call_request_count, protected_request_count,
+        high_performance_request_count,
+        high_performance_eligible_request_count,
+        masking_known_request_count, masking_unknown_request_count,
+        routing_known_request_count, routing_unknown_request_count,
+        model_known_request_count, model_unknown_request_count,
         attempt_count, billable_attempt_count, fallback_request_count,
         latency_count, latency_sum_ms, latency_histogram,
         gateway_internal_latency_count, gateway_internal_latency_sum_ms,
         gateway_internal_latency_histogram,
         provider_latency_count, provider_latency_sum_ms, provider_latency_histogram,
         stream_request_count, ttft_count, ttft_sum_ms, ttft_histogram,
-        histogram_version, source_max_at, created_at, updated_at
+        histogram_version, source_max_at, event_max_at, created_at, updated_at
       )
       SELECT
         tenant_id, surface, ${bucket.grain}, ${bucket.bucket_start},
@@ -1342,6 +1629,18 @@ export class DashboardRollupService
         coalesce(sum(total_tokens), 0)::bigint,
         coalesce(sum(cost_micro_usd), 0)::bigint,
         coalesce(sum(saved_cost_micro_usd), 0)::bigint,
+        coalesce(sum(saved_cost_known_request_count), 0)::bigint,
+        coalesce(sum(saved_cost_unknown_request_count), 0)::bigint,
+        coalesce(sum(avoided_provider_call_request_count), 0)::bigint,
+        coalesce(sum(protected_request_count), 0)::bigint,
+        coalesce(sum(high_performance_request_count), 0)::bigint,
+        coalesce(sum(high_performance_eligible_request_count), 0)::bigint,
+        coalesce(sum(masking_known_request_count), 0)::bigint,
+        coalesce(sum(masking_unknown_request_count), 0)::bigint,
+        coalesce(sum(routing_known_request_count), 0)::bigint,
+        coalesce(sum(routing_unknown_request_count), 0)::bigint,
+        coalesce(sum(model_known_request_count), 0)::bigint,
+        coalesce(sum(model_unknown_request_count), 0)::bigint,
         coalesce(sum(attempt_count), 0)::bigint,
         coalesce(sum(billable_attempt_count), 0)::bigint,
         coalesce(sum(fallback_request_count), 0)::bigint,
@@ -1358,7 +1657,8 @@ export class DashboardRollupService
         coalesce(sum(ttft_count), 0)::bigint,
         coalesce(sum(ttft_sum_ms), 0)::bigint,
         ${Prisma.raw(histogramSumSQL('ttft_histogram'))},
-        ${DASHBOARD_HISTOGRAM_VERSION}, max(source_max_at), now(), now()
+        ${DASHBOARD_HISTOGRAM_VERSION}, max(source_max_at), max(event_max_at),
+        now(), now()
       FROM dashboard_rollup_totals
       WHERE tenant_id = ${bucket.tenant_id}::uuid
         AND surface = ${bucket.surface}
@@ -1502,9 +1802,17 @@ export async function enqueueDashboardRollupDirtyHierarchy(
     surface: DashboardRollupSurface;
     occurredAt: Date;
     reasonCode: 'SOURCE_DISCOVERED' | 'PROJECTION_CHANGED';
+    buildMode?: DashboardRollupBuildMode;
   },
 ): Promise<void> {
-  for (const grain of ['hour', 'day', 'month'] as const) {
+  const buildMode = input.buildMode ?? 'legacy';
+  const grains: readonly DashboardRollupGrain[] =
+    buildMode === 'minute'
+      ? ['minute']
+      : buildMode === 'shadow'
+        ? ['minute', 'hour', 'day', 'month']
+        : ['hour', 'day', 'month'];
+  for (const grain of grains) {
     await enqueueDashboardRollupDirtyBucket(tx, {
       tenantId: input.tenantId,
       surface: input.surface,
@@ -1520,6 +1828,10 @@ export function utcBucketStart(
   grain: DashboardRollupGrain,
 ): Date {
   const result = new Date(value.getTime());
+  if (grain === 'minute') {
+    result.setUTCSeconds(0, 0);
+    return result;
+  }
   if (grain === 'month') {
     return new Date(Date.UTC(result.getUTCFullYear(), result.getUTCMonth(), 1));
   }
@@ -1535,6 +1847,9 @@ export function utcBucketEnd(
   grain: DashboardRollupGrain,
 ): Date {
   const start = utcBucketStart(bucketStart, grain);
+  if (grain === 'minute') {
+    return new Date(start.getTime() + 60 * 1_000);
+  }
   if (grain === 'hour') {
     return new Date(start.getTime() + 60 * 60 * 1_000);
   }
@@ -1567,6 +1882,9 @@ export function dashboardHistogramPercentileUpperBound(
 function parentGrainFor(
   grain: DashboardRollupGrain,
 ): DashboardRollupGrain | null {
+  if (grain === 'minute') {
+    return 'hour';
+  }
   if (grain === 'hour') {
     return 'day';
   }
@@ -1576,12 +1894,13 @@ function parentGrainFor(
   return null;
 }
 
-function uniqueDirtyHours(
+function uniqueDirtyBuckets(
   values: Array<{ tenantId: string; occurredAt: Date }>,
+  grain: 'minute' | 'hour',
 ): Array<{ tenantId: string; bucketStart: Date }> {
   const unique = new Map<string, { tenantId: string; bucketStart: Date }>();
   for (const value of values) {
-    const bucketStart = utcBucketStart(value.occurredAt, 'hour');
+    const bucketStart = utcBucketStart(value.occurredAt, grain);
     unique.set(`${value.tenantId}:${bucketStart.toISOString()}`, {
       tenantId: value.tenantId,
       bucketStart,

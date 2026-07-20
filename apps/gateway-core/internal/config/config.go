@@ -98,6 +98,8 @@ type Config struct {
 	AuthSource                             string
 	AuthCache                              AuthCacheConfig
 	PricingCache                           PricingCacheConfig
+	AnalyticsPolicyImpactReadMode          string
+	AnalyticsPolicyImpactMaxRawTail        time.Duration
 	MockProviderBaseURL                    string
 	ProviderCatalogID                      string
 	ProviderCatalogVersion                 int
@@ -388,6 +390,21 @@ func LoadWithError() (Config, error) {
 	if difficultyE5ShadowTimeoutErr != nil {
 		return Config{}, difficultyE5ShadowTimeoutErr
 	}
+	analyticsPolicyImpactReadMode := strings.ToLower(strings.TrimSpace(
+		envString("GATEWAY_ANALYTICS_POLICY_IMPACT_READ_MODE", "raw"),
+	))
+	if analyticsPolicyImpactReadMode != "raw" && analyticsPolicyImpactReadMode != "rollup" {
+		return Config{}, errors.New("GATEWAY_ANALYTICS_POLICY_IMPACT_READ_MODE must be raw or rollup")
+	}
+	analyticsPolicyImpactMaxRawTail, analyticsPolicyImpactMaxRawTailErr := envDurationMillisInRange(
+		"GATEWAY_ANALYTICS_POLICY_IMPACT_MAX_RAW_TAIL_MS",
+		120000,
+		60000,
+		300000,
+	)
+	if analyticsPolicyImpactMaxRawTailErr != nil {
+		return Config{}, analyticsPolicyImpactMaxRawTailErr
+	}
 	databaseURL := envString("DATABASE_URL", "postgresql://gatelm:gatelm@localhost:5432/gatelm?schema=public")
 	exactCacheKeySecret := envString("GATEWAY_EXACT_CACHE_KEY_SECRET", "cache_key_secret_for_p0_demo_only")
 	providerTimeout := envDurationMillis("GATEWAY_PROVIDER_TIMEOUT_MS", 5000)
@@ -444,6 +461,8 @@ func LoadWithError() (Config, error) {
 			TTL:        envDurationMillis("GATEWAY_PRICING_CACHE_TTL_MS", 5000),
 			MaxEntries: envInt("GATEWAY_PRICING_CACHE_MAX_ENTRIES", 1024),
 		},
+		AnalyticsPolicyImpactReadMode:          analyticsPolicyImpactReadMode,
+		AnalyticsPolicyImpactMaxRawTail:        analyticsPolicyImpactMaxRawTail,
 		MockProviderBaseURL:                    envString("MOCK_PROVIDER_BASE_URL", "http://localhost:8090"),
 		ProviderCatalogID:                      envString("GATEWAY_PROVIDER_CATALOG_ID", "provider_catalog_local_static"),
 		ProviderCatalogVersion:                 envInt("GATEWAY_PROVIDER_CATALOG_VERSION", 1),

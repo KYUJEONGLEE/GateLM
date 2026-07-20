@@ -76,6 +76,7 @@
     "v2:p0:bootstrap": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev/v2-p0-bootstrap-check.ps1",
     "v2:p0:bootstrap:apps": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev/v2-p0-bootstrap-check.ps1 -CheckApps -RequireActiveSnapshot",
     "v2:p0:partition-smoke": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev/p0-monthly-partitioning-smoke.ps1",
+    "v2:dashboard:minute-rollup-benchmark": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev/dashboard-minute-rollup-benchmark.ps1",
     "v2:provider:e2e": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev/v2-provider-e2e-main-path.ps1",
     "v2:gemini:smoke": "node scripts/dev/gemini-gateway-smoke.mjs",
     "v2:claude:smoke": "node scripts/dev/claude-gateway-smoke.mjs",

@@ -28,6 +28,7 @@ interface ControlPlaneEnv extends RagRuntimeConfig {
   SMTP_USER?: string;
   CONTROL_PLANE_ADMIN_AUTH_MODE: string;
   DASHBOARD_ROLLUP_BUCKET_BATCH_SIZE?: number;
+  DASHBOARD_ROLLUP_BUILD_MODE?: 'legacy' | 'shadow' | 'minute';
   DASHBOARD_ROLLUP_DISCOVERY_BATCH_SIZE?: number;
   DASHBOARD_ROLLUP_DISCOVERY_LAG_MS?: number;
   DASHBOARD_ROLLUP_ENABLED?: string;
@@ -141,6 +142,19 @@ function readAdminAuthMode(env: RawEnv): string {
   if (value !== DEFAULT_ADMIN_AUTH_MODE && value !== DEMO_ADMIN_AUTH_MODE) {
     throw new Error(
       'CONTROL_PLANE_ADMIN_AUTH_MODE must be session_cookie or demo_admin_placeholder',
+    );
+  }
+
+  return value;
+}
+
+function readDashboardRollupBuildMode(
+  env: RawEnv,
+): 'legacy' | 'shadow' | 'minute' {
+  const value = env.DASHBOARD_ROLLUP_BUILD_MODE ?? 'legacy';
+  if (value !== 'legacy' && value !== 'shadow' && value !== 'minute') {
+    throw new Error(
+      'DASHBOARD_ROLLUP_BUILD_MODE must be legacy, shadow, or minute',
     );
   }
 
@@ -338,6 +352,7 @@ export function validateEnv(config: RawEnv): ValidatedControlPlaneEnv {
     DASHBOARD_ROLLUP_BUCKET_BATCH_SIZE:
       readOptionalInteger(config, 'DASHBOARD_ROLLUP_BUCKET_BATCH_SIZE', 1, 100) ??
       8,
+    DASHBOARD_ROLLUP_BUILD_MODE: readDashboardRollupBuildMode(config),
     DASHBOARD_ROLLUP_DISCOVERY_BATCH_SIZE:
       readOptionalInteger(
         config,
