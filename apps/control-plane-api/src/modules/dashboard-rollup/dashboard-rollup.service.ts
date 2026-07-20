@@ -43,7 +43,7 @@ type DirtyBucketRow = {
 };
 
 type SourceCursorRow = {
-  cursor_at: Date | null;
+  cursor_at: string | null;
   cursor_key: string;
   last_reconciled_at: Date | null;
 };
@@ -57,14 +57,14 @@ type ProjectApplicationDiscoveryRow = {
   request_id: string;
   tenant_id: string;
   created_at: Date;
-  ingested_at: Date;
+  ingested_at: string;
 };
 
 type TenantChatDiscoveryRow = {
   request_id: string;
   tenant_id: string;
   completed_at: Date;
-  updated_at: Date;
+  updated_at: string;
 };
 
 class DashboardRollupBucketRebuildError extends Error {
@@ -163,7 +163,7 @@ export class DashboardRollupService
           ON CONFLICT (source) DO NOTHING
         `);
         const cursorRows = await tx.$queryRaw<SourceCursorRow[]>(Prisma.sql`
-          SELECT cursor_at, cursor_key, last_reconciled_at
+          SELECT cursor_at::text AS cursor_at, cursor_key, last_reconciled_at
           FROM dashboard_rollup_source_cursors
           WHERE source = ${source}
           FOR UPDATE SKIP LOCKED
@@ -191,11 +191,14 @@ export class DashboardRollupService
     cutoff: Date,
   ): Promise<number> {
     const rows = await tx.$queryRaw<ProjectApplicationDiscoveryRow[]>(Prisma.sql`
-      SELECT request_id, tenant_id::text, created_at, ingested_at
+      SELECT request_id, tenant_id::text, created_at,
+             ingested_at::text AS ingested_at
       FROM p0_llm_invocation_logs
       WHERE (
           ${cursor.cursor_at}::timestamptz IS NULL
-          OR (ingested_at, request_id) > (${cursor.cursor_at}, ${cursor.cursor_key})
+          OR (ingested_at, request_id) > (
+            ${cursor.cursor_at}::timestamptz, ${cursor.cursor_key}
+          )
         )
         AND ingested_at <= ${cutoff}
       ORDER BY ingested_at, request_id
@@ -233,11 +236,14 @@ export class DashboardRollupService
     cutoff: Date,
   ): Promise<number> {
     const rows = await tx.$queryRaw<TenantChatDiscoveryRow[]>(Prisma.sql`
-      SELECT request_id, tenant_id::text, completed_at, updated_at
+      SELECT request_id, tenant_id::text, completed_at,
+             updated_at::text AS updated_at
       FROM tenant_chat_invocation_logs
       WHERE (
           ${cursor.cursor_at}::timestamptz IS NULL
-          OR (updated_at, request_id) > (${cursor.cursor_at}, ${cursor.cursor_key})
+          OR (updated_at, request_id) > (
+            ${cursor.cursor_at}::timestamptz, ${cursor.cursor_key}
+          )
         )
         AND updated_at <= ${cutoff}
       ORDER BY updated_at, request_id
@@ -271,14 +277,14 @@ export class DashboardRollupService
   private async advanceCursor(
     tx: RollupTransaction,
     source: DashboardRollupSurface,
-    cursorAt: Date | null,
+    cursorAt: string | null,
     cursorKey: string | null,
     caughtUp: boolean,
     caughtUpThrough: Date,
   ): Promise<void> {
     await tx.$executeRaw(Prisma.sql`
       UPDATE dashboard_rollup_source_cursors
-      SET cursor_at = coalesce(${cursorAt}, cursor_at),
+      SET cursor_at = coalesce(${cursorAt}::timestamptz, cursor_at),
           cursor_key = coalesce(${cursorKey}, cursor_key),
           last_discovered_at = now(),
           caught_up_at = CASE WHEN ${caughtUp} THEN now() ELSE NULL END,
