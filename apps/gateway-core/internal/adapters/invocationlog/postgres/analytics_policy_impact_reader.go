@@ -23,29 +23,13 @@ func (r *QueryReader) GetAnalyticsPolicyImpact(
 		return invocationlog.AnalyticsPolicyImpactFields{}, err
 	}
 
-	surfaceTotals, err := r.queryAnalyticsPolicyImpactSurfaceTotals(ctx, normalized)
-	if err != nil {
-		return invocationlog.AnalyticsPolicyImpactFields{}, err
-	}
-	outcomes, err := r.queryAnalyticsPolicyImpactOutcomes(ctx, normalized)
-	if err != nil {
-		return invocationlog.AnalyticsPolicyImpactFields{}, err
-	}
-	routingRoles, err := r.queryAnalyticsPolicyImpactRoutingRoles(ctx, normalized)
-	if err != nil {
-		return invocationlog.AnalyticsPolicyImpactFields{}, err
-	}
-	modelBuckets, err := r.queryAnalyticsPolicyImpactModelBuckets(ctx, normalized)
-	if err != nil {
-		return invocationlog.AnalyticsPolicyImpactFields{}, err
-	}
-	usageSources, err := r.queryAnalyticsPolicyImpactUsageSources(ctx, normalized)
+	snapshot, err := r.queryAnalyticsPolicyImpactSnapshot(ctx, normalized)
 	if err != nil {
 		return invocationlog.AnalyticsPolicyImpactFields{}, err
 	}
 
 	config := policyImpactBucketConfig(normalized)
-	totals, coverage, lastEventAt := aggregatePolicyImpactSurfaceTotals(surfaceTotals)
+	totals, coverage, lastEventAt := aggregatePolicyImpactSurfaceTotals(snapshot.SurfaceTotals)
 	generatedAt := time.Now().UTC()
 	source := "postgresql_unified_policy_impact_raw"
 	if normalized.ProjectID != "" {
@@ -56,11 +40,11 @@ func (r *QueryReader) GetAnalyticsPolicyImpact(
 		BucketInterval:      config.IntervalLabel,
 		ExpectedBucketCount: config.ExpectedBucketCount,
 		Totals:              totals,
-		SurfaceTotals:       surfaceTotals,
-		PolicyOutcomes:      outcomes,
-		RoutingRoles:        routingRoles,
-		ModelBuckets:        modelBuckets,
-		UsageSources:        usageSources,
+		SurfaceTotals:       snapshot.SurfaceTotals,
+		PolicyOutcomes:      snapshot.PolicyOutcomes,
+		RoutingRoles:        snapshot.RoutingRoles,
+		ModelBuckets:        snapshot.ModelBuckets,
+		UsageSources:        snapshot.UsageSources,
 		MetricCoverage:      coverage,
 		DataFreshness: invocationlog.DashboardDataFreshness{
 			Source:           source,
@@ -407,7 +391,7 @@ func buildAnalyticsPolicyImpactFilteredCTE(filter invocationlog.AnalyticsPolicyI
   from tenant_chat_invocation_logs
   where %s`, invocationlog.AnalyticsSurfaceTenantChat, strings.Join(tenantChatWhere, " and ")))
 	}
-	return "with filtered as (" + strings.Join(branches, "\nunion all\n") + "\n)", args
+	return "with filtered as materialized (" + strings.Join(branches, "\nunion all\n") + "\n)", args
 }
 
 func policyImpactBucketConfig(filter invocationlog.AnalyticsPolicyImpactFilter) invocationlog.TimeSeriesBucketConfig {

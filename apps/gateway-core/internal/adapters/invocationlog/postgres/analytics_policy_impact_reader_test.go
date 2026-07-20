@@ -2,7 +2,7 @@ package postgres
 
 import (
 	"context"
-	"database/sql"
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -13,55 +13,53 @@ import (
 func TestQueryReaderGetAnalyticsPolicyImpactCombinesSurfacesWithoutRequestRowCap(t *testing.T) {
 	from := time.Date(2026, 7, 18, 0, 0, 0, 0, time.UTC)
 	to := from.Add(time.Hour)
-	db := &fakeQueryer{rowsByQuery: []fakeQueryRows{
-		{
-			contains: "count(*) filter (where saved_cost_micro_usd is null)",
-			rows: &fakeRows{values: [][]any{
+	projectLastEventAt := from.Add(40 * time.Minute)
+	tenantChatLastEventAt := from.Add(50 * time.Minute)
+	db := &fakeQueryer{rowByQuery: []fakeQueryRow{{
+		contains: "analytics_policy_impact_single_scan",
+		row: fakeRow{values: []any{
+			mustMarshalPolicyImpactJSON(t, []invocationlog.AnalyticsPolicyImpactSurfaceTotal{
 				{
-					invocationlog.AnalyticsSurfaceProjectApplication,
-					int64(1500), int64(6000), int64(2000), int64(1500), int64(0),
-					int64(300), int64(70), int64(500), int64(1400),
-					int64(1500), int64(0), int64(1400), int64(100),
-					int64(1200), int64(50), sql.NullTime{Time: from.Add(40 * time.Minute), Valid: true},
+					Surface: invocationlog.AnalyticsSurfaceProjectApplication, RequestCount: 1500,
+					CostMicroUSD: 6000, KnownSavedCostMicroUSD: 2000,
+					SavedCostKnownRequests: 1500, SavedCostUnknownRequests: 0,
+					AvoidedProviderCallRequests: 300, ProtectedRequests: 70,
+					HighPerformanceRequests: 500, HighPerformanceEligibleRequests: 1400,
+					MaskingKnownRequests: 1500, MaskingUnknownRequests: 0,
+					RoutingKnownRequests: 1400, RoutingUnknownRequests: 100,
+					ModelKnownRequests: 1200, ModelUnknownRequests: 50,
+					LastEventAt: &projectLastEventAt,
 				},
 				{
-					invocationlog.AnalyticsSurfaceTenantChat,
-					int64(1000), int64(3000), int64(500), int64(800), int64(200),
-					int64(200), int64(10), int64(200), int64(600),
-					int64(100), int64(900), int64(600), int64(400),
-					int64(900), int64(50), sql.NullTime{Time: from.Add(50 * time.Minute), Valid: true},
+					Surface: invocationlog.AnalyticsSurfaceTenantChat, RequestCount: 1000,
+					CostMicroUSD: 3000, KnownSavedCostMicroUSD: 500,
+					SavedCostKnownRequests: 800, SavedCostUnknownRequests: 200,
+					AvoidedProviderCallRequests: 200, ProtectedRequests: 10,
+					HighPerformanceRequests: 200, HighPerformanceEligibleRequests: 600,
+					MaskingKnownRequests: 100, MaskingUnknownRequests: 900,
+					RoutingKnownRequests: 600, RoutingUnknownRequests: 400,
+					ModelKnownRequests: 900, ModelUnknownRequests: 50,
+					LastEventAt: &tenantChatLastEventAt,
 				},
-			}},
-		},
-		{
-			contains: "as policy_outcome(outcome, matched)",
-			rows: &fakeRows{values: [][]any{
-				{invocationlog.AnalyticsSurfaceTenantChat, "cache_hit", int64(150)},
-				{invocationlog.AnalyticsSurfaceProjectApplication, "fallback_success", int64(40)},
-			}},
-		},
-		{
-			contains: "select surface, routing_scheme, routing_role",
-			rows: &fakeRows{values: [][]any{
-				{invocationlog.AnalyticsSurfaceProjectApplication, "difficulty", "complex", int64(500)},
-				{invocationlog.AnalyticsSurfaceTenantChat, "difficulty", "complex", int64(200)},
-			}},
-		},
-		{
-			contains: "top_models as",
-			rows: &fakeRows{values: [][]any{
-				{invocationlog.AnalyticsSurfaceProjectApplication, from, "openai", "gpt-4o", int64(1500)},
-				{invocationlog.AnalyticsSurfaceTenantChat, from, "openai", "gpt-4o-mini", int64(1000)},
-			}},
-		},
-		{
-			contains: "coalesce(project_id, '')",
-			rows: &fakeRows{values: [][]any{
-				{invocationlog.AnalyticsSurfaceProjectApplication, "11111111-1111-4111-8111-111111111111", int64(1500), int64(6000)},
-				{invocationlog.AnalyticsSurfaceTenantChat, "", int64(1000), int64(3000)},
-			}},
-		},
-	}}
+			}),
+			mustMarshalPolicyImpactJSON(t, []invocationlog.AnalyticsPolicyImpactOutcome{
+				{Surface: invocationlog.AnalyticsSurfaceTenantChat, Outcome: "cache_hit", RequestCount: 150},
+				{Surface: invocationlog.AnalyticsSurfaceProjectApplication, Outcome: "fallback_success", RequestCount: 40},
+			}),
+			mustMarshalPolicyImpactJSON(t, []invocationlog.AnalyticsPolicyImpactRoutingRole{
+				{Surface: invocationlog.AnalyticsSurfaceProjectApplication, Scheme: "difficulty", Role: "complex", RequestCount: 500},
+				{Surface: invocationlog.AnalyticsSurfaceTenantChat, Scheme: "difficulty", Role: "complex", RequestCount: 200},
+			}),
+			mustMarshalPolicyImpactJSON(t, []invocationlog.AnalyticsPolicyImpactModelBucket{
+				{Surface: invocationlog.AnalyticsSurfaceProjectApplication, PeriodStart: from, Provider: "openai", Model: "gpt-4o", RequestCount: 1500},
+				{Surface: invocationlog.AnalyticsSurfaceTenantChat, PeriodStart: from, Provider: "openai", Model: "gpt-4o-mini", RequestCount: 1000},
+			}),
+			mustMarshalPolicyImpactJSON(t, []invocationlog.AnalyticsPolicyImpactUsageSource{
+				{Surface: invocationlog.AnalyticsSurfaceProjectApplication, ProjectID: "11111111-1111-4111-8111-111111111111", RequestCount: 1500, CostMicroUSD: 6000},
+				{Surface: invocationlog.AnalyticsSurfaceTenantChat, RequestCount: 1000, CostMicroUSD: 3000},
+			}),
+		}},
+	}}}
 	reader := NewQueryReader(db)
 
 	impact, err := reader.GetAnalyticsPolicyImpact(context.Background(), invocationlog.AnalyticsPolicyImpactFilter{
@@ -91,6 +89,10 @@ func TestQueryReaderGetAnalyticsPolicyImpactCombinesSurfacesWithoutRequestRowCap
 		t.Fatalf("unexpected freshness: %+v", impact.DataFreshness)
 	}
 	joined := strings.Join(db.queries, "\n")
+	if len(db.queries) != 1 || strings.Count(joined, "from p0_llm_invocation_logs") != 1 ||
+		!strings.Contains(joined, "with filtered as materialized") {
+		t.Fatalf("expected one materialized source query, got %d queries: %s", len(db.queries), joined)
+	}
 	if !strings.Contains(joined, "from tenant_chat_invocation_logs") || strings.Contains(joined, "limit 1000") {
 		t.Fatalf("expected Tenant Chat aggregate without request row cap: %s", joined)
 	}
@@ -99,6 +101,15 @@ func TestQueryReaderGetAnalyticsPolicyImpactCombinesSurfacesWithoutRequestRowCap
 		strings.Contains(joined, "routing_role in ('complex', 'high_quality')") {
 		t.Fatalf("policy impact routing must use only simple/complex difficulty: %s", joined)
 	}
+}
+
+func mustMarshalPolicyImpactJSON(t *testing.T, value any) []byte {
+	t.Helper()
+	payload, err := json.Marshal(value)
+	if err != nil {
+		t.Fatalf("marshal policy impact fixture: %v", err)
+	}
+	return payload
 }
 
 func TestBuildAnalyticsPolicyImpactFilteredCTEOmitsTenantChatForProjectScope(t *testing.T) {
