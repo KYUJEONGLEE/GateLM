@@ -90,8 +90,12 @@ func TestQueryReaderGetAnalyticsPolicyImpactCombinesSurfacesWithoutRequestRowCap
 	}
 	joined := strings.Join(db.queries, "\n")
 	if len(db.queries) != 1 || strings.Count(joined, "from p0_llm_invocation_logs") != 1 ||
-		!strings.Contains(joined, "with filtered as materialized") {
-		t.Fatalf("expected one materialized source query, got %d queries: %s", len(db.queries), joined)
+		!strings.Contains(joined, "with filtered as not materialized") ||
+		!strings.Contains(joined, "grouped as materialized") {
+		t.Fatalf("expected one source scan feeding one materialized pre-aggregate, got %d queries: %s", len(db.queries), joined)
+	}
+	if strings.Count(joined, "from filtered") != 1 {
+		t.Fatalf("raw filtered rows must feed only the pre-aggregate once: %s", joined)
 	}
 	if !strings.Contains(joined, "from tenant_chat_invocation_logs") || strings.Contains(joined, "limit 1000") {
 		t.Fatalf("expected Tenant Chat aggregate without request row cap: %s", joined)
