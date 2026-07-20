@@ -1,30 +1,56 @@
-import { parseBoundedInteger } from "../runtime-policy-editor-utils";
+import { useEffect, useState } from "react";
+
+import {
+  formatPolicyNumberInputValue,
+  parseOptionalBoundedInteger
+} from "../runtime-policy-editor-utils";
 
 export function PolicyNumberField({
+  className,
   label,
+  labelClassName,
   max,
   min,
   onChange,
   readOnly = false,
   value
 }: {
+  className?: string;
   label: string;
+  labelClassName?: string;
   max: number;
   min: number;
   onChange: (value: number) => void;
   readOnly?: boolean;
-  value: number;
+  value: number | null | undefined;
 }) {
+  const [inputValue, setInputValue] = useState(() =>
+    formatPolicyNumberInputValue(value)
+  );
+
+  useEffect(() => {
+    setInputValue(formatPolicyNumberInputValue(value));
+  }, [value]);
+
   return (
-    <label className="policy-field">
-      <span>{label}</span>
+    <label className={["policy-field", className].filter(Boolean).join(" ")}>
+      <span className={labelClassName}>{label}</span>
       <input
         max={max}
         min={min}
-        onChange={(event) => onChange(parseBoundedInteger(event.target.value, min, max))}
+        onBlur={() => setInputValue(formatPolicyNumberInputValue(value))}
+        onChange={(event) => {
+          const nextInputValue = event.target.value;
+          const nextValue = parseOptionalBoundedInteger(nextInputValue, min, max);
+
+          setInputValue(nextInputValue);
+          if (nextValue !== null) {
+            onChange(nextValue);
+          }
+        }}
         readOnly={readOnly}
         type="number"
-        value={value}
+        value={inputValue}
       />
     </label>
   );

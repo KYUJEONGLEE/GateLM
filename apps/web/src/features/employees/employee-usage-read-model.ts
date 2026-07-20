@@ -12,6 +12,7 @@ const MICRO_USD_PER_USD = 1_000_000;
 
 export type EmployeeUsageSnapshot = {
   tenantChatUsage?: EmployeeUsageResponse | null;
+  weeklyUsage?: EmployeeUsageResponse | null;
   weeklyTokenQuotas?: EmployeeWeeklyTokenQuotasResponse | null;
   loadError?: string | null;
   monthlyUsage?: EmployeeUsageResponse | null;
@@ -89,6 +90,9 @@ export function buildEmployeeUsageReadModel(
   const usageByEmployeeId = new Map(
     (snapshot.tenantChatUsage?.data ?? []).map((row) => [row.employeeId, row])
   );
+  const weeklyUsageByEmployeeId = new Map(
+    (snapshot.weeklyUsage?.data ?? []).map((row) => [row.employeeId, row])
+  );
   const monthlyUsageByEmployeeId = new Map(
     (snapshot.monthlyUsage?.data ?? []).map((row) => [row.employeeId, row])
   );
@@ -96,6 +100,10 @@ export function buildEmployeeUsageReadModel(
   const monthlyUsageComplete = Boolean(
     snapshot.monthlyUsage &&
       model.employees.every((employee) => monthlyUsageByEmployeeId.has(employee.id))
+  );
+  const weeklyUsageComplete = Boolean(
+    snapshot.weeklyUsage &&
+      hasExactlyEmployeeIds(weeklyUsageByEmployeeId, modelEmployeeIds)
   );
 
   for (const assignments of Object.values(model.assignmentsByProjectId)) {
@@ -144,7 +152,9 @@ export function buildEmployeeUsageReadModel(
         "not_configured"
       ),
       status: employee.status,
-      weeklyCostMicroUsd: null
+      weeklyCostMicroUsd: weeklyUsageComplete
+        ? (weeklyUsageByEmployeeId.get(employee.id)?.total.costMicroUsd ?? null)
+        : null
     } satisfies EmployeeUsageCandidate;
   });
 
@@ -202,6 +212,8 @@ export function buildEmployeeUsageReadModel(
       snapshot.loadError ??
       (snapshot.tenantChatUsage && !tenantChatUsageComplete
         ? "Control Plane returned incomplete Tenant Chat employee usage."
+        : snapshot.weeklyUsage && !weeklyUsageComplete
+          ? "Control Plane returned incomplete weekly employee usage."
         : snapshot.weeklyTokenQuotas && !hasExactlyEmployeeIds(quotaByEmployeeId, modelEmployeeIds)
         ? "Control Plane returned incomplete employee weekly token quotas."
         : null),

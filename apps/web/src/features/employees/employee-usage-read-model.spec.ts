@@ -11,6 +11,10 @@ test("ranks employees by Tenant Chat confirmed cost and keeps project usage sepa
       usageRow("employee-a", 2_500_000),
       usageRow("employee-b", 7_500_000)
     ]),
+    weeklyUsage: buildTenantChatUsage([
+      usageRow("employee-a", 5_000_000),
+      usageRow("employee-b", 9_000_000)
+    ]),
     weeklyTokenQuotas: buildWeeklyTokenQuotas(["employee-a", "employee-b"])
   });
 
@@ -29,8 +33,8 @@ test("ranks employees by Tenant Chat confirmed cost and keeps project usage sepa
       row.weeklyCostMicroUsd
     ])
   ).toEqual([
-    [1, "employee-b", 7_500_000, null],
-    [2, "employee-a", 2_500_000, null]
+    [1, "employee-b", 7_500_000, 9_000_000],
+    [2, "employee-a", 2_500_000, 5_000_000]
   ]);
   expect(usage.rows[0]).toMatchObject({
     costShare: 0.75,

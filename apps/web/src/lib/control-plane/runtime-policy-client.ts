@@ -20,6 +20,7 @@ import {
   isRuntimeRoutingPolicyHash,
   runtimeRoutingCategories,
   runtimeRoutingDifficulties,
+  toRuntimePolicyRateLimitWriteInput,
   toRuntimePolicyRoutingWriteInput
 } from "@/lib/control-plane/runtime-policy-types";
 import type { ProviderConnectionRecord } from "@/lib/control-plane/provider-connections-types";
@@ -1073,10 +1074,7 @@ function toDraftRequest(values: RuntimePolicyDraftValues, configVersion: string)
       maxChars: values.responseCaptureMaxChars,
       mode: values.responseCaptureEnabled ? "raw_full" : "disabled"
     },
-    rateLimit: {
-      enabled: values.rateLimitEnabled,
-      limit: values.rateLimitLimit
-    },
+    rateLimit: toRuntimePolicyRateLimitWriteInput(values),
     routingPolicy: toRuntimePolicyRoutingWriteInput(values.routingPolicy),
     safetyPolicy: {
       detectors: values.detectors.map((detector) => ({

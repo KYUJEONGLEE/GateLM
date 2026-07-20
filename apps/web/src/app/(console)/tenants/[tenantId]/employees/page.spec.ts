@@ -23,5 +23,9 @@ test("employee management validates tenant access before loading employees", asy
   expect(weeklyQuotaReadIndex).toBeGreaterThan(accessGuardIndex);
   expect(usageReadIndex).toBeGreaterThan(accessGuardIndex);
   expect(monthlyLimitReadIndex).toBeGreaterThan(accessGuardIndex);
+  expect(pageSource).toContain("weeklyUsageFrom.toISOString()");
+  expect(pageSource).toContain(
+    "weeklyUsage: weeklyTenantChatUsage.ok ? weeklyTenantChatUsage.data : undefined"
+  );
   expect(pageSource).not.toContain('metric: "tokens"');
 });

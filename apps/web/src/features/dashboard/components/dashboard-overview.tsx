@@ -342,7 +342,7 @@ export function DashboardOverviewView({
       icon: <Timer aria-hidden="true" size={22} strokeWidth={2.2} />,
       label: text.kpi.averageLatency,
       tone: "violet",
-      value: formatLatency(overview.averageLatencyMs)
+      value: formatLatency(Math.round(overview.averageLatencyMs))
     },
     {
       icon: <WalletCards aria-hidden="true" size={22} strokeWidth={2.2} />,
