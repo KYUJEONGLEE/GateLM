@@ -119,6 +119,201 @@ class PrivacyFilterAdapterTests(unittest.TestCase):
             },
         )
 
+    def test_gatelm_koelectra_rejects_single_korean_syllable_person_fragment(self) -> None:
+        prompt = "\ub108\uc758\uc774\ub984\uc740?"
+        fragment_start = prompt.index("\ub984")
+        adapter = PrivacyFilterAdapter(
+            classifier=lambda _text: [
+                {
+                    "entity_group": "PER",
+                    "score": 0.99,
+                    "start": fragment_start,
+                    "end": fragment_start + 1,
+                }
+            ],
+            model_name=GATELM_KOELECTRA_PII_NER_MODEL,
+            allowed_detector_types=frozenset({"person_name"}),
+        )
+
+        self.assertEqual(adapter.detect(prompt), [])
+        self.assertEqual(adapter.detect_many([prompt]).detections, [[]])
+
+    def test_gatelm_koelectra_keeps_complete_korean_person_name(self) -> None:
+        person_name = "\uae40\ubbfc\uc218"
+        prompt = f"\uace0\uac1d {person_name}\uc5d0\uac8c \uc548\ub0b4\ud574 \uc8fc\uc138\uc694."
+        person_start = prompt.index(person_name)
+        adapter = PrivacyFilterAdapter(
+            classifier=lambda _text: [
+                {
+                    "entity_group": "PER",
+                    "score": 0.99,
+                    "start": person_start,
+                    "end": person_start + len(person_name),
+                }
+            ],
+            model_name=GATELM_KOELECTRA_PII_NER_MODEL,
+            allowed_detector_types=frozenset({"person_name"}),
+        )
+
+        detections = adapter.detect(prompt)
+
+        self.assertEqual(len(detections), 1)
+        self.assertEqual(detections[0].detector_type, "person_name")
+        self.assertEqual(
+            detections[0].length,
+            len(person_name),
+        )
+
+    def test_gatelm_koelectra_merges_adjacent_short_fragment_into_address(self) -> None:
+        prefix = "서울특별시 강남구"
+        address = "테헤란로 123"
+        prompt = f"배송지는 {prefix}{address}입니다."
+        prefix_start = prompt.index(prefix)
+        address_start = prompt.index(address)
+        raw_items = [
+            {
+                "entity_group": "ORG",
+                "score": 0.99,
+                "start": prefix_start,
+                "end": address_start,
+            },
+            {
+                "entity_group": "ADDR",
+                "score": 0.99,
+                "start": address_start,
+                "end": address_start + len(address),
+            },
+        ]
+        adapter = PrivacyFilterAdapter(
+            classifier=lambda _text: raw_items,
+            model_name=GATELM_KOELECTRA_PII_NER_MODEL,
+        )
+
+        detections = adapter.detect(prompt)
+        batch_detections = adapter.detect_many([prompt]).detections[0]
+
+        for result in (detections, batch_detections):
+            self.assertEqual(len(result), 1)
+            self.assertEqual(result[0].detector_type, "postal_address")
+            self.assertEqual(result[0].start, prefix_start)
+            self.assertEqual(result[0].end, address_start + len(address))
+
+    def test_gatelm_koelectra_expands_immediate_admin_suffix_address(self) -> None:
+        prefix = "서울특별시 강남구"
+        address = "테헤란로 123"
+        prompt = f"주소는 {prefix} {address}입니다."
+        prefix_start = prompt.index(prefix)
+        address_start = prompt.index(address)
+        adapter = PrivacyFilterAdapter(
+            classifier=lambda _text: [
+                {
+                    "entity_group": "ADDR",
+                    "score": 0.99,
+                    "start": address_start,
+                    "end": address_start + len(address),
+                }
+            ],
+            model_name=GATELM_KOELECTRA_PII_NER_MODEL,
+        )
+
+        detections = adapter.detect(prompt)
+
+        self.assertEqual(len(detections), 1)
+        self.assertEqual(detections[0].start, prefix_start)
+        self.assertEqual(detections[0].end, address_start + len(address))
+
+    def test_gatelm_koelectra_expands_admin_suffix_without_space(self) -> None:
+        prefix = "서울특별시 강남구"
+        address = "테헤란로 123"
+        prompt = f"주소는 {prefix}{address}입니다."
+        prefix_start = prompt.index(prefix)
+        address_start = prompt.index(address)
+        adapter = PrivacyFilterAdapter(
+            classifier=lambda _text: [
+                {
+                    "entity_group": "ADDR",
+                    "score": 0.99,
+                    "start": address_start,
+                    "end": address_start + len(address),
+                }
+            ],
+            model_name=GATELM_KOELECTRA_PII_NER_MODEL,
+        )
+
+        detections = adapter.detect(prompt)
+
+        self.assertEqual(len(detections), 1)
+        self.assertEqual(detections[0].start, prefix_start)
+        self.assertEqual(detections[0].end, address_start + len(address))
+
+    def test_gatelm_koelectra_does_not_merge_organization_suffix(self) -> None:
+        organization = "한빛대학교"
+        address = "서울특별시 강남구 테헤란로 123"
+        prompt = f"방문지는 {organization}{address}입니다."
+        organization_start = prompt.index(organization)
+        address_start = prompt.index(address)
+        adapter = PrivacyFilterAdapter(
+            classifier=lambda _text: [
+                {
+                    "entity_group": "ORG",
+                    "score": 0.99,
+                    "start": organization_start,
+                    "end": address_start,
+                },
+                {
+                    "entity_group": "ADDR",
+                    "score": 0.99,
+                    "start": address_start,
+                    "end": address_start + len(address),
+                },
+            ],
+            model_name=GATELM_KOELECTRA_PII_NER_MODEL,
+        )
+
+        detections = adapter.detect(prompt)
+
+        self.assertEqual(
+            [(item.detector_type, item.start) for item in detections],
+            [
+                ("organization_name", organization_start),
+                ("postal_address", address_start),
+            ],
+        )
+
+    def test_gatelm_koelectra_does_not_merge_punctuation_gap(self) -> None:
+        organization = "고객센터"
+        address = "서울특별시 강남구 테헤란로 123"
+        prompt = f"문의처는 {organization}, {address}입니다."
+        organization_start = prompt.index(organization)
+        address_start = prompt.index(address)
+        adapter = PrivacyFilterAdapter(
+            classifier=lambda _text: [
+                {
+                    "entity_group": "ORG",
+                    "score": 0.99,
+                    "start": organization_start,
+                    "end": organization_start + len(organization),
+                },
+                {
+                    "entity_group": "ADDR",
+                    "score": 0.99,
+                    "start": address_start,
+                    "end": address_start + len(address),
+                },
+            ],
+            model_name=GATELM_KOELECTRA_PII_NER_MODEL,
+        )
+
+        detections = adapter.detect(prompt)
+
+        self.assertEqual(
+            [(item.detector_type, item.start) for item in detections],
+            [
+                ("organization_name", organization_start),
+                ("postal_address", address_start),
+            ],
+        )
+
     def test_adapter_dynamic_batch_preserves_input_order_and_counts_one_invocation(self) -> None:
         classifier = FakeBatchClassifier()
         adapter = PrivacyFilterAdapter(classifier=classifier)

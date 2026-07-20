@@ -25,6 +25,14 @@ TARGET_TYPES = (
     "postal_address",
     "resident_registration_number",
 )
+TARGET_THRESHOLDS = (
+    ("email", 0.99),
+    ("organization_name", 0.90),
+    ("person_name", 0.90),
+    ("phone_number", 0.99),
+    ("postal_address", 0.90),
+    ("resident_registration_number", 0.99),
+)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -186,10 +194,16 @@ def render_candidate_env(runtime_model_path: str) -> str:
         "GATEWAY_AI_SAFETY_SIDECAR_DETECTOR_SET": "gatelm-koelectra-pii-ner-v1",
         "GATEWAY_AI_SAFETY_SIDECAR_MODE": "enforce",
         "GATEWAY_AI_SAFETY_SIDECAR_TIMEOUT_MS": "100",
+        "GATEWAY_AI_SAFETY_PERSON_NAME_MODEL_ONLY": "true",
         "AI_SERVICE_AI_SAFETY_DETECTOR_RUNTIME": "onnx",
         "AI_SERVICE_AI_SAFETY_PRELOAD_ENABLED": "true",
         "AI_SERVICE_AI_SAFETY_MICRO_BATCH_SIZE": "1",
         "AI_SERVICE_AI_SAFETY_ML_ALLOWED_DETECTOR_TYPES": ",".join(TARGET_TYPES),
+        "AI_SERVICE_AI_SAFETY_ML_DETECTOR_THRESHOLDS": ",".join(
+            f"{detector_type}={threshold:.2f}"
+            for detector_type, threshold in TARGET_THRESHOLDS
+        ),
+        "AI_SERVICE_AI_SAFETY_PERSON_NAME_MODEL_ONLY": "true",
         "AI_SERVICE_AI_SAFETY_DETECTOR_MODEL_ID": runtime_model_path,
         "AI_SERVICE_AI_SAFETY_ADDITIONAL_DETECTOR_MODEL_IDS": "",
     }
@@ -199,7 +213,9 @@ def render_candidate_env(runtime_model_path: str) -> str:
 def render_rollback_env() -> str:
     return (
         "GATEWAY_AI_SAFETY_SIDECAR_ENABLED=false\n"
+        "GATEWAY_AI_SAFETY_PERSON_NAME_MODEL_ONLY=false\n"
         "AI_SERVICE_AI_SAFETY_ADDITIONAL_DETECTOR_MODEL_IDS=\n"
+        "AI_SERVICE_AI_SAFETY_PERSON_NAME_MODEL_ONLY=false\n"
     )
 
 
