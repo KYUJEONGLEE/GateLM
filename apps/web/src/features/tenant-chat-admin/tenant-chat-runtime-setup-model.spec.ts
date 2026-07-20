@@ -279,6 +279,21 @@ test("Chat App routing reuses the original routing policy presentation", async (
   expect(source).toContain("MessageSquareMore");
   expect(source).toContain("BrainCircuit");
   expect(source).toContain("ProviderFamilyIcon");
+  expect(styles).toMatch(
+    /\.tenant-management-content:not\(\.tenant-chat-app-content\)[\s\S]*?\.tenant-routing-model-card/
+  );
+  expect(styles).toContain(
+    ".management-line-content:not(.tenant-chat-app-content)"
+  );
+  expect(styles).toMatch(
+    /html\[data-presentation-mode="true"\] \.tenant-chat-app-content \{[\s\S]*?--global-font-lift: 5px;/
+  );
+  expect(styles).toMatch(
+    /\.tenant-chat-app-content[\s\S]*?\.tenant-routing-table-row \{[\s\S]*?min-height: 90px;/
+  );
+  expect(styles).toMatch(
+    /\.tenant-chat-app-content[\s\S]*?\.tenant-routing-provider-control select,[\s\S]*?min-height: 54px;[\s\S]*?font-size: 17px;/
+  );
 });
 
 test("Chat App policy navigation exposes routing, cache, security, usage limits, and tenant-admin Knowledge Base panels", async () => {
