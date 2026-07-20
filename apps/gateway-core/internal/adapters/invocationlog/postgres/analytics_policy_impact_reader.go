@@ -391,7 +391,7 @@ func buildAnalyticsPolicyImpactFilteredCTE(filter invocationlog.AnalyticsPolicyI
   from tenant_chat_invocation_logs
   where %s`, invocationlog.AnalyticsSurfaceTenantChat, strings.Join(tenantChatWhere, " and ")))
 	}
-	return "with filtered as materialized (" + strings.Join(branches, "\nunion all\n") + "\n)", args
+	return "with filtered as not materialized (" + strings.Join(branches, "\nunion all\n") + "\n)", args
 }
 
 func policyImpactBucketConfig(filter invocationlog.AnalyticsPolicyImpactFilter) invocationlog.TimeSeriesBucketConfig {
