@@ -138,6 +138,13 @@ type ledgerlessAccounting interface {
 	) (bool, error)
 }
 
+type safetySummaryReader interface {
+	ReadSafetySummary(
+		ctx context.Context,
+		requestContext tenantchat.RequestContext,
+	) (*tenantchat.SafetySummary, error)
+}
+
 type preCallAccounting interface {
 	FinalizePreCall(
 		ctx context.Context,
@@ -157,6 +164,7 @@ type Service struct {
 	tokenRate         providerTokenLimiter
 	difficultyRuntime routing.DifficultySemanticClassifier
 	ledgerless        ledgerlessAccounting
+	safetySummaries   safetySummaryReader
 	preCall           preCallAccounting
 	metrics           *metrics.Registry
 	sessionsMu        sync.Mutex
@@ -258,6 +266,7 @@ func New(snapshots snapshotResolver, usage usageAccounting, providers providerEx
 		sessions: make(map[string]*sharedSession),
 	}
 	service.ledgerless, _ = usage.(ledgerlessAccounting)
+	service.safetySummaries, _ = usage.(safetySummaryReader)
 	service.preCall, _ = usage.(preCallAccounting)
 	for _, option := range options {
 		if option != nil {
@@ -312,6 +321,23 @@ func (s *Service) Prepare(
 		}
 		input = evaluation.Input
 	}
+	cacheEligible := snapshot.Policies.Cache.Enabled && request.Context.UsageIntent != nil &&
+		request.Context.UsageIntent.CacheStrategy == "exact"
+	if cacheEligible && snapshot.Policies.Safety.Enabled {
+		cacheEligible = false
+		if s.safetySummaries != nil {
+			summary, summaryErr := s.safetySummaries.ReadSafetySummary(ctx, request.Context)
+			if summaryErr != nil {
+				if errors.Is(summaryErr, context.Canceled) || errors.Is(summaryErr, context.DeadlineExceeded) ||
+					errors.Is(summaryErr, tenantchat.ErrAdmissionExpired) {
+					return nil, summaryErr
+				}
+				return nil, tenantchat.ErrUsageGuardUnavailable
+			}
+			request.Context.Safety = tenantchat.CloneSafetySummary(summary)
+			cacheEligible = tenantchat.SafetyAllowsExactCache(true, summary)
+		}
+	}
 	if snapshot.Policies.Routing.Policy != nil {
 		routingDecision, routingErr := decideTenantChatRoute(ctx, snapshot, input, s.difficultyRuntime)
 		if routingErr != nil {
@@ -319,8 +345,6 @@ func (s *Service) Prepare(
 		}
 		request.Context.Routing = &routingDecision
 	}
-	cacheEligible := snapshot.Policies.Cache.Enabled && request.Context.UsageIntent != nil &&
-		request.Context.UsageIntent.CacheStrategy == "exact"
 	if cacheEligible {
 		if snapshot.Policies.Cache.Strategy != "exact" || s.cache == nil || s.ledgerless == nil {
 			return nil, tenantchat.ErrRuntimeUnavailable
@@ -1018,7 +1042,8 @@ func (e *PreparedExecution) closeCurrentStream() {
 }
 
 func (e *PreparedExecution) storeConfirmedPrimaryCache(ctx context.Context, settlement tenantchat.UsageSettlement) {
-	if e == nil || e.cache == nil || e.attemptNo != 1 || !e.cacheEligible {
+	if e == nil || e.cache == nil || e.attemptNo != 1 || !e.cacheEligible ||
+		!tenantchat.SafetyAllowsExactCache(e.snapshot.Policies.Safety.Enabled, e.requestContext.Safety) {
 		e.cacheResponse = nil
 		return
 	}

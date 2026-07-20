@@ -78,6 +78,13 @@ export class RuntimeConfigRateLimitDto {
   @Min(1)
   @Max(100000)
   limit?: number;
+
+  @Type(() => Number)
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(100000)
+  windowSeconds?: number;
 }
 
 export class RuntimeConfigBudgetPolicyDto {
@@ -477,7 +484,7 @@ export interface RuntimeConfigRateLimitResponseDto {
   enabled: boolean;
   scope: 'application';
   algorithm: 'fixed_window';
-  windowSeconds: 60;
+  windowSeconds: number;
   limit: number;
 }
 

@@ -131,10 +131,13 @@ export type RuntimePolicyEditorText = {
   publish: string;
   publishedAt: string;
   rateLimit: string;
+  rateLimitEnabledTitle: string;
   rateLimitInfo: string;
   rateLimitTab: string;
   redactAction: string;
   refillRate: string;
+  requestsPerSecondUnit: string;
+  requestsUnit: string;
   remove: string;
   responseCapture: string;
   responseCaptureHint: string;

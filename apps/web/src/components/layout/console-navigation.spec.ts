@@ -34,10 +34,11 @@ test("API management route activates the API Key management nav item", () => {
   });
 });
 
-test("sidebar omits inactive alerts and consistently names API Key management", () => {
+test("sidebar shortens the Korean API Key label without changing the page title", () => {
   expect(shellSource).not.toContain('item: "alerts"');
   expect(shellSource).toContain('en: "API Key Management"');
-  expect(shellSource).toContain('ko: "API Key 관리"');
+  expect(shellSource).toContain('ko: "API Key"');
+  expect(shellSource).not.toContain('ko: "API Key 관리"');
   expect(apiKeyManagementSource).toContain('title: "API Key Management"');
   expect(apiKeyManagementSource).toContain('title: "API Key 관리"');
 });

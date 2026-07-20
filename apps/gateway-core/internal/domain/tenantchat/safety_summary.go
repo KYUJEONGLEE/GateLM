@@ -66,3 +66,13 @@ func CloneSafetySummary(summary *SafetySummary) *SafetySummary {
 	cloned.MaskingDetectedTypes = append([]string(nil), summary.MaskingDetectedTypes...)
 	return &cloned
 }
+
+// SafetyAllowsExactCache keeps cache eligibility fail-closed when executable
+// safety is enabled. Only a complete, explicitly non-masking server summary
+// may participate in exact-cache lookup or storage.
+func SafetyAllowsExactCache(safetyEnabled bool, summary *SafetySummary) bool {
+	if !safetyEnabled {
+		return true
+	}
+	return summary != nil && summary.MaskingAction == "none" && ValidateSafetySummary(*summary) == nil
+}

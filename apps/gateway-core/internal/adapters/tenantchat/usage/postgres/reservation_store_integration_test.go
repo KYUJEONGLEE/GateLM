@@ -145,6 +145,49 @@ func TestConsumeAndReserveWritesAtomicUsageLedgerIntegration(t *testing.T) {
 	assertNoEmployeeLedgerRows(t, pool, fixture, completionContext.RequestID)
 }
 
+func TestRedactedAdmissionRemainsCacheIneligibleAfterConsumptionIntegration(t *testing.T) {
+	pool, fixture := setupUsageIntegration(t)
+	fixture.configureEmployeeLedgerRollout(t, pool, "off")
+	admissionStore := admissionpostgres.NewStore(pool)
+	admission, err := admissionStore.Create(context.Background(), fixture.admissionContext(), tenantchat.AdmissionLimits{
+		RequestsPerWindow: 100, Window: time.Minute, MaxActiveAdmissionsPerUser: 2, AdmissionTTL: 30 * time.Second,
+	})
+	if err != nil {
+		t.Fatalf("create admission fixture: %v", err)
+	}
+
+	store := NewReservationStore(pool)
+	completionContext := fixture.completionContext(admission.AdmissionID)
+	completionContext.UsageIntent.CacheStrategy = "exact"
+	digest := "sha256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+	redacted := tenantchat.SafetySummary{
+		MaskingAction: "redacted", MaskingDetectedTypes: []string{"email"},
+		MaskingDetectedCount: 1, SafetyPolicyDigest: digest,
+	}
+	if _, err := store.RecordSafetySummary(context.Background(), completionContext, redacted); err != nil {
+		t.Fatalf("record redacted safety summary: %v", err)
+	}
+	observed, err := store.ReadSafetySummary(context.Background(), completionContext)
+	if err != nil || !tenantchat.SameSafetySummary(observed, &redacted) {
+		t.Fatalf("read active redacted safety summary: summary=%+v err=%v", observed, err)
+	}
+
+	snapshot := fixture.snapshot(10_000, 1_000_000)
+	snapshot.Policies.Cache = tenantruntime.CachePolicy{Enabled: true, Strategy: "exact"}
+	snapshot.Policies.Safety = tenantruntime.SafetyPolicy{Enabled: true, PolicyDigest: digest}
+	reservation, err := store.BeginExecution(context.Background(), completionContext, snapshot)
+	if err != nil {
+		t.Fatalf("reserve redacted request: %v", err)
+	}
+	if reservation.CacheOutcome != "off" {
+		t.Fatalf("redacted reservation must record cache off, got %+v", reservation)
+	}
+	observed, err = store.ReadSafetySummary(context.Background(), completionContext)
+	if err != nil || !tenantchat.SameSafetySummary(observed, &redacted) {
+		t.Fatalf("read consumed redacted safety summary: summary=%+v err=%v", observed, err)
+	}
+}
+
 func TestConsumeAndReserveAppliesNewMonthlyZeroQuotaToExistingPeriodIntegration(t *testing.T) {
 	pool, fixture := setupUsageIntegration(t)
 	fixture.configureEmployeeLedgerRollout(t, pool, "off")
