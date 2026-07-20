@@ -21097,6 +21097,11 @@ html[data-theme="dark"] .tenant-routing-provider-icon[data-family="claude"] img 
 
   html[data-presentation-mode="true"]
     .tenant-chat-app-content
+    .tenant-management-tabs
+    button,
+  html[data-presentation-mode="true"]
+    .tenant-chat-app-content
+    :where(.tenant-routing-panel, .chat-app-policy-form, .tenant-chat-knowledge-panel)
     :is(p, label, input, select, textarea, button, th, td, dt, dd) {
     font-size: 18px;
     line-height: 1.4;
@@ -21104,23 +21109,31 @@ html[data-theme="dark"] .tenant-routing-provider-icon[data-family="claude"] img 
 
   html[data-presentation-mode="true"]
     .tenant-chat-app-content
+    :where(.tenant-routing-panel, .chat-app-policy-form, .tenant-chat-knowledge-panel)
     :is(small, .status-badge, .badge) {
     font-size: 16px;
   }
 
-  html[data-presentation-mode="true"] .tenant-chat-app-content strong {
+  html[data-presentation-mode="true"]
+    .tenant-chat-app-content
+    :where(.tenant-routing-panel, .chat-app-policy-form, .tenant-chat-knowledge-panel)
+    strong {
     font-size: 20px;
     line-height: 1.35;
   }
 
   html[data-presentation-mode="true"]
     .tenant-chat-app-content
+    :where(.tenant-routing-panel, .chat-app-policy-form, .tenant-chat-knowledge-panel)
     :is(h3, .panel-heading h3) {
     font-size: 25px;
     line-height: 1.25;
   }
 
-  html[data-presentation-mode="true"] .tenant-chat-app-content h4 {
+  html[data-presentation-mode="true"]
+    .tenant-chat-app-content
+    :where(.tenant-routing-panel, .chat-app-policy-form, .tenant-chat-knowledge-panel)
+    h4 {
     font-size: 22px;
     line-height: 1.3;
   }

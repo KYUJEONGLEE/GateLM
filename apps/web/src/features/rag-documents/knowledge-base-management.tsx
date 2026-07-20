@@ -131,7 +131,7 @@ export function KnowledgeBaseManagement({
   return (
     <div
       aria-labelledby="chat-app-knowledge-tab"
-      className="policy-tab-panel space-y-5"
+      className="policy-tab-panel tenant-chat-knowledge-panel space-y-5"
       hidden={!active}
       id="chat-app-knowledge-panel"
       role="tabpanel"
