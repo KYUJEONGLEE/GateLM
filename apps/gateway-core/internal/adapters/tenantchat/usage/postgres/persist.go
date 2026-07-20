@@ -203,8 +203,10 @@ func routingDifficultyValue(requestContext tenantchat.RequestContext) any {
 func reservationCacheOutcome(
 	requestContext tenantchat.RequestContext,
 	snapshot tenantruntime.Snapshot,
+	safety *tenantchat.SafetySummary,
 ) string {
-	if snapshot.Policies.Cache.Enabled && snapshot.Policies.Cache.Strategy == "exact" &&
+	if tenantchat.SafetyAllowsExactCache(snapshot.Policies.Safety.Enabled, safety) &&
+		snapshot.Policies.Cache.Enabled && snapshot.Policies.Cache.Strategy == "exact" &&
 		requestContext.UsageIntent != nil && requestContext.UsageIntent.CacheStrategy == "exact" {
 		return "miss"
 	}

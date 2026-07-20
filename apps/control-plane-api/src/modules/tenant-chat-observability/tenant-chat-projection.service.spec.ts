@@ -287,8 +287,12 @@ describe('TenantChatProjectionService', () => {
     Object.assign(row.payload, {
       cacheOutcome: 'hit',
       terminalOutcome: 'cache_hit',
+      effectiveProviderId: 'provider_001',
+      effectiveModelKey: 'gpt-5.4-mini',
+      savedCostMicroUsd: 425,
       ttftMs: 0,
     });
+    delete (row.payload as { errorCode?: string }).errorCode;
     const harness = createHarness(row);
     harness.tx.tenantChatUsageReservation.findUnique.mockResolvedValue(null);
 
@@ -296,7 +300,12 @@ describe('TenantChatProjectionService', () => {
 
     expect(harness.tx.tenantChatInvocationLog.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
-        create: expect.objectContaining({ ttftMs: 0n }),
+        create: expect.objectContaining({
+          cacheOutcome: 'hit',
+          effectiveModelKey: 'gpt-5.4-mini',
+          savedCostMicroUsd: 425n,
+          ttftMs: 0n,
+        }),
       }),
     );
   });
