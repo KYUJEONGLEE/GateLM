@@ -88,9 +88,15 @@ func buildAnalyticsPolicyImpactSnapshotQuery(
 	query := fmt.Sprintf(`
 /* analytics_policy_impact_single_scan */
 %s,
-surface_totals as (
+grouped as materialized (
   select
     surface,
+    project_id,
+    %s as period_start,
+    provider_key,
+    model_key,
+    routing_scheme,
+    routing_role,
     count(*)::bigint as request_count,
     coalesce(sum(cost_micro_usd), 0)::bigint as cost_micro_usd,
     coalesce(sum(saved_cost_micro_usd) filter (where saved_cost_micro_usd is not null), 0)::bigint as known_saved_cost_micro_usd,
@@ -106,36 +112,67 @@ surface_totals as (
     count(*) filter (where routing_role is null)::bigint as routing_unknown_requests,
     count(*) filter (where model_observation_eligible and provider_key is not null and model_key is not null)::bigint as model_known_requests,
     count(*) filter (where model_observation_eligible and (provider_key is null or model_key is null))::bigint as model_unknown_requests,
+    count(*) filter (where is_cache_hit)::bigint as cache_hit_requests,
+    count(*) filter (where is_pii_masked)::bigint as pii_masked_requests,
+    count(*) filter (where is_safety_blocked)::bigint as safety_blocked_requests,
+    count(*) filter (where is_rate_limited)::bigint as rate_limited_requests,
+    count(*) filter (where is_fallback_success)::bigint as fallback_success_requests,
+    count(*) filter (where is_quota_blocked)::bigint as quota_blocked_requests,
+    count(*) filter (where is_budget_blocked)::bigint as budget_blocked_requests,
+    count(*) filter (where is_concurrency_limited)::bigint as concurrency_limited_requests,
+    count(*) filter (where is_policy_ack_required)::bigint as policy_ack_required_requests,
     max(occurred_at) as last_event_at
   from filtered
+  group by surface, project_id, period_start, provider_key, model_key, routing_scheme, routing_role
+),
+surface_totals as (
+  select
+    surface,
+    coalesce(sum(request_count), 0)::bigint as request_count,
+    coalesce(sum(cost_micro_usd), 0)::bigint as cost_micro_usd,
+    coalesce(sum(known_saved_cost_micro_usd), 0)::bigint as known_saved_cost_micro_usd,
+    coalesce(sum(saved_cost_known_requests), 0)::bigint as saved_cost_known_requests,
+    coalesce(sum(saved_cost_unknown_requests), 0)::bigint as saved_cost_unknown_requests,
+    coalesce(sum(avoided_provider_call_requests), 0)::bigint as avoided_provider_call_requests,
+    coalesce(sum(protected_requests), 0)::bigint as protected_requests,
+    coalesce(sum(high_performance_requests), 0)::bigint as high_performance_requests,
+    coalesce(sum(high_performance_eligible_requests), 0)::bigint as high_performance_eligible_requests,
+    coalesce(sum(masking_known_requests), 0)::bigint as masking_known_requests,
+    coalesce(sum(masking_unknown_requests), 0)::bigint as masking_unknown_requests,
+    coalesce(sum(routing_known_requests), 0)::bigint as routing_known_requests,
+    coalesce(sum(routing_unknown_requests), 0)::bigint as routing_unknown_requests,
+    coalesce(sum(model_known_requests), 0)::bigint as model_known_requests,
+    coalesce(sum(model_unknown_requests), 0)::bigint as model_unknown_requests,
+    max(last_event_at) as last_event_at
+  from grouped
   group by surface
 ),
 policy_outcomes as (
-  select surface, outcome, count(*)::bigint as request_count
-  from filtered
+  select surface, outcome, sum(matched_requests)::bigint as request_count
+  from grouped
   cross join lateral (values
-    ('cache_hit', is_cache_hit),
-    ('pii_masked', is_pii_masked),
-    ('safety_blocked', is_safety_blocked),
-    ('rate_limited', is_rate_limited),
-    ('fallback_success', is_fallback_success),
-    ('quota_blocked', is_quota_blocked),
-    ('budget_blocked', is_budget_blocked),
-    ('concurrency_limited', is_concurrency_limited),
-    ('policy_ack_required', is_policy_ack_required)
-  ) as policy_outcome(outcome, matched)
-  where matched
+    ('cache_hit', cache_hit_requests),
+    ('pii_masked', pii_masked_requests),
+    ('safety_blocked', safety_blocked_requests),
+    ('rate_limited', rate_limited_requests),
+    ('fallback_success', fallback_success_requests),
+    ('quota_blocked', quota_blocked_requests),
+    ('budget_blocked', budget_blocked_requests),
+    ('concurrency_limited', concurrency_limited_requests),
+    ('policy_ack_required', policy_ack_required_requests)
+  ) as policy_outcome(outcome, matched_requests)
+  where matched_requests > 0
   group by surface, outcome
 ),
 routing_roles as (
-  select surface, routing_scheme, routing_role, count(*)::bigint as request_count
-  from filtered
+  select surface, routing_scheme, routing_role, sum(request_count)::bigint as request_count
+  from grouped
   where routing_role is not null
   group by surface, routing_scheme, routing_role
 ),
 top_models as (
-  select surface, provider_key, model_key, count(*)::bigint as request_count
-  from filtered
+  select surface, provider_key, model_key, sum(request_count)::bigint as request_count
+  from grouped
   where provider_key is not null and model_key is not null
   group by surface, provider_key, model_key
   order by request_count desc, surface, provider_key, model_key
@@ -143,22 +180,22 @@ top_models as (
 ),
 model_buckets as (
   select
-    filtered.surface,
-    %s as period_start,
-    filtered.provider_key,
-    filtered.model_key,
-    count(*)::bigint as request_count
-  from filtered
+    grouped.surface,
+    grouped.period_start,
+    grouped.provider_key,
+    grouped.model_key,
+    sum(grouped.request_count)::bigint as request_count
+  from grouped
   join top_models
-    on top_models.surface = filtered.surface
-   and top_models.provider_key = filtered.provider_key
-   and top_models.model_key = filtered.model_key
-  group by filtered.surface, period_start, filtered.provider_key, filtered.model_key
+    on top_models.surface = grouped.surface
+   and top_models.provider_key = grouped.provider_key
+   and top_models.model_key = grouped.model_key
+  group by grouped.surface, grouped.period_start, grouped.provider_key, grouped.model_key
 ),
 usage_sources as (
-  select surface, coalesce(project_id, '') as project_id, count(*)::bigint as request_count,
+  select surface, coalesce(project_id, '') as project_id, sum(request_count)::bigint as request_count,
     coalesce(sum(cost_micro_usd), 0)::bigint as cost_micro_usd
-  from filtered
+  from grouped
   group by surface, project_id
 )
 select
