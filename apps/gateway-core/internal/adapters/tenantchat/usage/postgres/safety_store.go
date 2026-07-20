@@ -18,6 +18,48 @@ type admissionRecord struct {
 	Safety    *tenantchat.SafetySummary
 }
 
+func (s *ReservationStore) ReadSafetySummary(
+	ctx context.Context,
+	requestContext tenantchat.RequestContext,
+) (*tenantchat.SafetySummary, error) {
+	if s == nil || s.pool == nil || requestContext.AdmissionID == "" {
+		return nil, tenantchat.ErrUsageGuardUnavailable
+	}
+	var action, detectedTypesJSON, policyDigest *string
+	var detectedCount *int
+	err := s.pool.QueryRow(ctx, `
+		SELECT masking_action, masking_detected_types::text,
+		       masking_detected_count, safety_policy_digest
+		FROM tenant_chat_request_admissions
+		WHERE admission_id = $1::uuid AND tenant_id = $2::uuid
+		  AND user_id = $3::uuid AND request_id = $4
+	`, requestContext.AdmissionID, requestContext.ExecutionScope.TenantID,
+		requestContext.ExecutionScope.Actor.UserID, requestContext.RequestID).Scan(
+		&action, &detectedTypesJSON, &detectedCount, &policyDigest,
+	)
+	if err != nil {
+		return nil, classifySafetySummaryReadError(ctx, err)
+	}
+	summary, err := safetySummaryFromColumns(action, detectedTypesJSON, detectedCount, policyDigest)
+	if err != nil {
+		return nil, tenantchat.ErrUsageGuardUnavailable
+	}
+	return summary, nil
+}
+
+func classifySafetySummaryReadError(ctx context.Context, err error) error {
+	if contextErr := ctx.Err(); contextErr != nil {
+		return contextErr
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return err
+	}
+	if errors.Is(err, pgx.ErrNoRows) {
+		return tenantchat.ErrAdmissionExpired
+	}
+	return tenantchat.ErrUsageGuardUnavailable
+}
+
 func (s *ReservationStore) RecordSafetySummary(
 	ctx context.Context,
 	requestContext tenantchat.RequestContext,

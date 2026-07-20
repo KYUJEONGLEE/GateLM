@@ -199,7 +199,7 @@ func (s *ReservationStore) consumeAndReserve(
 	}
 	quotaState := usageState(projectedTokens, userPeriod.Warning, userPeriod.Economy, userPeriod.HardStop)
 	budgetState := usageState(projectedCost, tenantPeriod.Warning, tenantPeriod.Economy, tenantPeriod.HardStop)
-	cacheOutcome := reservationCacheOutcome(requestContext, snapshot)
+	cacheOutcome := reservationCacheOutcome(requestContext, snapshot, admission.Safety)
 
 	reservationID, err := newUUID()
 	if err != nil {

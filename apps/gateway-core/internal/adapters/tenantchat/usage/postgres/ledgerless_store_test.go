@@ -11,7 +11,7 @@ import (
 
 func TestLedgerlessTerminalPayloadCarriesBoundedCacheObservability(t *testing.T) {
 	observability := tenantchat.LedgerlessObservability{
-		EffectiveProviderID: "provider_001", EffectiveModelKey: "model_001",
+		EffectiveProviderID: "provider_001", EffectiveModelKey: "gpt-5.4-mini",
 		EffectiveRouteTier: "high_quality", SavedCostMicroUSD: 425,
 	}
 	payload, err := ledgerlessTerminalPayload(
@@ -38,7 +38,7 @@ func TestLedgerlessTerminalPayloadCarriesBoundedCacheObservability(t *testing.T)
 		t.Fatalf("decode ledgerless payload: %v", err)
 	}
 	if decoded["effectiveProviderId"] != "provider_001" ||
-		decoded["effectiveModelKey"] != "model_001" ||
+		decoded["effectiveModelKey"] != "gpt-5.4-mini" ||
 		decoded["effectiveRouteTier"] != "high_quality" ||
 		decoded["routingDifficulty"] != "complex" ||
 		decoded["savedCostMicroUsd"] != float64(425) ||
@@ -53,7 +53,7 @@ func TestLedgerlessTerminalPayloadCarriesBoundedCacheObservability(t *testing.T)
 
 func TestLedgerlessCacheHitOmitsMissingCompatibilityTier(t *testing.T) {
 	observability := tenantchat.LedgerlessObservability{
-		EffectiveProviderID: "provider_001", EffectiveModelKey: "model_001",
+		EffectiveProviderID: "provider_001", EffectiveModelKey: "models/gemini-2.5-flash",
 		SavedCostMicroUSD: 425,
 	}
 	if !validLedgerlessObservability("cache_hit", observability) {
