@@ -8,11 +8,12 @@ import (
 )
 
 type Request struct {
-	RequestedModel           string
-	PromptText               string
-	PromptMessages           []PromptMessage
-	Config                   *SimpleRouterConfig
-	DifficultyShadowEligible bool
+	RequestedModel                   string
+	PromptText                       string
+	PromptMessages                   []PromptMessage
+	Config                           *SimpleRouterConfig
+	DifficultyShadowEligible         bool
+	DifficultyLightGBMShadowEligible bool
 }
 
 // Decision is the routing-policy result. It intentionally contains only an

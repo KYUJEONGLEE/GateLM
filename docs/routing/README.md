@@ -19,11 +19,22 @@
 | [`difficulty-feature-vector-v1.md`](difficulty-feature-vector-v1.md) | `difficulty-feature-vector.v1`의 42차원 순서, scaling, enum과 zero-fill 계약 |
 | [`difficulty-logistic-training.md`](difficulty-logistic-training.md) | Owner-approved 500건의 300/100/100 split, exact 42D·106D·118D offline candidate 학습·artifact·비활성 selection evidence 경계 |
 | [`difficulty-e5-encoder.md`](difficulty-e5-encoder.md) | Pinned `multilingual-e5-small` QInt8, attention-mask mean pooling, train-only PCA 384→64와 verified AI Service runtime bundle |
+| [`difficulty-lightgbm-shadow.md`](difficulty-lightgbm-shadow.md) | 기존 LR 경로를 유지한 별도 E5-base 768D → raw/PCA + rule 42D → LightGBM offline/제한 shadow 계약 |
 | [`remote-e5-inference-experiment.md`](remote-e5-inference-experiment.md) | Gateway local E5 병목의 측정 근거, private AI Service 전환 결정과 운영 guardrail |
 | [`schemas/routing-policy.schema.json`](schemas/routing-policy.schema.json) | 전역 Simple/Complex/단일 fallback을 5 category × 2 difficulty에 투영하는 routing policy v2 schema |
 | [`fixtures/routing-policy.fixture.json`](fixtures/routing-policy.fixture.json) | 모든 셀이 `mock-balanced`인 안전한 bootstrap fixture |
 | [`schemas/runtime-snapshot-routing.schema.json`](schemas/runtime-snapshot-routing.schema.json) | published RuntimeSnapshot routing v2 section schema |
 | [`fixtures/runtime-snapshot-routing.fixture.json`](fixtures/runtime-snapshot-routing.fixture.json) | routingPolicyHash를 포함한 RuntimeSnapshot routing bootstrap fixture |
+| [`schemas/difficulty-lightgbm-shadow-profile.schema.json`](schemas/difficulty-lightgbm-shadow-profile.schema.json) | 격리된 768D encoder, raw/PCA feature shape, LightGBM artifact와 offline provenance schema |
+| [`fixtures/difficulty-lightgbm-shadow-profile.fixture.json`](fixtures/difficulty-lightgbm-shadow-profile.fixture.json) | schema 검증 전용 LightGBM shadow profile fixture; runtime artifact가 아님 |
+
+## Dataset Work Area
+
+| Path | Status | Scope |
+|---|---|---|
+| [`datasets/difficulty/README.md`](datasets/difficulty/README.md) | Active data work area; candidate dataset is not training eligible | 제품 SemVer와 분리된 Simple/Complex 데이터 구축 계획, 공개 7,000건·합성 6,000건·경계 사례 2,000건과 통합 15,000건 |
+
+이 데이터 영역은 active runtime API/DB/Event/Metrics 계약을 변경하지 않는다. 현재 15,000개 record는 안전성 검사를 통과한 공개·합성 후보이지만 사람 검수 전이므로 production gold, threshold 선택 또는 runtime promotion evidence가 아니다. 기존 `docs/v2.1.0` offline fixture는 과거 versioned evidence로 그대로 보존한다.
 
 ## Non-active Proposals
 
@@ -50,6 +61,8 @@
 
 ```powershell
 corepack pnpm run verify:routing-contract
+corepack pnpm run verify:routing-difficulty-enterprise-8000
+corepack pnpm run verify:routing-difficulty-public-7000
 corepack pnpm run verify:v2.1-category-eval
 corepack pnpm run verify:v2.1-difficulty-eval
 corepack pnpm run verify:v2.1-difficulty-gateway-bundle
@@ -58,4 +71,4 @@ corepack pnpm run verify:v2-docs
 
 Local pinned E5 artifact cache와 Docker가 준비된 환경에서는 `corepack pnpm run verify:v2.1-gateway-e5-shadow`로 Linux amd64 native/Python parity, optional image build와 startup smoke를 추가 검증한다. 이 명령은 runtime download를 수행하지 않는다.
 
-106D difficulty runtime의 활성화, 장애 시 rule fallback, worker/queue guardrail과 rollback 절차는 [`contracts.md`](contracts.md)와 [`remote-e5-inference-experiment.md`](remote-e5-inference-experiment.md)를 따른다. Historical request shadow와 local/remote runtime은 동시에 활성화할 수 없다.
+106D difficulty runtime의 활성화, 장애 시 rule fallback, worker/queue guardrail과 rollback 절차는 [`contracts.md`](contracts.md)와 [`remote-e5-inference-experiment.md`](remote-e5-inference-experiment.md)를 따른다. Historical request shadow와 local/remote runtime은 동시에 활성화할 수 없다. 별도 768D LightGBM profile은 default disabled이며 LR과 같은 process에 올리지 않고 [`difficulty-lightgbm-shadow.md`](difficulty-lightgbm-shadow.md)의 offline/제한 shadow 경계만 따른다.

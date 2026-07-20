@@ -92,6 +92,27 @@ type RoutingDifficultyRemote struct {
 	DurationSeconds float64
 }
 
+type RoutingDifficultyLightGBMShadow struct {
+	Status          string
+	Category        string
+	Comparison      string
+	DurationSeconds float64
+}
+
+func (r *Registry) RoutingDifficultyLightGBMShadow(
+	observation RoutingDifficultyLightGBMShadow,
+) {
+	status := normalizeDifficultyShadowStatus(observation.Status)
+	r.AddCounter(RoutingDifficultyLightGBMShadowTotal, []Label{
+		{Name: "status", Value: status},
+		{Name: "category", Value: normalizeDifficultyShadowCategory(observation.Category)},
+		{Name: "comparison", Value: normalizeDifficultyShadowComparison(observation.Comparison)},
+	}, 1)
+	r.ObserveHistogram(RoutingDifficultyLightGBMShadowDurationSeconds, []Label{
+		{Name: "status", Value: status},
+	}, observation.DurationSeconds)
+}
+
 func (r *Registry) RoutingDifficultyRemote(observation RoutingDifficultyRemote) {
 	status := normalizeDifficultyShadowStatus(observation.Status)
 	r.AddCounter(RoutingDifficultyRemoteTotal, []Label{
@@ -134,7 +155,7 @@ func normalizeDifficultyShadowCategory(value string) string {
 
 func normalizeDifficultyShadowComparison(value string) string {
 	switch strings.TrimSpace(value) {
-	case "match", "rule_simple_shadow_complex", "rule_complex_shadow_simple", "not_compared":
+	case "match", "rule_simple_shadow_complex", "rule_complex_shadow_simple", "authoritative_simple_shadow_complex", "authoritative_complex_shadow_simple", "not_compared":
 		return strings.TrimSpace(value)
 	default:
 		return "not_compared"

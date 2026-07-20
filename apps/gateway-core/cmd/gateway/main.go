@@ -37,6 +37,7 @@ import (
 	redisratelimit "gatelm/apps/gateway-core/internal/adapters/ratelimit/redis"
 	routingaiservice "gatelm/apps/gateway-core/internal/adapters/routing/aiservice"
 	"gatelm/apps/gateway-core/internal/adapters/routing/e5onnx"
+	routinglightgbm "gatelm/apps/gateway-core/internal/adapters/routing/lightgbmshadow"
 	cachedruntimeconfig "gatelm/apps/gateway-core/internal/adapters/runtimeconfig/cached"
 	controlplaneruntimeconfig "gatelm/apps/gateway-core/internal/adapters/runtimeconfig/controlplane"
 	staticruntimeconfig "gatelm/apps/gateway-core/internal/adapters/runtimeconfig/static"
@@ -141,6 +142,25 @@ func main() {
 		},
 	)
 	difficultyE5InitCancel()
+	difficultyLightGBMInitCtx, difficultyLightGBMInitCancel := context.WithTimeout(
+		context.Background(),
+		difficultyE5StartupSmokeTimeout,
+	)
+	difficultyLightGBMShadowRunner, difficultyLightGBMShadowStatus := initializeDifficultyLightGBMShadowRunner(
+		difficultyLightGBMInitCtx,
+		cfg.DifficultyLightGBMShadow,
+		difficultyE5Runtime != nil || difficultyRemote != nil,
+		providerHTTPClient,
+		routingdomain.DifficultySemanticShadowObserverFunc(func(observation routingdomain.DifficultySemanticShadowObservation) {
+			metricsRegistry.RoutingDifficultyLightGBMShadow(metrics.RoutingDifficultyLightGBMShadow{
+				Status:          observation.Status,
+				Category:        observation.Category,
+				Comparison:      observation.Comparison,
+				DurationSeconds: observation.Duration.Seconds(),
+			})
+		}),
+	)
+	difficultyLightGBMInitCancel()
 	var difficultyClassifier routingdomain.DifficultySemanticClassifier
 	if difficultyE5Runtime != nil {
 		difficultyClassifier = difficultyE5Runtime
@@ -165,6 +185,12 @@ func main() {
 	}
 	if difficultyRemote != nil {
 		log.Printf("gateway-core remote difficulty runtime initialized; AI Service E5 is authoritative for eligible auto routes")
+	}
+	if difficultyLightGBMShadowStatus == DifficultyLightGBMShadowRuntimeUnavailable {
+		log.Printf("gateway-core LightGBM shadow unavailable; authoritative LR routing unchanged")
+	}
+	if difficultyLightGBMShadowRunner != nil {
+		log.Printf("gateway-core LightGBM shadow initialized; authoritative LR routing unchanged")
 	}
 	mockAdapter := mock.NewAdapter(cfg.MockProviderBaseURL, providerHTTPClient)
 	openAIAdapter := openai.NewAdapter(providerHTTPClient)
@@ -287,6 +313,9 @@ func main() {
 	}
 	if difficultyE5ShadowRunner != nil {
 		routerOptions = append(routerOptions, app.WithDifficultySemanticShadow(difficultyE5ShadowRunner))
+	}
+	if difficultyLightGBMShadowRunner != nil {
+		routerOptions = append(routerOptions, app.WithDifficultyLightGBMShadow(difficultyLightGBMShadowRunner))
 	}
 	if difficultyClassifier != nil {
 		routerOptions = append(routerOptions, app.WithDifficultySemanticRuntime(difficultyClassifier))
@@ -518,6 +547,13 @@ func main() {
 		}
 		shadowCloseCancel()
 	}
+	if difficultyLightGBMShadowRunner != nil {
+		shadowCloseCtx, shadowCloseCancel := context.WithTimeout(context.Background(), time.Second)
+		if err := difficultyLightGBMShadowRunner.Close(shadowCloseCtx); err != nil {
+			log.Printf("gateway-core LightGBM shadow shutdown incomplete; authoritative LR routing unchanged")
+		}
+		shadowCloseCancel()
+	}
 	if difficultyClassifier != nil {
 		runtimeCloseCtx, runtimeCloseCancel := context.WithTimeout(context.Background(), time.Second)
 		if err := difficultyClassifier.Close(runtimeCloseCtx); err != nil {
@@ -555,6 +591,12 @@ const (
 	DifficultyRemoteRuntimeDisabled    = "disabled"
 	DifficultyRemoteRuntimeReady       = "ready"
 	DifficultyRemoteRuntimeUnavailable = "unavailable"
+)
+
+const (
+	DifficultyLightGBMShadowRuntimeDisabled    = "disabled"
+	DifficultyLightGBMShadowRuntimeReady       = "ready"
+	DifficultyLightGBMShadowRuntimeUnavailable = "unavailable"
 )
 
 type difficultyE5EncoderFactory func(e5onnx.BundleConfig) (routingdomain.DifficultySemanticPooledEncoder, error)
@@ -612,6 +654,48 @@ func initializeDifficultyRemote(
 		return nil, DifficultyRemoteRuntimeUnavailable
 	}
 	return classifier, DifficultyRemoteRuntimeReady
+}
+
+func initializeDifficultyLightGBMShadowRunner(
+	ctx context.Context,
+	cfg config.DifficultyLightGBMShadowConfig,
+	authoritativeLRAvailable bool,
+	httpClient *http.Client,
+	observer routingdomain.DifficultySemanticShadowObserver,
+) (*routingdomain.DifficultySemanticShadowRunner, string) {
+	if !cfg.HasAllowedScopes() {
+		return nil, DifficultyLightGBMShadowRuntimeDisabled
+	}
+	if !authoritativeLRAvailable {
+		return nil, DifficultyLightGBMShadowRuntimeUnavailable
+	}
+	client, err := routinglightgbm.NewClient(routinglightgbm.Config{
+		EndpointURL:       cfg.EndpointURL,
+		ServiceToken:      cfg.ServiceToken,
+		ModelVersion:      cfg.ModelVersion,
+		ModelContentHash:  cfg.ModelContentHash,
+		HTTPClient:        httpClient,
+		Timeout:           cfg.Timeout,
+		MaximumConcurrent: cfg.MaximumConcurrent,
+	})
+	if err != nil {
+		return nil, DifficultyLightGBMShadowRuntimeUnavailable
+	}
+	features := routingdomain.ExtractPromptFeatures(difficultyE5StartupSmokeInstruction)
+	category := routingdomain.NewRuleBasedCategoryClassifier().ClassifyFeatures(features).Category
+	result := client.Evaluate(ctx, features, category)
+	if result.Status != routingdomain.DifficultySemanticShadowReady {
+		_ = client.Close()
+		return nil, DifficultyLightGBMShadowRuntimeUnavailable
+	}
+	return routingdomain.NewDifficultySemanticShadowRunner(
+		client,
+		cfg.Timeout,
+		observer,
+		routingdomain.WithDifficultySemanticShadowComparison(
+			routingdomain.DifficultyLightGBMShadowComparison,
+		),
+	), DifficultyLightGBMShadowRuntimeReady
 }
 
 func initializeDifficultyE5ShadowRunner(

@@ -5,6 +5,7 @@ from fastapi import APIRouter, Request, Response, status
 from app.api.dependencies import get_ai_safety_detector_service
 from app.core.config import Settings
 from app.services.routing_difficulty import RoutingDifficultyService
+from app.services.routing_lightgbm_shadow import RoutingLightGBMShadowService
 
 
 router = APIRouter()
@@ -37,10 +38,19 @@ def readyz(request: Request, response: Response) -> dict[str, object]:
         not routing_dependency["required"]
         or routing_dependency["status"] == "loaded"
     )
-    if not detector_ready or not routing_ready:
+    lightgbm_dependency = _routing_lightgbm_shadow_dependency(request, settings)
+    lightgbm_ready = (
+        not lightgbm_dependency["required"]
+        or lightgbm_dependency["status"] == "loaded"
+    )
+    if not detector_ready or not routing_ready or not lightgbm_ready:
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
     return {
-        "status": "ready" if detector_ready and routing_ready else "not_ready",
+        "status": (
+            "ready"
+            if detector_ready and routing_ready and lightgbm_ready
+            else "not_ready"
+        ),
         "service": "ai-service",
         "dependencies": {
             "remoteSafety": {
@@ -50,6 +60,7 @@ def readyz(request: Request, response: Response) -> dict[str, object]:
             },
             "aiSafetyDetector": detector_dependency,
             "routingDifficulty": routing_dependency,
+            "routingLightGBMShadow": lightgbm_dependency,
         },
     }
 
@@ -93,5 +104,25 @@ def _routing_difficulty_dependency(
     service = getattr(request.app.state, "routing_difficulty_service", None)
     return {
         "status": "loaded" if isinstance(service, RoutingDifficultyService) else "configured",
+        "required": True,
+    }
+
+
+def _routing_lightgbm_shadow_dependency(
+    request: Request,
+    settings: Settings,
+) -> dict[str, object]:
+    if not settings.routing_lightgbm_shadow_enabled:
+        return {
+            "status": "disabled",
+            "required": False,
+        }
+    service = getattr(request.app.state, "routing_lightgbm_shadow_service", None)
+    return {
+        "status": (
+            "loaded"
+            if isinstance(service, RoutingLightGBMShadowService)
+            else "configured"
+        ),
         "required": True,
     }

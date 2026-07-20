@@ -22,3 +22,5 @@ docs/v2.1.0/evaluation/difficulty-promotion-holdout-100.v1.json text eol=lf
 docs/testing/difficulty-promotion-holdout-100-result.json text eol=lf
 docs/v2.1.0/evaluation/difficulty-promotion-holdout-100.v2.json text eol=lf
 docs/testing/difficulty-*.json text eol=lf
+docs/routing/datasets/difficulty/data/*.jsonl text eol=lf
+docs/routing/datasets/difficulty/data/*.json text eol=lf

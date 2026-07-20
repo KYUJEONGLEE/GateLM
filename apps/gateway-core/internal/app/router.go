@@ -44,6 +44,13 @@ type RouterOptions struct {
 	Credentials                   credentials.Resolver
 	DifficultyRuntime             routingdomain.DifficultySemanticClassifier
 	DifficultyShadow              *routingdomain.DifficultySemanticShadowRunner
+	DifficultyLightGBMShadow      *routingdomain.DifficultySemanticShadowRunner
+}
+
+func WithDifficultyLightGBMShadow(runner *routingdomain.DifficultySemanticShadowRunner) RouterOption {
+	return func(options *RouterOptions) {
+		options.DifficultyLightGBMShadow = runner
+	}
 }
 
 type RouterOption func(*RouterOptions)
@@ -209,10 +216,14 @@ func newRouterWithOptions(cfg config.Config, providers *provider.Registry, readi
 		runtimeconfig.BootstrapRoutingPolicy(cfg.RoutingPolicyHash).SimpleRouterConfig(),
 		routingdomain.WithDifficultySemanticRuntime(routerOptions.DifficultyRuntime),
 		routingdomain.WithDifficultySemanticShadow(routerOptions.DifficultyShadow),
+		routingdomain.WithDifficultyLightGBMShadow(routerOptions.DifficultyLightGBMShadow),
 	)
 	var preProviderPipeline handlers.GatewayPipeline = pipeline.New(routingstage.NewStage(
 		simpleRouter,
 		routingstage.WithDifficultyShadowEligibility(cfg.DifficultyE5Shadow.AllowsScope),
+		routingstage.WithDifficultyLightGBMShadowEligibility(
+			cfg.DifficultyLightGBMShadow.AllowsRequest,
+		),
 	))
 	if routerOptions.PreProviderPipeline != nil {
 		preProviderPipeline = routerOptions.PreProviderPipeline

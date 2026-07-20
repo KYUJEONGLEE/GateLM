@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"net"
 	"net/url"
 	"os"
@@ -161,6 +162,7 @@ type Config struct {
 	DifficultyE5Runtime                    DifficultyE5RuntimeConfig
 	DifficultyRemote                       DifficultyRemoteConfig
 	DifficultyE5Shadow                     DifficultyE5ShadowConfig
+	DifficultyLightGBMShadow               DifficultyLightGBMShadowConfig
 	TenantChatPrivate                      TenantChatPrivateConfig
 	RAGEmbedding                           RAGEmbeddingConfig
 }
@@ -194,6 +196,50 @@ type DifficultyE5ShadowConfig struct {
 type DifficultyE5ShadowScope struct {
 	TenantID      string
 	ApplicationID string
+}
+
+type DifficultyLightGBMShadowConfig struct {
+	Enabled             bool
+	AllowedScopes       []DifficultyE5ShadowScope
+	SamplingBasisPoints int
+	EndpointURL         string
+	ServiceToken        string
+	ModelVersion        string
+	ModelContentHash    string
+	Timeout             time.Duration
+	MaximumConcurrent   int
+}
+
+func (c DifficultyLightGBMShadowConfig) HasAllowedScopes() bool {
+	return c.Enabled && len(c.AllowedScopes) > 0
+}
+
+func (c DifficultyLightGBMShadowConfig) AllowsRequest(
+	tenantID string,
+	applicationID string,
+	requestID string,
+) bool {
+	if !c.HasAllowedScopes() || strings.TrimSpace(requestID) == "" ||
+		c.SamplingBasisPoints < 1 || c.SamplingBasisPoints > 10000 {
+		return false
+	}
+	allowed := false
+	for _, scope := range c.AllowedScopes {
+		if scope.TenantID == tenantID && scope.ApplicationID == applicationID {
+			allowed = true
+			break
+		}
+	}
+	if !allowed {
+		return false
+	}
+	hash := fnv.New64a()
+	_, _ = hash.Write([]byte(tenantID))
+	_, _ = hash.Write([]byte{0})
+	_, _ = hash.Write([]byte(applicationID))
+	_, _ = hash.Write([]byte{0})
+	_, _ = hash.Write([]byte(requestID))
+	return int(hash.Sum64()%10000) < c.SamplingBasisPoints
 }
 
 func (c DifficultyE5ShadowConfig) HasAllowedScopes() bool {
@@ -388,6 +434,43 @@ func LoadWithError() (Config, error) {
 	if difficultyE5ShadowTimeoutErr != nil {
 		return Config{}, difficultyE5ShadowTimeoutErr
 	}
+	difficultyLightGBMShadowEnabled := envBool(
+		"GATEWAY_DIFFICULTY_LIGHTGBM_SHADOW_ENABLED",
+		false,
+	)
+	difficultyLightGBMShadowScopes := []DifficultyE5ShadowScope(nil)
+	if difficultyLightGBMShadowEnabled {
+		difficultyLightGBMShadowScopes = parseDifficultyE5ShadowScopes(
+			envString("GATEWAY_DIFFICULTY_LIGHTGBM_SHADOW_ALLOWED_SCOPES", ""),
+		)
+	}
+	difficultyLightGBMShadowSampling, difficultyLightGBMShadowSamplingErr := ragEnvIntInRange(
+		"GATEWAY_DIFFICULTY_LIGHTGBM_SHADOW_SAMPLING_BASIS_POINTS",
+		1000,
+		1,
+		10000,
+	)
+	if difficultyLightGBMShadowSamplingErr != nil {
+		return Config{}, difficultyLightGBMShadowSamplingErr
+	}
+	difficultyLightGBMShadowTimeout, difficultyLightGBMShadowTimeoutErr := envDurationMillisInRange(
+		"GATEWAY_DIFFICULTY_LIGHTGBM_SHADOW_TIMEOUT_MS",
+		500,
+		1,
+		2000,
+	)
+	if difficultyLightGBMShadowTimeoutErr != nil {
+		return Config{}, difficultyLightGBMShadowTimeoutErr
+	}
+	difficultyLightGBMShadowMaximumConcurrent, difficultyLightGBMShadowConcurrentErr := ragEnvIntInRange(
+		"GATEWAY_DIFFICULTY_LIGHTGBM_SHADOW_MAX_CONCURRENT",
+		4,
+		1,
+		64,
+	)
+	if difficultyLightGBMShadowConcurrentErr != nil {
+		return Config{}, difficultyLightGBMShadowConcurrentErr
+	}
 	databaseURL := envString("DATABASE_URL", "postgresql://gatelm:gatelm@localhost:5432/gatelm?schema=public")
 	exactCacheKeySecret := envString("GATEWAY_EXACT_CACHE_KEY_SECRET", "cache_key_secret_for_p0_demo_only")
 	providerTimeout := envDurationMillis("GATEWAY_PROVIDER_TIMEOUT_MS", 5000)
@@ -546,6 +629,29 @@ func LoadWithError() (Config, error) {
 			RuntimeLockPath:     strings.TrimSpace(envString("GATEWAY_DIFFICULTY_E5_RUNTIME_LOCK", "/opt/gatelm/difficulty-e5/difficulty-e5-gateway-runtime-lock.linux-amd64.v2.json")),
 			Timeout:             difficultyE5ShadowTimeout,
 		},
+		DifficultyLightGBMShadow: DifficultyLightGBMShadowConfig{
+			Enabled:             difficultyLightGBMShadowEnabled,
+			AllowedScopes:       difficultyLightGBMShadowScopes,
+			SamplingBasisPoints: difficultyLightGBMShadowSampling,
+			EndpointURL: strings.TrimSpace(envString(
+				"GATEWAY_DIFFICULTY_LIGHTGBM_SHADOW_URL",
+				"",
+			)),
+			ServiceToken: strings.TrimSpace(envString(
+				"GATEWAY_DIFFICULTY_LIGHTGBM_SHADOW_SERVICE_TOKEN",
+				"",
+			)),
+			ModelVersion: strings.TrimSpace(envString(
+				"GATEWAY_DIFFICULTY_LIGHTGBM_SHADOW_MODEL_VERSION",
+				"",
+			)),
+			ModelContentHash: strings.TrimSpace(envString(
+				"GATEWAY_DIFFICULTY_LIGHTGBM_SHADOW_MODEL_CONTENT_HASH",
+				"",
+			)),
+			Timeout:           difficultyLightGBMShadowTimeout,
+			MaximumConcurrent: difficultyLightGBMShadowMaximumConcurrent,
+		},
 		TenantChatPrivate: TenantChatPrivateConfig{
 			Enabled:               envBool("TENANT_CHAT_PRIVATE_GATEWAY_ENABLED", false),
 			ListenAddress:         strings.TrimSpace(envString("TENANT_CHAT_PRIVATE_LISTEN_ADDRESS", ":8081")),
@@ -582,6 +688,9 @@ func LoadWithError() (Config, error) {
 		return cfg, err
 	}
 	if err := validateDifficultyRemoteConfig(cfg); err != nil {
+		return cfg, err
+	}
+	if err := validateDifficultyLightGBMShadowConfig(cfg); err != nil {
 		return cfg, err
 	}
 	if err := validateTenantChatPrivateConfig(cfg); err != nil {
@@ -767,6 +876,72 @@ func validateDifficultyRemoteConfig(cfg Config) error {
 		return errors.New("GATEWAY_DIFFICULTY_REMOTE_URL must use HTTPS or a private service address in production-like environments")
 	}
 	return nil
+}
+
+func validateDifficultyLightGBMShadowConfig(cfg Config) error {
+	shadow := cfg.DifficultyLightGBMShadow
+	if !shadow.Enabled {
+		return nil
+	}
+	if !cfg.DifficultyRemote.Enabled && !cfg.DifficultyE5Runtime.Enabled {
+		return errors.New("LightGBM shadow requires an authoritative LR difficulty runtime")
+	}
+	if !shadow.HasAllowedScopes() {
+		return errors.New("GATEWAY_DIFFICULTY_LIGHTGBM_SHADOW_ALLOWED_SCOPES requires non-empty exact tenant/application pairs")
+	}
+	parsed, err := url.Parse(strings.TrimSpace(shadow.EndpointURL))
+	if err != nil || parsed.Hostname() == "" ||
+		(parsed.Scheme != "http" && parsed.Scheme != "https") ||
+		parsed.User != nil || parsed.RawQuery != "" || parsed.ForceQuery || parsed.Fragment != "" {
+		return errors.New("GATEWAY_DIFFICULTY_LIGHTGBM_SHADOW_URL must be a valid http(s) URL without credentials, query, or fragment")
+	}
+	if strings.TrimSpace(shadow.ServiceToken) == "" {
+		return errors.New("GATEWAY_DIFFICULTY_LIGHTGBM_SHADOW_SERVICE_TOKEN is required when enabled")
+	}
+	if !validLightGBMShadowModelVersion(shadow.ModelVersion) {
+		return errors.New("GATEWAY_DIFFICULTY_LIGHTGBM_SHADOW_MODEL_VERSION is invalid")
+	}
+	if !validPrefixedSHA256(shadow.ModelContentHash) {
+		return errors.New("GATEWAY_DIFFICULTY_LIGHTGBM_SHADOW_MODEL_CONTENT_HASH must be a prefixed SHA-256 digest")
+	}
+	productionLike := productionLikeEnv() || observabilityProductionLikeMode(cfg.DeploymentMode)
+	if productionLike && IsWeakObservabilityInternalToken(shadow.ServiceToken) {
+		return errors.New("GATEWAY_DIFFICULTY_LIGHTGBM_SHADOW_SERVICE_TOKEN must be a non-placeholder value of at least 32 characters in production-like environments")
+	}
+	if productionLike && parsed.Scheme == "http" && !privateOrLocalServiceHostname(parsed.Hostname()) {
+		return errors.New("GATEWAY_DIFFICULTY_LIGHTGBM_SHADOW_URL must use HTTPS or a private service address in production-like environments")
+	}
+	return nil
+}
+
+func validLightGBMShadowModelVersion(value string) bool {
+	value = strings.TrimSpace(value)
+	if len(value) < 1 || len(value) > 160 || value[0] < 'a' || value[0] > 'z' {
+		if len(value) < 1 || len(value) > 160 || value[0] < '0' || value[0] > '9' {
+			return false
+		}
+	}
+	for _, character := range value {
+		if (character >= 'a' && character <= 'z') ||
+			(character >= '0' && character <= '9') ||
+			character == '.' || character == '_' || character == '-' {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+func validPrefixedSHA256(value string) bool {
+	if !strings.HasPrefix(value, "sha256:") || len(value) != len("sha256:")+64 {
+		return false
+	}
+	for _, character := range value[len("sha256:"):] {
+		if (character < '0' || character > '9') && (character < 'a' || character > 'f') {
+			return false
+		}
+	}
+	return true
 }
 
 func privateOrLocalServiceHostname(hostname string) bool {

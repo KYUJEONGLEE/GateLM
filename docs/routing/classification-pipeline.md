@@ -28,6 +28,8 @@ Prompt
 
 공통 전처리는 요청당 한 번만 실행한다. Category를 먼저 확정한 뒤 해당 category의 난이도 규칙만 선택적으로 계산한다. 다른 category의 난이도 규칙을 미리 모두 계산하지 않는다.
 
+승격된 LR 경로와 별도 LightGBM 후보는 같은 `instructionText`와 공통 feature extraction 결과에서 분기한다. LR의 E5-small 384D → PCA 64D + rule 42D → 106D 결과가 계속 권위값이다. LightGBM은 별도 AI Service process에서 E5-base 768D를 raw 또는 train-only PCA 128/256D로 사용하고 rule 42D와 결합하지만 offline 평가 또는 명시적으로 허용된 제한 shadow에서만 실행한다. LightGBM 응답은 `DifficultyResult`, routing matrix lookup 또는 `modelRef`를 덮어쓸 수 없다. Exact profile과 운영 경계는 [`difficulty-lightgbm-shadow.md`](difficulty-lightgbm-shadow.md)를 따른다.
+
 ## 2. Feature And Result Boundaries
 
 `PromptFeatures`는 category와 difficulty가 공유하는 공통 전처리만 보관한다.
@@ -150,7 +152,7 @@ Offline evaluator의 artifact 사용은 명시적인 `-difficulty-shadow-model-a
 
 Unicode compatibility normalization, bounded head+tail scan, code-fence 분리, 목록 구조 추출, whitespace 정규화, 토큰화와 길이 계산은 `ExtractPromptFeatures`에서 한 번만 수행한다. Category 분류와 difficulty 분류는 같은 `PromptFeatures` 값을 공유한다.
 
-Package-private `difficultyEmbeddingInput`은 semantic encoder의 유일한 input boundary다. 의미 있는 `instructionText`만 반환하며 `normalizedText`, `payloadText` 또는 raw prompt로 fallback하지 않는다. Payload-only 또는 의미 없는 instruction이면 encoder candidate가 없다고 반환한다. Approved offline tooling과 Gateway runtime은 이 exact boundary만 사용할 수 있으며 반환 text를 report, log, metric, lock manifest 또는 artifact에 저장하지 않는다. Empty input은 tokenizer 이전에 `not_applicable`로 제외하고 zero vector로 교정하지 않는다. Canonical component는 [`difficulty-e5-encoder.md`](difficulty-e5-encoder.md)의 pinned E5 QInt8, attention-mask mean pooling, train-only PCA 384→64와 post-PCA L2를 사용한다. AI Service는 시작 시 manifest, model artifact, tokenizer와 ONNX hash를 검증하고 warmup한 뒤에만 `/readyz`를 통과한다. Authoritative execution은 single process, batch 1, wait 0ms, worker 4, bounded queue 16, ONNX intra/inter-op 1/1이다. `ready` semantic difficulty는 auto-routing matrix lookup의 권위값이고, `not_applicable | unavailable | busy | timeout | invalid_embedding | inference_failed | panic_recovered`는 해당 요청의 rule difficulty를 유지한다. Category와 `difficulty-feature-vector.v1` 42차원 외부 계약은 변경되지 않는다.
+Package-private `difficultyEmbeddingInput`은 routing difficulty encoder들이 공유하는 유일한 text input boundary다. 의미 있는 `instructionText`만 반환하며 `normalizedText`, `payloadText` 또는 raw prompt로 fallback하지 않는다. Payload-only 또는 의미 없는 instruction이면 encoder candidate가 없다고 반환한다. Approved offline tooling과 Gateway runtime은 이 exact boundary만 사용할 수 있으며 반환 text를 report, log, metric, lock manifest 또는 artifact에 저장하지 않는다. Empty input은 tokenizer 이전에 `not_applicable`로 제외하고 zero vector로 교정하지 않는다. Authoritative component는 [`difficulty-e5-encoder.md`](difficulty-e5-encoder.md)의 pinned E5-small QInt8, attention-mask mean pooling, train-only PCA 384→64와 post-PCA L2를 사용한다. 별도 E5-base 768D component는 [`difficulty-lightgbm-shadow.md`](difficulty-lightgbm-shadow.md)의 독립 process와 offline/shadow 제약을 따른다. AI Service는 시작 시 해당 profile의 manifest, model artifact, tokenizer와 ONNX hash를 검증하고 warmup한 뒤에만 `/readyz`를 통과한다. Authoritative LR execution은 single process, batch 1, wait 0ms, worker 4, bounded queue 16, ONNX intra/inter-op 1/1이다. LR의 `ready` semantic difficulty는 auto-routing matrix lookup의 권위값이고, 어느 runtime이든 `not_applicable | unavailable | busy | timeout | invalid_embedding | inference_failed | panic_recovered`이면 LightGBM은 route를 바꾸지 않으며 LR non-ready는 해당 요청의 rule difficulty를 유지한다. Category와 `difficulty-feature-vector.v1` 42차원 외부 계약은 변경되지 않는다.
 
 ## 4. Compatibility Policy
 

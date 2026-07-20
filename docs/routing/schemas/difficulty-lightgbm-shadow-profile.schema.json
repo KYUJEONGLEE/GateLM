@@ -1,0 +1,292 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gatelm.local/docs/routing/schemas/difficulty-lightgbm-shadow-profile.schema.json",
+  "title": "GateLM routing difficulty LightGBM shadow profile",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "profileVersion",
+    "contractVersion",
+    "promotionState",
+    "executionShape",
+    "encoder",
+    "featureShape",
+    "model",
+    "trainingProvenance"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "gatelm.routing-difficulty-lightgbm-shadow-profile.v1" },
+    "profileVersion": { "const": "difficulty-lightgbm-shadow.e5-base-768.v1" },
+    "contractVersion": { "const": "gatelm.internal.routing-difficulty-lightgbm-shadow.v1" },
+    "promotionState": { "const": "offline_shadow_only" },
+    "executionShape": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["unit", "batchSize", "paddingScope"],
+      "properties": {
+        "unit": { "const": "single_request" },
+        "batchSize": { "const": 1 },
+        "paddingScope": { "const": "within_request_only" }
+      }
+    },
+    "encoder": { "$ref": "#/$defs/encoder" },
+    "featureShape": { "$ref": "#/$defs/featureShape" },
+    "model": { "$ref": "#/$defs/model" },
+    "trainingProvenance": { "$ref": "#/$defs/trainingProvenance" }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "prefixedSha256": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "safeRelativePath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 240,
+      "pattern": "^(?![A-Za-z]:)(?![/\\\\])(?!.*(?:^|[/\\\\])\\.\\.(?:[/\\\\]|$)).+$"
+    },
+    "runtimeArtifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role", "relativePath", "sizeBytes", "sha256"],
+      "properties": {
+        "role": {
+          "enum": [
+            "model_config",
+            "sentence_transformer_config",
+            "pooling_config",
+            "special_tokens",
+            "tokenizer_json",
+            "tokenizer_config",
+            "tokenizer_model",
+            "encoder_onnx_dynamic_qint8"
+          ]
+        },
+        "relativePath": { "$ref": "#/$defs/safeRelativePath" },
+        "sizeBytes": { "type": "integer", "minimum": 1, "maximum": 2147483648 },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "encoder": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "modelId",
+        "sourceRevision",
+        "artifactDirectory",
+        "runtimeArtifacts",
+        "inputPrefix",
+        "maximumTokenLength",
+        "outputDimension",
+        "pooling"
+      ],
+      "properties": {
+        "modelId": { "const": "intfloat/multilingual-e5-base" },
+        "sourceRevision": { "const": "d13f1b27baf31030b7fd040960d60d909913633f" },
+        "artifactDirectory": { "$ref": "#/$defs/safeRelativePath" },
+        "runtimeArtifacts": {
+          "type": "array",
+          "minItems": 8,
+          "maxItems": 8,
+          "items": { "$ref": "#/$defs/runtimeArtifact" }
+        },
+        "inputPrefix": { "const": "query: " },
+        "maximumTokenLength": { "type": "integer", "minimum": 1, "maximum": 512 },
+        "outputDimension": { "const": 768 },
+        "pooling": { "const": "attention_mask_weighted_mean_excluding_padding" }
+      }
+    },
+    "projection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "relativePath",
+        "sizeBytes",
+        "sha256",
+        "inputDimension",
+        "outputDimension",
+        "fitSplit",
+        "fitRecordCount",
+        "l2Normalize",
+        "l2Epsilon"
+      ],
+      "properties": {
+        "kind": { "const": "sklearn_pca_full_svd" },
+        "relativePath": { "$ref": "#/$defs/safeRelativePath" },
+        "sizeBytes": { "type": "integer", "minimum": 1, "maximum": 8388608 },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "inputDimension": { "const": 768 },
+        "outputDimension": { "enum": [128, 256] },
+        "fitSplit": { "const": "train" },
+        "fitRecordCount": { "type": "integer", "minimum": 256 },
+        "l2Normalize": { "const": true },
+        "l2Epsilon": { "const": 1e-12 }
+      }
+    },
+    "featureShape": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ruleVectorVersion",
+        "ruleDimension",
+        "tabularFeatureNames",
+        "semanticMode",
+        "semanticDimension",
+        "totalDimension",
+        "projection"
+      ],
+      "properties": {
+        "ruleVectorVersion": { "const": "difficulty-feature-vector.v1" },
+        "ruleDimension": { "const": 42 },
+        "tabularFeatureNames": {
+          "const": [
+            "ruleVectorV1.payloadEmpty",
+            "ruleVectorV1.payloadSmall",
+            "ruleVectorV1.payloadMedium",
+            "ruleVectorV1.payloadLarge",
+            "ruleVectorV1.taskCount",
+            "ruleVectorV1.constraintCount",
+            "ruleVectorV1.scopeCount",
+            "ruleVectorV1.dependencyDepth",
+            "ruleVectorV1.categoryGeneral",
+            "ruleVectorV1.categoryCode",
+            "ruleVectorV1.categoryTranslation",
+            "ruleVectorV1.categorySummarization",
+            "ruleVectorV1.categoryReasoning",
+            "ruleVectorV1.generalWorkflowDepth",
+            "ruleVectorV1.generalBranchOrExceptionCount",
+            "ruleVectorV1.generalExtractionBreadth",
+            "ruleVectorV1.generalHasCrossSourceSynthesis",
+            "ruleVectorV1.codeOperationUnknown",
+            "ruleVectorV1.codeOperationSyntax",
+            "ruleVectorV1.codeOperationExample",
+            "ruleVectorV1.codeOperationSmallEdit",
+            "ruleVectorV1.codeOperationDebug",
+            "ruleVectorV1.codeOperationRefactor",
+            "ruleVectorV1.codeOperationDesign",
+            "ruleVectorV1.codeOperationMigration",
+            "ruleVectorV1.codeOperationConcurrency",
+            "ruleVectorV1.codeOperationPerformance",
+            "ruleVectorV1.codeScopeBreadth",
+            "ruleVectorV1.codeCausalComplexity",
+            "ruleVectorV1.codeEngineeringConstraintCount",
+            "ruleVectorV1.translationScopeCount",
+            "ruleVectorV1.translationPreservationConstraintCount",
+            "ruleVectorV1.translationDomainTerminologyLevel",
+            "ruleVectorV1.translationLocalizationDegree",
+            "ruleVectorV1.summarizationSourceBreadth",
+            "ruleVectorV1.summarizationSynthesisLevel",
+            "ruleVectorV1.summarizationFacetCount",
+            "ruleVectorV1.summarizationHasTraceabilityConstraints",
+            "ruleVectorV1.reasoningAlternativeCount",
+            "ruleVectorV1.reasoningCriteriaAndConstraintCount",
+            "ruleVectorV1.reasoningDepth",
+            "ruleVectorV1.reasoningUncertaintyScenarioCount"
+          ]
+        },
+        "semanticMode": { "enum": ["raw", "pca"] },
+        "semanticDimension": { "enum": [128, 256, 768] },
+        "totalDimension": { "enum": [170, 298, 810] },
+        "projection": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/projection" }
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "semanticMode": { "const": "raw" } } },
+          "then": {
+            "properties": {
+              "semanticDimension": { "const": 768 },
+              "totalDimension": { "const": 810 },
+              "projection": { "type": "null" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "semanticMode": { "const": "pca" } } },
+          "then": {
+            "properties": {
+              "semanticDimension": { "enum": [128, 256] },
+              "totalDimension": { "enum": [170, 298] },
+              "projection": { "$ref": "#/$defs/projection" }
+            }
+          }
+        }
+      ]
+    },
+    "model": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "contentHash",
+        "format",
+        "objective",
+        "relativePath",
+        "sizeBytes",
+        "sha256",
+        "numFeatures",
+        "threshold",
+        "parameters"
+      ],
+      "properties": {
+        "version": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,159}$" },
+        "contentHash": { "$ref": "#/$defs/prefixedSha256" },
+        "format": { "const": "lightgbm_text" },
+        "objective": { "const": "binary" },
+        "relativePath": { "$ref": "#/$defs/safeRelativePath" },
+        "sizeBytes": { "type": "integer", "minimum": 1, "maximum": 67108864 },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "numFeatures": { "enum": [170, 298, 810] },
+        "threshold": { "type": "number", "minimum": 0, "maximum": 1 },
+        "parameters": { "type": "object" }
+      }
+    },
+    "trainingProvenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "datasetVersion",
+        "datasetSha256",
+        "splitPolicyVersion",
+        "seed",
+        "splitCounts",
+        "familyDisjoint",
+        "selectedFrom",
+        "selectionSplit",
+        "testAccess"
+      ],
+      "properties": {
+        "datasetVersion": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "datasetSha256": { "$ref": "#/$defs/prefixedSha256" },
+        "splitPolicyVersion": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "seed": { "const": 20260721 },
+        "splitCounts": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["train", "validation", "test"],
+          "properties": {
+            "train": { "type": "integer", "minimum": 256 },
+            "validation": { "type": "integer", "minimum": 1 },
+            "test": { "type": "integer", "minimum": 1 }
+          }
+        },
+        "familyDisjoint": { "const": true },
+        "selectedFrom": {
+          "const": ["tabular_only", "raw_768", "pca_128", "pca_256"]
+        },
+        "selectionSplit": { "const": "validation" },
+        "testAccess": { "const": "after_selection_freeze" }
+      }
+    }
+  }
+}

@@ -8,8 +8,17 @@ from app.api.dependencies import (
     create_ai_safety_detector_service,
     create_routing_difficulty_batcher,
     create_routing_difficulty_service,
+    create_routing_lightgbm_shadow_batcher,
+    create_routing_lightgbm_shadow_service,
 )
-from app.api.routes import ai_safety, health, rag_extraction, routing_difficulty, safety
+from app.api.routes import (
+    ai_safety,
+    health,
+    rag_extraction,
+    routing_difficulty,
+    routing_lightgbm_shadow,
+    safety,
+)
 from app.core.config import Settings, load_settings
 from app.core.errors import (
     RemoteSafetyHTTPError,
@@ -56,11 +65,29 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 resolved_settings.routing_difficulty_max_concurrent
             )
         )
+    if resolved_settings.routing_lightgbm_shadow_enabled:
+        lightgbm_service = create_routing_lightgbm_shadow_service(
+            resolved_settings
+        )
+        lightgbm_service.warmup()
+        app.state.routing_lightgbm_shadow_service = lightgbm_service
+        lightgbm_batcher = create_routing_lightgbm_shadow_batcher(
+            resolved_settings,
+            lightgbm_service,
+        )
+        app.state.routing_lightgbm_shadow_batcher = lightgbm_batcher
+        app.add_event_handler("shutdown", lightgbm_batcher.close)
+        app.state.routing_lightgbm_shadow_concurrency_gate = (
+            RoutingDifficultyConcurrencyGate(
+                resolved_settings.routing_lightgbm_shadow_max_concurrent
+            )
+        )
     app.include_router(health.router)
     app.include_router(safety.router)
     app.include_router(ai_safety.router)
     app.include_router(rag_extraction.router)
     app.include_router(routing_difficulty.router)
+    app.include_router(routing_lightgbm_shadow.router)
     app.add_exception_handler(RemoteSafetyHTTPError, remote_safety_http_error_handler)
     app.add_exception_handler(RagExtractionError, rag_extraction_error_handler)
     app.add_exception_handler(RequestValidationError, validation_error_handler)

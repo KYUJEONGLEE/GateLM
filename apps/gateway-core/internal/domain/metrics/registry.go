@@ -10,42 +10,44 @@ import (
 )
 
 const (
-	GatewayRequestsTotal                   = "gatelm_gateway_requests_total"
-	GatewayRequestDurationSeconds          = "gatelm_gateway_request_duration_seconds"
-	GatewayStageDurationSeconds            = "gatelm_gateway_stage_duration_seconds"
-	GatewayInflightRequests                = "gatelm_gateway_inflight_requests"
-	ProviderRequestsTotal                  = "gatelm_provider_requests_total"
-	ProviderRequestDurationSeconds         = "gatelm_provider_request_duration_seconds"
-	CacheOperationsTotal                   = "gatelm_cache_operations_total"
-	RateLimitDecisionsTotal                = "gatelm_rate_limit_decisions_total"
-	RateLimitDecisionDurationSeconds       = "gatelm_rate_limit_decision_duration_seconds"
-	MaskingActionsTotal                    = "gatelm_masking_actions_total"
-	LogWritesTotal                         = "gatelm_log_writes_total"
-	LogWriteDurationSeconds                = "gatelm_log_write_duration_seconds"
-	AsyncLogEnqueueTotal                   = "gatelm_async_log_enqueue_total"
-	AsyncLogEnqueueDurationSeconds         = "gatelm_async_log_enqueue_duration_seconds"
-	AsyncLogQueueDepth                     = "gatelm_async_log_queue_depth"
-	AsyncLogDroppedTotal                   = "gatelm_async_log_dropped_total"
-	AsyncLogPersistTotal                   = "gatelm_async_log_persist_total"
-	AsyncLogPersistDurationSeconds         = "gatelm_async_log_persist_duration_seconds"
-	StreamsActive                          = "gatelm_streams_active"
-	StreamRelayTotal                       = "gatelm_stream_relay_total"
-	StreamDurationSeconds                  = "gatelm_stream_duration_seconds"
-	StreamTimeToFirstTokenSeconds          = "gatelm_stream_time_to_first_token_seconds"
-	RoutingDifficultyShadowTotal           = "gatelm_routing_difficulty_shadow_total"
-	RoutingDifficultyShadowDurationSeconds = "gatelm_routing_difficulty_shadow_duration_seconds"
-	RoutingDifficultyRemoteTotal           = "gatelm_routing_difficulty_remote_total"
-	RoutingDifficultyRemoteDurationSeconds = "gatelm_routing_difficulty_remote_duration_seconds"
-	TenantChatCompletionTotal              = "gatelm_tenant_chat_completion_total"
-	TenantChatUsageReconciliationTotal     = "gatelm_tenant_chat_usage_reconciliation_total"
-	TenantChatAccountingTransactionSeconds = "gatelm_tenant_chat_accounting_transaction_seconds"
-	AISafetySidecarCallsTotal              = "gatelm_ai_safety_sidecar_calls_total"
-	AISafetySidecarCallDurationSeconds     = "gatelm_ai_safety_sidecar_call_duration_seconds"
-	AISafetySidecarFallbackTotal           = "gatelm_ai_safety_sidecar_fallback_total"
-	GatewayDependencyReady                 = "gatelm_gateway_dependency_ready"
-	RagEmbeddingRequestsTotal              = "gatelm_rag_embedding_requests_total"
-	RagEmbeddingInputTokensTotal           = "gatelm_rag_embedding_input_tokens_total"
-	PrometheusTextContentType              = "text/plain; version=0.0.4; charset=utf-8"
+	GatewayRequestsTotal                           = "gatelm_gateway_requests_total"
+	GatewayRequestDurationSeconds                  = "gatelm_gateway_request_duration_seconds"
+	GatewayStageDurationSeconds                    = "gatelm_gateway_stage_duration_seconds"
+	GatewayInflightRequests                        = "gatelm_gateway_inflight_requests"
+	ProviderRequestsTotal                          = "gatelm_provider_requests_total"
+	ProviderRequestDurationSeconds                 = "gatelm_provider_request_duration_seconds"
+	CacheOperationsTotal                           = "gatelm_cache_operations_total"
+	RateLimitDecisionsTotal                        = "gatelm_rate_limit_decisions_total"
+	RateLimitDecisionDurationSeconds               = "gatelm_rate_limit_decision_duration_seconds"
+	MaskingActionsTotal                            = "gatelm_masking_actions_total"
+	LogWritesTotal                                 = "gatelm_log_writes_total"
+	LogWriteDurationSeconds                        = "gatelm_log_write_duration_seconds"
+	AsyncLogEnqueueTotal                           = "gatelm_async_log_enqueue_total"
+	AsyncLogEnqueueDurationSeconds                 = "gatelm_async_log_enqueue_duration_seconds"
+	AsyncLogQueueDepth                             = "gatelm_async_log_queue_depth"
+	AsyncLogDroppedTotal                           = "gatelm_async_log_dropped_total"
+	AsyncLogPersistTotal                           = "gatelm_async_log_persist_total"
+	AsyncLogPersistDurationSeconds                 = "gatelm_async_log_persist_duration_seconds"
+	StreamsActive                                  = "gatelm_streams_active"
+	StreamRelayTotal                               = "gatelm_stream_relay_total"
+	StreamDurationSeconds                          = "gatelm_stream_duration_seconds"
+	StreamTimeToFirstTokenSeconds                  = "gatelm_stream_time_to_first_token_seconds"
+	RoutingDifficultyShadowTotal                   = "gatelm_routing_difficulty_shadow_total"
+	RoutingDifficultyShadowDurationSeconds         = "gatelm_routing_difficulty_shadow_duration_seconds"
+	RoutingDifficultyRemoteTotal                   = "gatelm_routing_difficulty_remote_total"
+	RoutingDifficultyRemoteDurationSeconds         = "gatelm_routing_difficulty_remote_duration_seconds"
+	RoutingDifficultyLightGBMShadowTotal           = "gatelm_routing_difficulty_lightgbm_shadow_total"
+	RoutingDifficultyLightGBMShadowDurationSeconds = "gatelm_routing_difficulty_lightgbm_shadow_duration_seconds"
+	TenantChatCompletionTotal                      = "gatelm_tenant_chat_completion_total"
+	TenantChatUsageReconciliationTotal             = "gatelm_tenant_chat_usage_reconciliation_total"
+	TenantChatAccountingTransactionSeconds         = "gatelm_tenant_chat_accounting_transaction_seconds"
+	AISafetySidecarCallsTotal                      = "gatelm_ai_safety_sidecar_calls_total"
+	AISafetySidecarCallDurationSeconds             = "gatelm_ai_safety_sidecar_call_duration_seconds"
+	AISafetySidecarFallbackTotal                   = "gatelm_ai_safety_sidecar_fallback_total"
+	GatewayDependencyReady                         = "gatelm_gateway_dependency_ready"
+	RagEmbeddingRequestsTotal                      = "gatelm_rag_embedding_requests_total"
+	RagEmbeddingInputTokensTotal                   = "gatelm_rag_embedding_input_tokens_total"
+	PrometheusTextContentType                      = "text/plain; version=0.0.4; charset=utf-8"
 )
 
 var defaultDurationBuckets = []float64{0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10}
@@ -80,41 +82,43 @@ type metricSpec struct {
 }
 
 var metricSpecs = map[string]metricSpec{
-	GatewayRequestsTotal:                   {"counter", "Total Gateway requests by terminal outcome."},
-	GatewayRequestDurationSeconds:          {"histogram", "Gateway request duration in seconds."},
-	GatewayStageDurationSeconds:            {"histogram", "Gateway stage duration in seconds."},
-	GatewayInflightRequests:                {"gauge", "Current in-flight Gateway requests."},
-	ProviderRequestsTotal:                  {"counter", "Total provider requests issued by Gateway."},
-	ProviderRequestDurationSeconds:         {"histogram", "Provider request duration in seconds."},
-	CacheOperationsTotal:                   {"counter", "Total Gateway cache operations."},
-	RateLimitDecisionsTotal:                {"counter", "Total Gateway rate limit decisions."},
-	RateLimitDecisionDurationSeconds:       {"histogram", "Gateway rate limit decision duration in seconds."},
-	MaskingActionsTotal:                    {"counter", "Total Gateway masking actions."},
-	LogWritesTotal:                         {"counter", "Total invocation log writes."},
-	LogWriteDurationSeconds:                {"histogram", "Invocation log write duration in seconds."},
-	AsyncLogEnqueueTotal:                   {"counter", "Total async invocation log enqueue attempts."},
-	AsyncLogEnqueueDurationSeconds:         {"histogram", "Async invocation log enqueue duration in seconds."},
-	AsyncLogQueueDepth:                     {"gauge", "Current async invocation log queue depth."},
-	AsyncLogDroppedTotal:                   {"counter", "Total async invocation logs dropped before persistence."},
-	AsyncLogPersistTotal:                   {"counter", "Total async invocation log records by persistence outcome."},
-	AsyncLogPersistDurationSeconds:         {"histogram", "Async invocation log delegate write duration in seconds."},
-	StreamsActive:                          {"gauge", "Current active Gateway streaming relays."},
-	StreamRelayTotal:                       {"counter", "Total Gateway streaming relay attempts by outcome."},
-	StreamDurationSeconds:                  {"histogram", "Gateway streaming relay duration in seconds."},
-	StreamTimeToFirstTokenSeconds:          {"histogram", "Gateway streaming time to first visible content token in seconds."},
-	RoutingDifficultyShadowTotal:           {"counter", "Total bounded difficulty shadow comparisons by safe outcome."},
-	RoutingDifficultyShadowDurationSeconds: {"histogram", "Difficulty shadow evaluation duration in seconds by safe status."},
-	RoutingDifficultyRemoteTotal:           {"counter", "Remote difficulty classifications by bounded outcome."},
-	RoutingDifficultyRemoteDurationSeconds: {"histogram", "Remote difficulty classification duration in seconds by bounded outcome."},
-	TenantChatCompletionTotal:              {"counter", "Total Tenant Chat completions by bounded terminal outcome."},
-	TenantChatUsageReconciliationTotal:     {"counter", "Total Tenant Chat usage reconciliation transitions by bounded result."},
-	TenantChatAccountingTransactionSeconds: {"histogram", "Tenant Chat accounting transaction duration in seconds by bounded transition."},
-	AISafetySidecarCallsTotal:              {"counter", "Total AI safety sidecar calls by bounded execution outcome."},
-	AISafetySidecarCallDurationSeconds:     {"histogram", "AI safety sidecar call duration in seconds by bounded execution outcome."},
-	AISafetySidecarFallbackTotal:           {"counter", "Total AI safety sidecar fallbacks by bounded reason."},
-	GatewayDependencyReady:                 {"gauge", "Last readiness-check result for a bounded Gateway dependency."},
-	RagEmbeddingRequestsTotal:              {"counter", "Total private RAG embedding requests by bounded outcome."},
-	RagEmbeddingInputTokensTotal:           {"counter", "Total RAG embedding input tokens returned by the provider."},
+	GatewayRequestsTotal:                           {"counter", "Total Gateway requests by terminal outcome."},
+	GatewayRequestDurationSeconds:                  {"histogram", "Gateway request duration in seconds."},
+	GatewayStageDurationSeconds:                    {"histogram", "Gateway stage duration in seconds."},
+	GatewayInflightRequests:                        {"gauge", "Current in-flight Gateway requests."},
+	ProviderRequestsTotal:                          {"counter", "Total provider requests issued by Gateway."},
+	ProviderRequestDurationSeconds:                 {"histogram", "Provider request duration in seconds."},
+	CacheOperationsTotal:                           {"counter", "Total Gateway cache operations."},
+	RateLimitDecisionsTotal:                        {"counter", "Total Gateway rate limit decisions."},
+	RateLimitDecisionDurationSeconds:               {"histogram", "Gateway rate limit decision duration in seconds."},
+	MaskingActionsTotal:                            {"counter", "Total Gateway masking actions."},
+	LogWritesTotal:                                 {"counter", "Total invocation log writes."},
+	LogWriteDurationSeconds:                        {"histogram", "Invocation log write duration in seconds."},
+	AsyncLogEnqueueTotal:                           {"counter", "Total async invocation log enqueue attempts."},
+	AsyncLogEnqueueDurationSeconds:                 {"histogram", "Async invocation log enqueue duration in seconds."},
+	AsyncLogQueueDepth:                             {"gauge", "Current async invocation log queue depth."},
+	AsyncLogDroppedTotal:                           {"counter", "Total async invocation logs dropped before persistence."},
+	AsyncLogPersistTotal:                           {"counter", "Total async invocation log records by persistence outcome."},
+	AsyncLogPersistDurationSeconds:                 {"histogram", "Async invocation log delegate write duration in seconds."},
+	StreamsActive:                                  {"gauge", "Current active Gateway streaming relays."},
+	StreamRelayTotal:                               {"counter", "Total Gateway streaming relay attempts by outcome."},
+	StreamDurationSeconds:                          {"histogram", "Gateway streaming relay duration in seconds."},
+	StreamTimeToFirstTokenSeconds:                  {"histogram", "Gateway streaming time to first visible content token in seconds."},
+	RoutingDifficultyShadowTotal:                   {"counter", "Total bounded difficulty shadow comparisons by safe outcome."},
+	RoutingDifficultyShadowDurationSeconds:         {"histogram", "Difficulty shadow evaluation duration in seconds by safe status."},
+	RoutingDifficultyRemoteTotal:                   {"counter", "Remote difficulty classifications by bounded outcome."},
+	RoutingDifficultyRemoteDurationSeconds:         {"histogram", "Remote difficulty classification duration in seconds by bounded outcome."},
+	RoutingDifficultyLightGBMShadowTotal:           {"counter", "Total bounded LightGBM shadow comparisons by safe outcome."},
+	RoutingDifficultyLightGBMShadowDurationSeconds: {"histogram", "LightGBM shadow duration in seconds by safe status."},
+	TenantChatCompletionTotal:                      {"counter", "Total Tenant Chat completions by bounded terminal outcome."},
+	TenantChatUsageReconciliationTotal:             {"counter", "Total Tenant Chat usage reconciliation transitions by bounded result."},
+	TenantChatAccountingTransactionSeconds:         {"histogram", "Tenant Chat accounting transaction duration in seconds by bounded transition."},
+	AISafetySidecarCallsTotal:                      {"counter", "Total AI safety sidecar calls by bounded execution outcome."},
+	AISafetySidecarCallDurationSeconds:             {"histogram", "AI safety sidecar call duration in seconds by bounded execution outcome."},
+	AISafetySidecarFallbackTotal:                   {"counter", "Total AI safety sidecar fallbacks by bounded reason."},
+	GatewayDependencyReady:                         {"gauge", "Last readiness-check result for a bounded Gateway dependency."},
+	RagEmbeddingRequestsTotal:                      {"counter", "Total private RAG embedding requests by bounded outcome."},
+	RagEmbeddingInputTokensTotal:                   {"counter", "Total RAG embedding input tokens returned by the provider."},
 }
 
 var allowedLabels = map[string]struct{}{

@@ -7,10 +7,12 @@ from fastapi import Request
 
 from app.core.config import Settings, load_settings
 from app.domain.routing_difficulty.runtime import RoutingDifficultyRuntime
+from app.domain.routing_lightgbm_shadow.runtime import RoutingLightGBMShadowRuntime
 from app.services.ai_safety_detector import AiSafetyDetectorService
 from app.services.rag_extraction import RagExtractionService
 from app.services.routing_difficulty import RoutingDifficultyService
 from app.services.routing_difficulty_batcher import RoutingDifficultyBatcher
+from app.services.routing_lightgbm_shadow import RoutingLightGBMShadowService
 from app.services.safety_evaluator import RemoteSafetyEvaluationService
 
 
@@ -182,4 +184,81 @@ def get_routing_difficulty_concurrency_gate(
         get_settings(request).routing_difficulty_max_concurrent
     )
     request.app.state.routing_difficulty_concurrency_gate = gate
+    return gate
+
+
+def create_routing_lightgbm_shadow_service(
+    settings: Settings,
+) -> RoutingLightGBMShadowService:
+    runtime = RoutingLightGBMShadowRuntime(
+        artifact_root=Path(settings.routing_lightgbm_shadow_artifact_root),
+        profile_manifest_path=Path(
+            settings.routing_lightgbm_shadow_profile_manifest
+        ),
+        profile_manifest_sha256=(
+            settings.routing_lightgbm_shadow_profile_manifest_sha256
+        ),
+        intra_op_threads=settings.routing_lightgbm_shadow_onnx_intra_op_threads,
+        inter_op_threads=settings.routing_lightgbm_shadow_onnx_inter_op_threads,
+    )
+    return RoutingLightGBMShadowService(runtime)
+
+
+def get_routing_lightgbm_shadow_service(
+    request: Request,
+) -> RoutingLightGBMShadowService:
+    service = getattr(request.app.state, "routing_lightgbm_shadow_service", None)
+    if isinstance(service, RoutingLightGBMShadowService):
+        return service
+    settings = get_settings(request)
+    if not settings.routing_lightgbm_shadow_enabled:
+        raise RuntimeError("routing LightGBM shadow service is disabled")
+    service = create_routing_lightgbm_shadow_service(settings)
+    service.warmup()
+    request.app.state.routing_lightgbm_shadow_service = service
+    return service
+
+
+def create_routing_lightgbm_shadow_batcher(
+    settings: Settings,
+    service: RoutingLightGBMShadowService,
+) -> RoutingDifficultyBatcher:
+    return RoutingDifficultyBatcher(
+        service,  # type: ignore[arg-type]
+        maximum_batch_size=1,
+        maximum_wait_ms=0,
+        queue_capacity=settings.routing_lightgbm_shadow_max_concurrent,
+        worker_count=settings.routing_lightgbm_shadow_worker_count,
+    )
+
+
+def get_routing_lightgbm_shadow_batcher(
+    request: Request,
+) -> RoutingDifficultyBatcher:
+    batcher = getattr(request.app.state, "routing_lightgbm_shadow_batcher", None)
+    if isinstance(batcher, RoutingDifficultyBatcher):
+        return batcher
+    settings = get_settings(request)
+    batcher = create_routing_lightgbm_shadow_batcher(
+        settings,
+        get_routing_lightgbm_shadow_service(request),
+    )
+    request.app.state.routing_lightgbm_shadow_batcher = batcher
+    return batcher
+
+
+def get_routing_lightgbm_shadow_concurrency_gate(
+    request: Request,
+) -> RoutingDifficultyConcurrencyGate:
+    gate = getattr(
+        request.app.state,
+        "routing_lightgbm_shadow_concurrency_gate",
+        None,
+    )
+    if isinstance(gate, RoutingDifficultyConcurrencyGate):
+        return gate
+    gate = RoutingDifficultyConcurrencyGate(
+        get_settings(request).routing_lightgbm_shadow_max_concurrent
+    )
+    request.app.state.routing_lightgbm_shadow_concurrency_gate = gate
     return gate

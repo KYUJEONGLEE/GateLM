@@ -57,10 +57,11 @@ type RouteCandidateStatus struct {
 }
 
 type SimpleRouter struct {
-	config            SimpleRouterConfig
-	promptClassifier  RuleBasedPromptClassifier
-	difficultyRuntime DifficultySemanticClassifier
-	difficultyShadow  *DifficultySemanticShadowRunner
+	config                   SimpleRouterConfig
+	promptClassifier         RuleBasedPromptClassifier
+	difficultyRuntime        DifficultySemanticClassifier
+	difficultyShadow         *DifficultySemanticShadowRunner
+	difficultyLightGBMShadow *DifficultySemanticShadowRunner
 }
 
 type SimpleRouterOption func(*SimpleRouter)
@@ -68,6 +69,12 @@ type SimpleRouterOption func(*SimpleRouter)
 func WithDifficultySemanticShadow(runner *DifficultySemanticShadowRunner) SimpleRouterOption {
 	return func(router *SimpleRouter) {
 		router.difficultyShadow = runner
+	}
+}
+
+func WithDifficultyLightGBMShadow(runner *DifficultySemanticShadowRunner) SimpleRouterOption {
+	return func(router *SimpleRouter) {
+		router.difficultyLightGBMShadow = runner
 	}
 }
 
@@ -140,12 +147,14 @@ func (r *SimpleRouter) DecideRoute(ctx context.Context, req Request) (Decision, 
 	if config.Mode != RoutingPolicyModeAuto {
 		return Decision{}, ErrAutoRoutingDisabled
 	}
+	authoritativeLRReady := false
 	if r != nil && r.difficultyRuntime != nil &&
 		UsesDifficultyModelPath(ExtractDifficultyFeatures(features, category)) {
 		semantic := r.difficultyRuntime.Classify(ctx, features, category)
 		if semantic.Status == DifficultySemanticShadowReady {
 			difficulty = canonicalDifficulty(semantic.Difficulty.Difficulty)
 			material.Difficulty = difficulty
+			authoritativeLRReady = true
 		}
 	}
 	cell := config.Routes.Cell(category, difficulty)
@@ -166,6 +175,10 @@ func (r *SimpleRouter) DecideRoute(ctx context.Context, req Request) (Decision, 
 	decision.RoutingDecisionKeyHash, _ = DecisionKeyHash(material)
 	if r != nil && r.difficultyShadow != nil && req.DifficultyShadowEligible {
 		r.difficultyShadow.Submit(features, category, difficulty)
+	}
+	if r != nil && r.difficultyLightGBMShadow != nil &&
+		req.DifficultyLightGBMShadowEligible && authoritativeLRReady {
+		r.difficultyLightGBMShadow.Submit(features, category, difficulty)
 	}
 	return decision, nil
 }

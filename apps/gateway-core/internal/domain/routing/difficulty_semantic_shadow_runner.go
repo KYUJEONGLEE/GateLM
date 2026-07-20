@@ -8,10 +8,12 @@ import (
 )
 
 const (
-	DifficultySemanticShadowComparisonMatch                   = "match"
-	DifficultySemanticShadowComparisonRuleSimpleShadowComplex = "rule_simple_shadow_complex"
-	DifficultySemanticShadowComparisonRuleComplexShadowSimple = "rule_complex_shadow_simple"
-	DifficultySemanticShadowComparisonNotCompared             = "not_compared"
+	DifficultySemanticShadowComparisonMatch                            = "match"
+	DifficultySemanticShadowComparisonRuleSimpleShadowComplex          = "rule_simple_shadow_complex"
+	DifficultySemanticShadowComparisonRuleComplexShadowSimple          = "rule_complex_shadow_simple"
+	DifficultySemanticShadowComparisonAuthoritativeSimpleShadowComplex = "authoritative_simple_shadow_complex"
+	DifficultySemanticShadowComparisonAuthoritativeComplexShadowSimple = "authoritative_complex_shadow_simple"
+	DifficultySemanticShadowComparisonNotCompared                      = "not_compared"
 
 	DifficultySemanticShadowPanicRecovered = "panic_recovered"
 )
@@ -66,12 +68,26 @@ type DifficultySemanticShadowRunner struct {
 	done      chan struct{}
 	closed    atomic.Bool
 	closeOnce sync.Once
+	compare   func(string, string) string
+}
+
+type DifficultySemanticShadowRunnerOption func(*DifficultySemanticShadowRunner)
+
+func WithDifficultySemanticShadowComparison(
+	comparison func(string, string) string,
+) DifficultySemanticShadowRunnerOption {
+	return func(runner *DifficultySemanticShadowRunner) {
+		if comparison != nil {
+			runner.compare = comparison
+		}
+	}
 }
 
 func NewDifficultySemanticShadowRunner(
 	evaluator DifficultySemanticShadowEvaluation,
 	timeout time.Duration,
 	observer DifficultySemanticShadowObserver,
+	options ...DifficultySemanticShadowRunnerOption,
 ) *DifficultySemanticShadowRunner {
 	if evaluator == nil {
 		return nil
@@ -88,6 +104,12 @@ func NewDifficultySemanticShadowRunner(
 		ctx:       ctx,
 		cancel:    cancel,
 		done:      make(chan struct{}),
+		compare:   difficultySemanticShadowComparison,
+	}
+	for _, option := range options {
+		if option != nil {
+			option(runner)
+		}
 	}
 	go runner.run()
 	return runner
@@ -160,7 +182,7 @@ func (runner *DifficultySemanticShadowRunner) evaluate(job difficultySemanticSha
 
 	comparison := DifficultySemanticShadowComparisonNotCompared
 	if status == DifficultySemanticShadowReady {
-		comparison = difficultySemanticShadowComparison(job.ruleDifficulty, shadowDifficulty)
+		comparison = runner.compare(job.ruleDifficulty, shadowDifficulty)
 	}
 	runner.notify(DifficultySemanticShadowObservation{
 		Status:     status,
@@ -196,6 +218,23 @@ func difficultySemanticShadowComparison(ruleDifficulty string, shadowDifficulty 
 		return DifficultySemanticShadowComparisonRuleSimpleShadowComplex
 	}
 	return DifficultySemanticShadowComparisonRuleComplexShadowSimple
+}
+
+// DifficultyLightGBMShadowComparison compares the authoritative LR difficulty
+// with the isolated LightGBM shadow result using bounded, low-cardinality enums.
+func DifficultyLightGBMShadowComparison(
+	authoritativeDifficulty string,
+	shadowDifficulty string,
+) string {
+	authoritativeDifficulty = canonicalDifficulty(authoritativeDifficulty)
+	shadowDifficulty = canonicalDifficulty(shadowDifficulty)
+	if authoritativeDifficulty == shadowDifficulty {
+		return DifficultySemanticShadowComparisonMatch
+	}
+	if authoritativeDifficulty == DifficultySimple {
+		return DifficultySemanticShadowComparisonAuthoritativeSimpleShadowComplex
+	}
+	return DifficultySemanticShadowComparisonAuthoritativeComplexShadowSimple
 }
 
 func (runner *DifficultySemanticShadowRunner) notify(observation DifficultySemanticShadowObservation) {

@@ -1,0 +1,357 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gatelm.local/docs/routing/datasets/difficulty/schemas/difficulty-dataset-record.schema.json",
+  "title": "GateLM Routing Difficulty Dataset Record",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "gatelm.routing-difficulty-dataset-record.v1"
+    },
+    "dataset_version": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120
+    },
+    "sample_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9._:-]+$",
+      "maxLength": 160
+    },
+    "redacted_prompt": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 65536,
+      "description": "Synthetic input or licensed public Prompt text that passed safety filtering. Customer raw prompts, personal data, and secrets are forbidden."
+    },
+    "automatic_label": {
+      "enum": ["simple", "complex"]
+    },
+    "label": {
+      "enum": ["simple", "complex"],
+      "description": "Current candidate label. It is not production gold while review_status is pending."
+    },
+    "expected_category": {
+      "enum": ["general", "code", "translation", "summarization", "reasoning"],
+      "description": "Projection compatible with the active routing category vocabulary."
+    },
+    "task_type": {
+      "enum": [
+        "general_query",
+        "fact_explanation",
+        "translation",
+        "summarization",
+        "document_writing",
+        "code_generation",
+        "code_explanation",
+        "code_modification",
+        "code_review",
+        "debugging",
+        "data_analysis",
+        "math_problem",
+        "comparison_evaluation",
+        "planning",
+        "search",
+        "rag_query",
+        "table_conversion",
+        "json_conversion",
+        "structured_data_processing",
+        "file_processing",
+        "multi_document_comparison",
+        "business_report",
+        "internal_document_query"
+      ]
+    },
+    "service_domain": {
+      "enum": [
+        "corporate_operations",
+        "hr_recruiting",
+        "internal_policy",
+        "finance_accounting",
+        "sales",
+        "marketing",
+        "customer_support",
+        "security",
+        "legal",
+        "compliance",
+        "privacy",
+        "software_development",
+        "data_analysis",
+        "project_management",
+        "product_planning",
+        "research",
+        "business_strategy",
+        "document_management",
+        "meeting_minutes",
+        "business_reporting",
+        "training_onboarding",
+        "rag_internal_knowledge",
+        "business_format_conversion"
+      ]
+    },
+    "language": {
+      "enum": ["ko", "en", "mixed"]
+    },
+    "source": {
+      "enum": ["synthetic", "boundary", "public"]
+    },
+    "boundary_case": {
+      "type": "boolean"
+    },
+    "counterexample_type": {
+      "type": ["string", "null"],
+      "maxLength": 80
+    },
+    "label_source": {
+      "enum": ["synthetic_design", "public_rule_candidate"]
+    },
+    "label_confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "label_reason": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 240,
+      "description": "Safe reason category without prompt fragments or reviewer identity."
+    },
+    "human_reviewed": {
+      "type": "boolean"
+    },
+    "review_status": {
+      "enum": ["pending", "in_review", "needs_adjudication", "approved", "rejected"]
+    },
+    "group_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9._:-]+$",
+      "maxLength": 160,
+      "description": "Keeps paraphrases, translations, and counterfactual variants in one split."
+    },
+    "split": {
+      "enum": ["train", "validation", "test"]
+    },
+    "expression_style": {
+      "enum": [
+        "standard",
+        "polite",
+        "imperative",
+        "interrogative",
+        "request_form",
+        "conversational",
+        "informal",
+        "abbreviated",
+        "messenger",
+        "typo",
+        "spacing_error",
+        "long_explanation",
+        "keyword_list",
+        "compound_command",
+        "technical",
+        "incomplete"
+      ]
+    },
+    "prompt_structure": {
+      "enum": ["single_sentence", "multi_sentence", "multi_paragraph", "keyword_list"]
+    },
+    "length_bucket": {
+      "enum": ["short", "medium", "long"]
+    },
+    "reasoning_level": {
+      "enum": ["low", "medium", "high"]
+    },
+    "task_step_count": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 20
+    },
+    "constraint_count": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 30
+    },
+    "has_code": {
+      "type": "boolean"
+    },
+    "has_file": {
+      "type": "boolean"
+    },
+    "tool_required": {
+      "type": "boolean"
+    },
+    "verification_required": {
+      "type": "boolean"
+    },
+    "source_dataset": {
+      "enum": [
+        "klue_mrc",
+        "kite",
+        "aya_dataset",
+        "k2_eval",
+        "hrm8k_ksm",
+        "haerae_bench_2",
+        "openassistant_oasst1",
+        "databricks_dolly_15k",
+        "kullm_v2_dolly",
+        "ultrachat"
+      ]
+    },
+    "source_record_id": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{24}$"
+    },
+    "source_license": {
+      "enum": ["CC-BY-SA-4.0", "CC-BY-SA-3.0", "Apache-2.0", "MIT"]
+    },
+    "source_url": {
+      "type": "string",
+      "format": "uri",
+      "maxLength": 300
+    },
+    "source_revision": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{40}$"
+    },
+    "source_prompt_kind": {
+      "enum": [
+        "benchmark_question",
+        "benchmark_instruction",
+        "human_authored_instruction",
+        "handwritten_benchmark_instruction",
+        "human_reviewed_math_question",
+        "human_authored_prompter",
+        "employee_authored_instruction",
+        "machine_translated_human_instruction",
+        "synthetic_user_turn"
+      ]
+    },
+    "source_transform": {
+      "enum": ["as_published_field", "prompt_serialization", "machine_translated_published_field"]
+    },
+    "source_authorship": {
+      "enum": [
+        "human_authored",
+        "human_curated_translation",
+        "human_origin_machine_translated",
+        "benchmark_derived",
+        "synthetic"
+      ]
+    },
+    "source_human_origin": {
+      "type": "boolean"
+    },
+    "source_direct_human_authored": {
+      "type": "boolean"
+    },
+    "source_real_user": {
+      "type": "boolean"
+    },
+    "source_access": {
+      "const": "anonymous_public"
+    },
+    "redaction_status": {
+      "const": "safety_filtered"
+    },
+    "quality_score": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    }
+  },
+  "required": [
+    "schema_version",
+    "dataset_version",
+    "sample_id",
+    "redacted_prompt",
+    "automatic_label",
+    "label",
+    "expected_category",
+    "task_type",
+    "service_domain",
+    "language",
+    "source",
+    "boundary_case",
+    "counterexample_type",
+    "label_source",
+    "label_confidence",
+    "label_reason",
+    "human_reviewed",
+    "review_status",
+    "group_id",
+    "split",
+    "expression_style",
+    "prompt_structure",
+    "length_bucket",
+    "reasoning_level",
+    "task_step_count",
+    "constraint_count",
+    "has_code",
+    "has_file",
+    "tool_required",
+    "verification_required"
+  ],
+  "allOf": [
+    {
+      "if": {
+        "properties": { "source": { "const": "synthetic" } },
+        "required": ["source"]
+      },
+      "then": {
+        "properties": {
+          "boundary_case": { "const": false },
+          "counterexample_type": { "type": "null" }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "source": { "const": "boundary" } },
+        "required": ["source"]
+      },
+      "then": {
+        "properties": {
+          "boundary_case": { "const": true },
+          "counterexample_type": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "source": { "const": "public" } },
+        "required": ["source"]
+      },
+      "then": {
+        "properties": {
+          "boundary_case": { "const": false },
+          "counterexample_type": { "type": "null" },
+          "label_source": { "const": "public_rule_candidate" }
+        },
+        "required": [
+          "source_dataset",
+          "source_record_id",
+          "source_license",
+          "source_url",
+          "source_revision",
+          "source_prompt_kind",
+          "source_transform",
+          "source_authorship",
+          "source_human_origin",
+          "source_direct_human_authored",
+          "source_real_user",
+          "source_access",
+          "redaction_status",
+          "quality_score"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": { "review_status": { "const": "pending" } },
+        "required": ["review_status"]
+      },
+      "then": {
+        "properties": { "human_reviewed": { "const": false } }
+      }
+    }
+  ]
+}

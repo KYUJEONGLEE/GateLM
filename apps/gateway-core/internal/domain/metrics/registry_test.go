@@ -57,6 +57,12 @@ func TestRegistryRendersPrometheusTextWithDeterministicSafeLabels(t *testing.T) 
 		Status:          "ready",
 		DurationSeconds: 0.018,
 	})
+	registry.RoutingDifficultyLightGBMShadow(RoutingDifficultyLightGBMShadow{
+		Status:          "ready",
+		Category:        "general",
+		Comparison:      "authoritative_simple_shadow_complex",
+		DurationSeconds: 0.025,
+	})
 	registry.RecordAISafetySidecarCall(AISafetySidecarCall{
 		Surface:         "tenant_chat",
 		Mode:            "enforce",
@@ -94,6 +100,8 @@ func TestRegistryRendersPrometheusTextWithDeterministicSafeLabels(t *testing.T) 
 	assertMetricsContains(t, first, `gatelm_routing_difficulty_shadow_duration_seconds_count{status="ready"} 1`)
 	assertMetricsContains(t, first, `gatelm_routing_difficulty_remote_total{status="ready"} 1`)
 	assertMetricsContains(t, first, `gatelm_routing_difficulty_remote_duration_seconds_sum{status="ready"} 0.018`)
+	assertMetricsContains(t, first, `gatelm_routing_difficulty_lightgbm_shadow_total{category="general",comparison="authoritative_simple_shadow_complex",status="ready"} 1`)
+	assertMetricsContains(t, first, `gatelm_routing_difficulty_lightgbm_shadow_duration_seconds_sum{status="ready"} 0.025`)
 	assertMetricsContains(t, first, `gatelm_ai_safety_sidecar_calls_total{inference_path="hybrid",mode="enforce",outcome="redacted",surface="tenant_chat"} 1`)
 	assertMetricsContains(t, first, `gatelm_ai_safety_sidecar_call_duration_seconds_sum{inference_path="hybrid",mode="enforce",outcome="redacted",surface="tenant_chat"} 0.125`)
 	assertMetricsContains(t, first, `gatelm_ai_safety_sidecar_fallback_total{mode="enforce",reason="timeout",surface="tenant_chat"} 1`)
@@ -130,6 +138,8 @@ func TestRegistryRenderIncludesAllRequiredMetricFamilies(t *testing.T) {
 		RoutingDifficultyShadowDurationSeconds,
 		RoutingDifficultyRemoteTotal,
 		RoutingDifficultyRemoteDurationSeconds,
+		RoutingDifficultyLightGBMShadowTotal,
+		RoutingDifficultyLightGBMShadowDurationSeconds,
 		TenantChatCompletionTotal,
 		TenantChatUsageReconciliationTotal,
 		TenantChatAccountingTransactionSeconds,

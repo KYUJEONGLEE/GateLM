@@ -26,7 +26,7 @@ COPY scripts/routing_difficulty_model/artifacts/candidates/difficulty-candidate-
 
 RUN pip install --no-cache-dir --requirement requirements-rag-extraction.lock \
   && if [ "$AI_SERVICE_INSTALL_ML_DEPS" = "true" ]; then \
-    case "$AI_SERVICE_ML_EXTRA" in onnx|routing|pii) ;; *) echo "unsupported AI Service ML extra" >&2; exit 1 ;; esac; \
+    case "$AI_SERVICE_ML_EXTRA" in onnx|routing|routing-lightgbm|pii) ;; *) echo "unsupported AI Service ML extra" >&2; exit 1 ;; esac; \
     pip install --no-cache-dir ".[${AI_SERVICE_ML_EXTRA}]"; \
   else \
     pip install --no-cache-dir --no-deps .; \
@@ -53,7 +53,8 @@ RUN groupadd --system gatelm \
   && useradd --system --gid gatelm --home-dir /nonexistent --shell /usr/sbin/nologin gatelm \
   && mkdir -p /models \
   && mkdir -p /opt/gatelm/difficulty-e5 \
-  && chown gatelm:gatelm /models /opt/gatelm/difficulty-e5
+  && mkdir -p /opt/gatelm/difficulty-lightgbm-shadow \
+  && chown gatelm:gatelm /models /opt/gatelm/difficulty-e5 /opt/gatelm/difficulty-lightgbm-shadow
 
 COPY --from=builder --chown=gatelm:gatelm /opt/venv /opt/venv
 COPY --from=builder --chown=gatelm:gatelm /build/difficulty-e5 /opt/gatelm/difficulty-e5

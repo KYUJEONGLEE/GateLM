@@ -95,10 +95,25 @@ class Settings:
     routing_difficulty_batch_max_wait_ms: float = 0.0
     routing_difficulty_onnx_intra_op_threads: int = 1
     routing_difficulty_onnx_inter_op_threads: int = 1
+    routing_lightgbm_shadow_enabled: bool = False
+    routing_lightgbm_shadow_service_token: str = field(default="", repr=False)
+    routing_lightgbm_shadow_artifact_root: str = (
+        "/opt/gatelm/difficulty-lightgbm-shadow"
+    )
+    routing_lightgbm_shadow_profile_manifest: str = (
+        "/opt/gatelm/difficulty-lightgbm-shadow/"
+        "difficulty-lightgbm-shadow-profile.v1.json"
+    )
+    routing_lightgbm_shadow_profile_manifest_sha256: str = ""
+    routing_lightgbm_shadow_max_concurrent: int = 4
+    routing_lightgbm_shadow_worker_count: int = 1
+    routing_lightgbm_shadow_onnx_intra_op_threads: int = 1
+    routing_lightgbm_shadow_onnx_inter_op_threads: int = 1
 
     def __post_init__(self) -> None:
         _validate_rag_settings(self)
         _validate_routing_difficulty_settings(self)
+        _validate_routing_lightgbm_shadow_settings(self)
 
 
 def load_settings() -> Settings:
@@ -224,6 +239,45 @@ def load_settings() -> Settings:
             "AI_SERVICE_ROUTING_DIFFICULTY_ONNX_INTER_OP_THREADS",
             1,
         ),
+        routing_lightgbm_shadow_enabled=_env_strict_bool(
+            "AI_SERVICE_ROUTING_LIGHTGBM_SHADOW_ENABLED",
+            False,
+        ),
+        routing_lightgbm_shadow_service_token=_env_string(
+            "AI_SERVICE_ROUTING_LIGHTGBM_SHADOW_SERVICE_TOKEN",
+            "",
+        ).strip(),
+        routing_lightgbm_shadow_artifact_root=_env_string(
+            "AI_SERVICE_ROUTING_LIGHTGBM_SHADOW_ARTIFACT_ROOT",
+            "/opt/gatelm/difficulty-lightgbm-shadow",
+        ).strip(),
+        routing_lightgbm_shadow_profile_manifest=_env_string(
+            "AI_SERVICE_ROUTING_LIGHTGBM_SHADOW_PROFILE_MANIFEST",
+            (
+                "/opt/gatelm/difficulty-lightgbm-shadow/"
+                "difficulty-lightgbm-shadow-profile.v1.json"
+            ),
+        ).strip(),
+        routing_lightgbm_shadow_profile_manifest_sha256=_env_string(
+            "AI_SERVICE_ROUTING_LIGHTGBM_SHADOW_PROFILE_MANIFEST_SHA256",
+            "",
+        ).strip(),
+        routing_lightgbm_shadow_max_concurrent=_env_strict_int(
+            "AI_SERVICE_ROUTING_LIGHTGBM_SHADOW_MAX_CONCURRENT",
+            4,
+        ),
+        routing_lightgbm_shadow_worker_count=_env_strict_int(
+            "AI_SERVICE_ROUTING_LIGHTGBM_SHADOW_WORKER_COUNT",
+            1,
+        ),
+        routing_lightgbm_shadow_onnx_intra_op_threads=_env_strict_int(
+            "AI_SERVICE_ROUTING_LIGHTGBM_SHADOW_ONNX_INTRA_OP_THREADS",
+            1,
+        ),
+        routing_lightgbm_shadow_onnx_inter_op_threads=_env_strict_int(
+            "AI_SERVICE_ROUTING_LIGHTGBM_SHADOW_ONNX_INTER_OP_THREADS",
+            1,
+        ),
     )
 
 
@@ -341,6 +395,86 @@ def _validate_routing_difficulty_settings(settings: Settings) -> None:
         ):
             raise ValueError(
                 "AI_SERVICE_ROUTING_DIFFICULTY_SERVICE_TOKEN must be a non-placeholder value of at least 32 characters in production-like environments"
+            )
+
+
+def _validate_routing_lightgbm_shadow_settings(settings: Settings) -> None:
+    if not 1 <= settings.routing_lightgbm_shadow_max_concurrent <= 16:
+        raise ValueError(
+            "AI_SERVICE_ROUTING_LIGHTGBM_SHADOW_MAX_CONCURRENT must be between 1 and 16"
+        )
+    if not 1 <= settings.routing_lightgbm_shadow_worker_count <= 16:
+        raise ValueError(
+            "AI_SERVICE_ROUTING_LIGHTGBM_SHADOW_WORKER_COUNT must be between 1 and 16"
+        )
+    if (
+        settings.routing_lightgbm_shadow_worker_count
+        > settings.routing_lightgbm_shadow_max_concurrent
+    ):
+        raise ValueError(
+            "AI_SERVICE_ROUTING_LIGHTGBM_SHADOW_WORKER_COUNT must not exceed MAX_CONCURRENT"
+        )
+    if not 1 <= settings.routing_lightgbm_shadow_onnx_intra_op_threads <= 32:
+        raise ValueError(
+            "AI_SERVICE_ROUTING_LIGHTGBM_SHADOW_ONNX_INTRA_OP_THREADS must be between 1 and 32"
+        )
+    if not 1 <= settings.routing_lightgbm_shadow_onnx_inter_op_threads <= 8:
+        raise ValueError(
+            "AI_SERVICE_ROUTING_LIGHTGBM_SHADOW_ONNX_INTER_OP_THREADS must be between 1 and 8"
+        )
+    if (
+        settings.routing_difficulty_enabled
+        and settings.routing_lightgbm_shadow_enabled
+    ):
+        raise ValueError(
+            "LR difficulty and LightGBM shadow profiles require separate AI Service processes"
+        )
+    if not settings.routing_lightgbm_shadow_enabled:
+        return
+    if not settings.routing_lightgbm_shadow_service_token:
+        raise ValueError(
+            "AI_SERVICE_ROUTING_LIGHTGBM_SHADOW_SERVICE_TOKEN is required when enabled"
+        )
+    for key, raw_path in (
+        (
+            "AI_SERVICE_ROUTING_LIGHTGBM_SHADOW_ARTIFACT_ROOT",
+            settings.routing_lightgbm_shadow_artifact_root,
+        ),
+        (
+            "AI_SERVICE_ROUTING_LIGHTGBM_SHADOW_PROFILE_MANIFEST",
+            settings.routing_lightgbm_shadow_profile_manifest,
+        ),
+    ):
+        if not raw_path or not Path(raw_path).is_absolute():
+            raise ValueError(f"{key} must be an absolute path when enabled")
+    artifact_root = Path(settings.routing_lightgbm_shadow_artifact_root).resolve(
+        strict=False
+    )
+    manifest_path = Path(
+        settings.routing_lightgbm_shadow_profile_manifest
+    ).resolve(strict=False)
+    try:
+        manifest_path.relative_to(artifact_root)
+    except ValueError as exc:
+        raise ValueError(
+            "AI_SERVICE_ROUTING_LIGHTGBM_SHADOW_PROFILE_MANIFEST must stay within ARTIFACT_ROOT"
+        ) from exc
+    manifest_hash = settings.routing_lightgbm_shadow_profile_manifest_sha256
+    bare_hash = manifest_hash[7:] if manifest_hash.startswith("sha256:") else manifest_hash
+    if len(bare_hash) != 64 or any(
+        character not in "0123456789abcdef" for character in bare_hash
+    ):
+        raise ValueError(
+            "AI_SERVICE_ROUTING_LIGHTGBM_SHADOW_PROFILE_MANIFEST_SHA256 must be a SHA-256 digest"
+        )
+    if settings.deployment_mode in PRODUCTION_LIKE_DEPLOYMENT_MODES:
+        normalized_token = settings.routing_lightgbm_shadow_service_token.lower()
+        if len(settings.routing_lightgbm_shadow_service_token) < 32 or any(
+            marker in normalized_token
+            for marker in RAG_SERVICE_TOKEN_PLACEHOLDER_MARKERS
+        ):
+            raise ValueError(
+                "AI_SERVICE_ROUTING_LIGHTGBM_SHADOW_SERVICE_TOKEN must be a non-placeholder value of at least 32 characters in production-like environments"
             )
 
 

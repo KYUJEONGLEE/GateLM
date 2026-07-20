@@ -14,8 +14,17 @@ type Router interface {
 }
 
 type Stage struct {
-	router                      Router
-	difficultyShadowEligibility func(tenantID string, applicationID string) bool
+	router                              Router
+	difficultyShadowEligibility         func(tenantID string, applicationID string) bool
+	difficultyLightGBMShadowEligibility func(tenantID string, applicationID string, requestID string) bool
+}
+
+func WithDifficultyLightGBMShadowEligibility(
+	eligibility func(tenantID string, applicationID string, requestID string) bool,
+) StageOption {
+	return func(stage *Stage) {
+		stage.difficultyLightGBMShadowEligibility = eligibility
+	}
 }
 
 type StageOption func(*Stage)
@@ -42,10 +51,11 @@ func (s Stage) Name() string {
 
 func (s Stage) Execute(ctx context.Context, gatewayCtx *request.GatewayContext) error {
 	routeReq := routing.Request{
-		RequestedModel:           gatewayCtx.Request.RequestedModel,
-		PromptText:               gatewayCtx.Request.PromptText,
-		PromptMessages:           append([]routing.PromptMessage(nil), gatewayCtx.Request.PromptMessages...),
-		DifficultyShadowEligible: s.difficultyShadowEligible(gatewayCtx),
+		RequestedModel:                   gatewayCtx.Request.RequestedModel,
+		PromptText:                       gatewayCtx.Request.PromptText,
+		PromptMessages:                   append([]routing.PromptMessage(nil), gatewayCtx.Request.PromptMessages...),
+		DifficultyShadowEligible:         s.difficultyShadowEligible(gatewayCtx),
+		DifficultyLightGBMShadowEligible: s.difficultyLightGBMShadowEligible(gatewayCtx),
 	}
 	if gatewayCtx.Runtime.HasRoutingPolicy {
 		config := gatewayCtx.Runtime.RoutingPolicy.SimpleRouterConfig()
@@ -75,6 +85,19 @@ func (s Stage) Execute(ctx context.Context, gatewayCtx *request.GatewayContext) 
 	}
 
 	return nil
+}
+
+func (s Stage) difficultyLightGBMShadowEligible(
+	gatewayCtx *request.GatewayContext,
+) bool {
+	if s.difficultyLightGBMShadowEligibility == nil || gatewayCtx == nil {
+		return false
+	}
+	return s.difficultyLightGBMShadowEligibility(
+		gatewayCtx.Identity.TenantID,
+		gatewayCtx.Identity.ApplicationID,
+		gatewayCtx.Request.RequestID,
+	)
 }
 
 func (s Stage) difficultyShadowEligible(gatewayCtx *request.GatewayContext) bool {

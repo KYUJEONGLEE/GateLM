@@ -1,0 +1,175 @@
+{
+  "schema_version": "gatelm.routing-difficulty-dataset-manifest.v1",
+  "dataset_version": "routing_difficulty_enterprise_synthetic_8000_rebalanced_2026_07_21",
+  "record_schema_version": "gatelm.routing-difficulty-dataset-record.v1",
+  "record_schema_path": "docs/routing/datasets/difficulty/schemas/difficulty-dataset-record.schema.json",
+  "dataset_path": "docs/routing/datasets/difficulty/data/enterprise-synthetic-8000.jsonl",
+  "dataset_sha256": "b5061ffada29605448ec2ca0a2926e302bbd40d9c8c7376dc01fb0915c876391",
+  "generated_at": "2026-07-20T00:00:00Z",
+  "generation_seed": 20260720,
+  "scope": {
+    "initial_target_records": 15000,
+    "generated_records": 8000,
+    "deferred_public_records": 0,
+    "public_records": 0,
+    "training_eligible": false,
+    "training_blockers": [
+      "standalone_component_not_complete_training_bundle",
+      "llm_adjudication_not_completed",
+      "human_review_not_completed"
+    ]
+  },
+  "counts": {
+    "records": 8000,
+    "groups": 1752,
+    "synthetic_records": 6000,
+    "boundary_records": 2000,
+    "human_reviewed_records": 0
+  },
+  "distributions": {
+    "label": {
+      "complex": 4000,
+      "simple": 4000
+    },
+    "language": {
+      "en": 200,
+      "ko": 7400,
+      "mixed": 400
+    },
+    "source": {
+      "boundary": 2000,
+      "synthetic": 6000
+    },
+    "split": {
+      "test": 1200,
+      "train": 5600,
+      "validation": 1200
+    },
+    "task_type": {
+      "business_report": 432,
+      "code_explanation": 428,
+      "code_generation": 320,
+      "code_modification": 432,
+      "code_review": 428,
+      "comparison_evaluation": 416,
+      "data_analysis": 426,
+      "debugging": 428,
+      "document_writing": 320,
+      "fact_explanation": 202,
+      "file_processing": 428,
+      "general_query": 92,
+      "internal_document_query": 468,
+      "json_conversion": 430,
+      "math_problem": 156,
+      "multi_document_comparison": 424,
+      "planning": 156,
+      "rag_query": 428,
+      "search": 320,
+      "structured_data_processing": 88,
+      "summarization": 322,
+      "table_conversion": 428,
+      "translation": 428
+    },
+    "service_domain": {
+      "business_format_conversion": 360,
+      "business_reporting": 360,
+      "business_strategy": 360,
+      "compliance": 360,
+      "corporate_operations": 88,
+      "customer_support": 356,
+      "data_analysis": 360,
+      "document_management": 360,
+      "finance_accounting": 360,
+      "hr_recruiting": 360,
+      "internal_policy": 360,
+      "legal": 360,
+      "marketing": 364,
+      "meeting_minutes": 360,
+      "privacy": 360,
+      "product_planning": 364,
+      "project_management": 356,
+      "rag_internal_knowledge": 356,
+      "research": 360,
+      "sales": 360,
+      "security": 360,
+      "software_development": 360,
+      "training_onboarding": 356
+    },
+    "expression_style": {
+      "abbreviated": 499,
+      "compound_command": 499,
+      "conversational": 500,
+      "imperative": 502,
+      "incomplete": 500,
+      "informal": 500,
+      "interrogative": 501,
+      "keyword_list": 501,
+      "long_explanation": 500,
+      "messenger": 500,
+      "polite": 500,
+      "request_form": 499,
+      "spacing_error": 499,
+      "standard": 500,
+      "technical": 499,
+      "typo": 501
+    },
+    "prompt_structure": {
+      "keyword_list": 402,
+      "multi_paragraph": 2002,
+      "multi_sentence": 800,
+      "single_sentence": 4796
+    },
+    "length_bucket": {
+      "long": 1600,
+      "medium": 3522,
+      "short": 2878
+    },
+    "counterexample_type": {
+      "code_present_simple": 80,
+      "everyday_language_complex": 126,
+      "few_constraints_deep_complex": 126,
+      "file_simple_extraction": 76,
+      "implicit_multistep_complex": 126,
+      "independent_steps_simple": 76,
+      "json_output_simple": 76,
+      "long_answer_simple": 76,
+      "long_document_format_simple": 72,
+      "long_document_translation_simple": 76,
+      "long_input_copy_simple": 76,
+      "long_simple": 80,
+      "many_constraints_mechanical_simple": 82,
+      "no_code_complex": 128,
+      "no_file_expert_analysis": 122,
+      "no_output_format_complex": 122,
+      "no_search_logical_complex": 122,
+      "search_simple_fact": 76,
+      "short_complex": 128,
+      "single_task_long_context_simple": 74,
+      "technical_terms_simple": 80
+    }
+  },
+  "coverage": {
+    "task_types": 23,
+    "service_domains": 23,
+    "boundary_types": 21,
+    "every_task_type_has_both_labels": true,
+    "every_service_domain_has_both_labels": true,
+    "every_language_has_both_labels": true,
+    "long_simple_records": 800,
+    "long_complex_records": 800
+  },
+  "deduplication": {
+    "exact_duplicate_records": 0,
+    "normalized_duplicate_records": 0,
+    "cross_group_near_duplicate_pairs": 0,
+    "near_duplicate_method": "task-language-label bucketed normalized token Jaccard",
+    "near_duplicate_threshold": 0.94,
+    "within_group_variants_allowed": true
+  },
+  "review": {
+    "label_source": "synthetic_design",
+    "review_status": "pending",
+    "human_reviewed": false,
+    "production_gold": false
+  }
+}

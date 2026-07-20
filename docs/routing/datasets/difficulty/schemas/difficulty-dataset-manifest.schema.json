@@ -1,0 +1,121 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gatelm.local/docs/routing/datasets/difficulty/schemas/difficulty-dataset-manifest.schema.json",
+  "title": "GateLM Routing Difficulty Dataset Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "gatelm.routing-difficulty-dataset-manifest.v1"
+    },
+    "dataset_version": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120
+    },
+    "record_schema_version": {
+      "const": "gatelm.routing-difficulty-dataset-record.v1"
+    },
+    "record_schema_path": {
+      "type": "string",
+      "pattern": "^[a-zA-Z0-9._/-]+$"
+    },
+    "dataset_path": {
+      "type": "string",
+      "pattern": "^[a-zA-Z0-9._/-]+$"
+    },
+    "dataset_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "generation_seed": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "initial_target_records": { "const": 15000 },
+        "generated_records": { "type": "integer", "minimum": 0, "maximum": 15000 },
+        "deferred_public_records": { "type": "integer", "minimum": 0, "maximum": 7000 },
+        "public_records": { "type": "integer", "minimum": 0, "maximum": 7000 },
+        "training_eligible": { "const": false },
+        "training_blockers": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        }
+      },
+      "required": [
+        "initial_target_records",
+        "generated_records",
+        "deferred_public_records",
+        "training_eligible",
+        "training_blockers"
+      ]
+    },
+    "counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "records": { "type": "integer", "minimum": 1, "maximum": 15000 },
+        "public_records": { "type": "integer", "minimum": 0, "maximum": 7000 },
+        "groups": { "type": "integer", "minimum": 1 },
+        "synthetic_records": { "type": "integer", "minimum": 0, "maximum": 6000 },
+        "boundary_records": { "type": "integer", "minimum": 0, "maximum": 2000 },
+        "human_reviewed_records": { "type": "integer", "minimum": 0, "maximum": 15000 },
+        "human_origin_records": { "type": "integer", "minimum": 0, "maximum": 7000 },
+        "direct_human_authored_records": { "type": "integer", "minimum": 0, "maximum": 7000 },
+        "real_user_records": { "type": "integer", "minimum": 0, "maximum": 7000 },
+        "public_human_origin_records": { "type": "integer", "minimum": 0, "maximum": 7000 },
+        "public_direct_human_authored_records": { "type": "integer", "minimum": 0, "maximum": 7000 },
+        "public_real_user_records": { "type": "integer", "minimum": 0, "maximum": 7000 }
+      },
+      "required": ["records", "groups", "synthetic_records", "boundary_records", "human_reviewed_records"]
+    },
+    "distributions": {
+      "type": "object"
+    },
+    "coverage": {
+      "type": "object"
+    },
+    "deduplication": {
+      "type": "object"
+    },
+    "review": {
+      "type": "object"
+    },
+    "sources": {
+      "type": "object"
+    },
+    "filtering": {
+      "type": "object"
+    },
+    "components": {
+      "type": "array",
+      "items": { "type": "object" }
+    }
+  },
+  "required": [
+    "schema_version",
+    "dataset_version",
+    "record_schema_version",
+    "record_schema_path",
+    "dataset_path",
+    "dataset_sha256",
+    "generated_at",
+    "generation_seed",
+    "scope",
+    "counts",
+    "distributions",
+    "coverage",
+    "deduplication",
+    "review"
+  ]
+}

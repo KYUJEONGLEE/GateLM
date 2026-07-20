@@ -13,7 +13,7 @@
 | PCA artifact | [`../../scripts/routing_difficulty_model/artifacts/difficulty-e5-pca-64.v2.npz`](../../scripts/routing_difficulty_model/artifacts/difficulty-e5-pca-64.v2.npz) |
 | Last reviewed | 2026-07-20 |
 
-이 계약은 difficulty semantic 후보가 사용하는 유일한 encoder 경로를 고정한다. 과거의 다중 encoder 후보 benchmark, custom 128-token head-tail 처리와 provisional projection은 사용하지 않는다. Private AI Service는 같은 경로를 startup warmup과 request runtime에서 사용하고 Gateway는 exact 42D vector와 bounded instruction만 전달한다. 현재 명시적으로 승격된 106D artifact만 model-path difficulty를 제품 routing decision에 연결하며, 다른 artifact나 encoder component의 존재는 자동 promotion을 뜻하지 않는다.
+이 계약은 authoritative Logistic Regression 경로가 사용하는 유일한 encoder를 고정한다. 과거의 다중 encoder 후보 benchmark, custom 128-token head-tail 처리와 provisional projection은 이 LR 경로에 사용하지 않는다. Private AI Service는 같은 경로를 startup warmup과 request runtime에서 사용하고 Gateway는 exact 42D vector와 bounded instruction만 전달한다. 현재 명시적으로 승격된 106D artifact만 model-path difficulty를 제품 routing decision에 연결한다. 별도 E5-base 768D encoder는 [`difficulty-lightgbm-shadow.md`](difficulty-lightgbm-shadow.md)의 offline/제한 shadow process에서만 허용하며 이 계약이나 LR artifact를 교체하지 않는다.
 
 ## 1. Canonical Pipeline
 
