@@ -278,7 +278,7 @@ order by count(*) desc, surface, project_id`, cte), args...)
 
 func buildAnalyticsPolicyImpactFilteredCTE(filter invocationlog.AnalyticsPolicyImpactFilter) (string, []any) {
 	args := []any{filter.From.UTC(), filter.To.UTC()}
-	projectWhere := []string{"created_at >= $1", "created_at < $2"}
+	projectWhere := []string{"logs.created_at >= $1", "logs.created_at < $2"}
 	tenantChatWhere := []string{
 		"completed_at >= $1", "completed_at < $2",
 		"surface = 'tenant_chat'", "execution_scope_kind = 'tenant_chat'",
@@ -286,7 +286,7 @@ func buildAnalyticsPolicyImpactFilteredCTE(filter invocationlog.AnalyticsPolicyI
 	if isPostgresUUID(filter.TenantID) {
 		args = append(args, filter.TenantID)
 		placeholder := fmt.Sprintf("$%d", len(args))
-		projectWhere = append(projectWhere, "tenant_id = "+placeholder)
+		projectWhere = append(projectWhere, "logs.tenant_id = "+placeholder)
 		tenantChatWhere = append(tenantChatWhere, "tenant_id = "+placeholder)
 	} else {
 		projectWhere = append(projectWhere, "1 = 0")
@@ -294,57 +294,104 @@ func buildAnalyticsPolicyImpactFilteredCTE(filter invocationlog.AnalyticsPolicyI
 	}
 	includeTenantChat := filter.ProjectID == ""
 	if !includeTenantChat {
-		addUUIDWhere(&projectWhere, &args, "project_id", filter.ProjectID)
+		addUUIDWhere(&projectWhere, &args, "logs.project_id", filter.ProjectID)
 	}
 
-	safetyOutcome := metadataOutcomeSQL("safety", `case coalesce(nullif(masking_action, ''), 'none') when 'blocked' then 'blocked' when 'redacted' then 'redacted' else 'passed' end`)
-	fallbackOutcome := metadataOutcomeSQL("fallback", `'not_called'`)
-	budgetOutcome := metadataOutcomeSQL("budget", `'not_checked'`)
+	safetyOutcome := `coalesce(
+      nullif(meta."domainOutcomes" #>> '{safety,outcome}', ''),
+      nullif(meta."gatewayStageOutcomes" #>> '{domainOutcomes,safety,outcome}', ''),
+      case coalesce(nullif(logs.masking_action, ''), 'none')
+        when 'blocked' then 'blocked'
+        when 'redacted' then 'redacted'
+        else 'passed'
+      end
+    )`
+	terminalStatus := `coalesce(
+      nullif(meta."terminalStatus", ''),
+      nullif(meta."gatewayStageOutcomes" #>> '{terminalStatus}', ''),
+      logs.status
+    )`
+	fallbackOutcome := `coalesce(
+      nullif(meta."domainOutcomes" #>> '{fallback,outcome}', ''),
+      nullif(meta."gatewayStageOutcomes" #>> '{domainOutcomes,fallback,outcome}', ''),
+      'not_called'
+    )`
+	budgetOutcome := `coalesce(
+      nullif(meta."domainOutcomes" #>> '{budget,outcome}', ''),
+      nullif(meta."gatewayStageOutcomes" #>> '{domainOutcomes,budget,outcome}', ''),
+      'not_checked'
+    )`
+	projectSource := fmt.Sprintf(`
+project_source as materialized (
+  /* Parse the TOASTed metadata object once before policy expressions reuse its fields. */
+  select
+    logs.project_id::text as project_id,
+    logs.created_at as occurred_at,
+    nullif(logs.provider, '') as provider_key,
+    nullif(logs.model, '') as model_key,
+    lower(nullif(meta."promptDifficulty", '')) as prompt_difficulty,
+    case lower(nullif(meta."providerCalled", ''))
+      when 'true' then true
+      when '1' then true
+      else false
+    end as provider_called,
+    logs.cost_micro_usd::bigint as cost_micro_usd,
+    logs.saved_cost_micro_usd::bigint as saved_cost_micro_usd,
+    coalesce(nullif(logs.masking_action, ''), 'none') as masking_action,
+    coalesce(nullif(logs.cache_status, ''), 'bypass') as cache_status,
+    %s as safety_outcome,
+    %s as terminal_status,
+    %s as fallback_outcome,
+    %s as budget_outcome
+  from p0_llm_invocation_logs logs
+  cross join lateral jsonb_to_record(logs.metadata) as meta(
+    "promptDifficulty" text,
+    "providerCalled" text,
+    "terminalStatus" text,
+    "domainOutcomes" jsonb,
+    "gatewayStageOutcomes" jsonb
+  )
+  where %s
+)`, safetyOutcome, terminalStatus, fallbackOutcome, budgetOutcome, strings.Join(projectWhere, " and "))
+
 	projectBranch := fmt.Sprintf(`
   select
     '%s'::text as surface,
-    project_id::text as project_id,
-    created_at as occurred_at,
-    nullif(provider, '') as provider_key,
-    nullif(model, '') as model_key,
+    project_id,
+    occurred_at,
+    provider_key,
+    model_key,
     'difficulty'::text as routing_scheme,
-    case lower(nullif(metadata->>'promptDifficulty', ''))
+    case prompt_difficulty
       when 'simple' then 'simple'
       when 'complex' then 'complex'
       else null
     end as routing_role,
-    cost_micro_usd::bigint as cost_micro_usd,
-    saved_cost_micro_usd::bigint as saved_cost_micro_usd,
-    coalesce(nullif(masking_action, ''), 'none') as masking_action,
-    coalesce(nullif(cache_status, ''), 'bypass') = 'hit' as is_cache_hit,
-    coalesce(nullif(masking_action, ''), 'none') = 'redacted' as is_pii_masked,
-    %s = 'blocked' as is_safety_blocked,
-    %s = 'rate_limited' as is_rate_limited,
-    %s = 'success' as is_fallback_success,
+    cost_micro_usd,
+    saved_cost_micro_usd,
+    masking_action,
+    cache_status = 'hit' as is_cache_hit,
+    masking_action = 'redacted' as is_pii_masked,
+    safety_outcome = 'blocked' as is_safety_blocked,
+    terminal_status = 'rate_limited' as is_rate_limited,
+    fallback_outcome = 'success' as is_fallback_success,
     false as is_quota_blocked,
-    %s in ('blocked', 'hard_limit_exceeded', 'exceeded') as is_budget_blocked,
+    budget_outcome in ('blocked', 'hard_limit_exceeded', 'exceeded') as is_budget_blocked,
     false as is_concurrency_limited,
     false as is_policy_ack_required,
     (
-      coalesce(nullif(cache_status, ''), 'bypass') = 'hit'
-      or %s = 'blocked'
-      or %s = 'rate_limited'
-      or %s in ('blocked', 'hard_limit_exceeded', 'exceeded')
+      cache_status = 'hit'
+      or safety_outcome = 'blocked'
+      or terminal_status = 'rate_limited'
+      or budget_outcome in ('blocked', 'hard_limit_exceeded', 'exceeded')
     ) as avoided_provider_call,
-    (coalesce(nullif(masking_action, ''), 'none') in ('redacted', 'blocked') or %s = 'blocked') as protected_request,
+    (masking_action in ('redacted', 'blocked') or safety_outcome = 'blocked') as protected_request,
     (
-      case lower(nullif(metadata->>'providerCalled', ''))
-        when 'true' then true
-        when '1' then true
-        else false
-      end
-      or nullif(provider, '') is not null
-      or nullif(model, '') is not null
+      provider_called
+      or provider_key is not null
+      or model_key is not null
     ) as model_observation_eligible
-  from p0_llm_invocation_logs
-  where %s`, invocationlog.AnalyticsSurfaceProjectApplication, safetyOutcome, terminalStatusSQL,
-		fallbackOutcome, budgetOutcome, safetyOutcome, terminalStatusSQL, budgetOutcome, safetyOutcome,
-		strings.Join(projectWhere, " and "))
+  from project_source`, invocationlog.AnalyticsSurfaceProjectApplication)
 
 	branches := []string{projectBranch}
 	if includeTenantChat {
@@ -391,7 +438,7 @@ func buildAnalyticsPolicyImpactFilteredCTE(filter invocationlog.AnalyticsPolicyI
   from tenant_chat_invocation_logs
   where %s`, invocationlog.AnalyticsSurfaceTenantChat, strings.Join(tenantChatWhere, " and ")))
 	}
-	return "with filtered as not materialized (" + strings.Join(branches, "\nunion all\n") + "\n)", args
+	return "with " + projectSource + ",\nfiltered as not materialized (" + strings.Join(branches, "\nunion all\n") + "\n)", args
 }
 
 func policyImpactBucketConfig(filter invocationlog.AnalyticsPolicyImpactFilter) invocationlog.TimeSeriesBucketConfig {
