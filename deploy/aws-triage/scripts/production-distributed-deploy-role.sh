@@ -366,6 +366,7 @@ if [[ "${role}" == "data" ]]; then
   apply_sql_file "${repo_dir}/deploy/aws-triage/migrations/002_drop_legacy_selected_routing_columns.sql"
   apply_sql_file "${repo_dir}/deploy/aws-triage/migrations/003_add_p0_invocation_log_ttft.sql"
   apply_sql_file "${repo_dir}/deploy/aws-triage/migrations/004_add_p0_dashboard_rollup_indexes.sql"
+  apply_sql_file "${repo_dir}/deploy/aws-triage/migrations/005_prepare_p0_monthly_partitioning.sql"
 fi
 
 cutover_started=true

@@ -590,6 +590,7 @@ apply_sql_file "${repo_dir}/db/seeds/002_seed_dashboard_pricing_catalog.sql"
 apply_sql_file "${deploy_dir}/migrations/002_drop_legacy_selected_routing_columns.sql"
 apply_sql_file "${deploy_dir}/migrations/003_add_p0_invocation_log_ttft.sql"
 apply_sql_file "${deploy_dir}/migrations/004_add_p0_dashboard_rollup_indexes.sql"
+apply_sql_file "${deploy_dir}/migrations/005_prepare_p0_monthly_partitioning.sql"
 
 cutover_started=true
 deploy_log "Recreating application services."

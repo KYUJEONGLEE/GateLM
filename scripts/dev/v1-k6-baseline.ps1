@@ -184,6 +184,7 @@ if (-not $SkipDbPrepare) {
         "db/migrations/008_alter_gateway_rate_limit_counters_cascade.sql",
         "db/migrations/016_add_p0_invocation_log_ttft.sql",
         "db/migrations/017_add_p0_dashboard_rollup_indexes.sql",
+        "db/migrations/018_prepare_p0_monthly_partitioning.sql",
         "db/seeds/001_seed_p0_demo_data.sql"
     )
     Push-Location $repoRoot

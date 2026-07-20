@@ -515,7 +515,7 @@ insert into p0_llm_invocation_logs (
   $31, $32, $33, $34, $35, $36, $37, $38, $39, $40,
   $41, $42, $43, $44, $45
 )
-on conflict (request_id) do nothing`
+on conflict do nothing`
 
 const upsertNotificationEventSQL = `
 insert into notification_events (
