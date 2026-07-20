@@ -238,7 +238,43 @@ A signed service-to-service request can be replayed while it remains valid. Sign
 
 This establishes the shared-state replay guard. It does not by itself prove signing-key rotation operations or cross-region Redis replication behavior.
 
-## 10. Large-Scale Validation Still Required
+## 10. Request-Path Success Does Not Prove Dashboard Pipeline Capacity
+
+### Failure mode
+
+A sustained request run can complete and persist every terminal log while the asynchronous dashboard pipeline is already falling behind. When a closed Rollup bucket cannot be rebuilt, aggregate coverage remains incomplete. A dashboard reader can then return to the raw request log while the Rollup worker is also scanning and rewriting aggregate state. Repeating that work from a one-second UI poll can saturate the shared PostgreSQL host after the load generator has stopped.
+
+### How the current implementation exposes the failure
+
+- The Web dashboard requests a snapshot every one second.
+- One snapshot route fans out overview, cost, live-request, and month-to-date reads in parallel.
+- The Gateway uses Rollup rows only when coverage is complete; otherwise it executes the raw aggregation path.
+- A Rollup bucket rebuild runs in a transaction with a 60-second timeout.
+- A failed bucket is retried with exponential backoff capped at 300 seconds.
+
+### Operational evidence and containment
+
+On 2026-07-20, a Krafton-isolated `300 RPS × 10 minute` Mock run wrote 180,001 successful request-log rows. The request stage completed, but the Data host later reached PostgreSQL container CPU of about 190–199%. Closing the dashboard and draining its raw reads reduced CPU to about 100%; relation locks identified the remaining query as the Control Plane Rollup worker reading `p0_llm_invocation_logs` and writing the Rollup tables.
+
+The active Rollup transaction was canceled and `DASHBOARD_ROLLUP_ENABLED` was temporarily changed to `false` before recreating only Control Plane. PostgreSQL CPU changed from `100.24%` to `0.07% / 0.06% / 0.29%` at the immediate, 15-second, and 45-second samples. Both Gateway NLB targets, the Control Plane health check, and the public Web and Chat boundaries remained healthy.
+
+Read-only profiling then isolated the failed hour bucket at 37,886 source rows with metadata averaging 3,518 bytes. The original light dimension plan expanded it to 303,088 intermediate rows, spilled a 72,680 kB external merge sort, and took 13,209.823 ms. Materializing the normalized source CTE reduced the same light comparison to 3,289.948 ms (75.1% lower); the full dimension histogram query completed in 5,341.990 ms. This is evidence for the query-plan fix on that bucket, not yet proof that the undiscovered 180,001-row Krafton bucket or concurrent Dashboard traffic is safe.
+
+### Evidence
+
+- [Production 300 RPS × 10 minute Rollup incident report](../../reports/perf/production-krafton-300rps-10m-dashboard-rollup-incident-20260720.ko.md)
+- [One-second dashboard snapshot interval](../../apps/web/src/lib/dashboard/live-dashboard-snapshot.ts)
+- [Dashboard snapshot fan-out](../../apps/web/src/app/api/dashboard/snapshot/route.ts)
+- [Incomplete Rollup coverage falls back to the raw path](../../apps/gateway-core/internal/adapters/invocationlog/postgres/query_reader.go)
+- [Hybrid Rollup and raw-range reader](../../apps/gateway-core/internal/adapters/invocationlog/postgres/dashboard_rollup_hybrid.go)
+- [Rollup transaction timeout and retry backoff](../../apps/control-plane-api/src/modules/dashboard-rollup/dashboard-rollup.service.ts)
+- [Production query profile and claim boundary](../../reports/perf/production-krafton-300rps-10m-dashboard-rollup-incident-20260720.ko.md)
+
+### Claim boundary
+
+The operational evidence was collected on 2026-07-20 with deployed image tag `production-distributed-23c6e6d847de`. It proves the diagnosed failure and the immediate containment on that environment. It does not prove a permanent fix: the production Rollup worker is temporarily disabled, and opening the dashboard can still reintroduce raw-query pressure until polling, fallback, query budgets, and Rollup backfill are changed and retested.
+
+## 11. Large-Scale Validation Still Required
 
 The following claims must not be made until they are measured on the target environment:
 
@@ -255,7 +291,8 @@ Suggested evidence-producing tests are:
 2. multiple RAG workers with forced lease expiry: verify one claim per attempt and no stale transition;
 3. fixed tenant chunk-size tiers: measure exact vector-query p50/p95 and document when ANN indexing becomes necessary;
 4. request and token-weight burst tests: verify Redis limiter decisions and zero provider calls after rejection;
-5. long-running SSE reconnect soak: verify no duplicate stream completion or duplicate persistence.
+5. long-running SSE reconnect soak: verify no duplicate stream completion or duplicate persistence;
+6. dashboard-aware load drain: stop k6, wait for log queue drain and Rollup catch-up, then verify zero dirty buckets, bounded snapshot p95, and PostgreSQL CPU recovery.
 
 ## Presentation-safe Summary
 
