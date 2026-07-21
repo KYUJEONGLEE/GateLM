@@ -33,6 +33,10 @@ func TestProjectReaderUsesClickHouseCompatibleAliasesAndBucketConversions(t *tes
 			_, _ = io.WriteString(w, `{"option_type":"requested_model","value":"z-model","scope_type":"","scope_id":"","resolved_by":""}`+"\n")
 			_, _ = io.WriteString(w, `{"option_type":"requested_model","value":"a-model","scope_type":"","scope_id":"","resolved_by":""}`+"\n")
 			_, _ = io.WriteString(w, `{"option_type":"budget_scope","value":"","scope_type":"employee","scope_id":"employee-1","resolved_by":"api_key"}`+"\n")
+		case strings.Contains(statement, "fallback_requests"):
+			_, _ = io.WriteString(w, `{"requests":1,"success":0,"failed":1,"blocked":0,"rate_limited":0,"cancelled":0,"unknown":0,"fallback_requests":0,"fallback_success":0,"last_ms":1784638923000}`+"\n")
+		case strings.Contains(statement, "occurred_ms"):
+			_, _ = io.WriteString(w, `{"request_id":"request-1","project_id_text":"00000000-0000-4000-8000-000000000200","provider":"mock","model":"mock-balanced","status":"failed","fallback":"","http_status":500,"occurred_ms":1784638923000}`+"\n")
 		}
 	}))
 	defer server.Close()
@@ -92,5 +96,19 @@ func TestProjectReaderUsesClickHouseCompatibleAliasesAndBucketConversions(t *tes
 		if strings.Contains(statement, "toUnixTimestamp64Milli(toStartOf") || !strings.Contains(statement, "toUnixTimestamp(toStartOf") {
 			t.Fatalf("bucket conversion must support ClickHouse DateTime results: %s", statement)
 		}
+	}
+
+	reliability, err := reader.GetAnalyticsReliability(context.Background(), invocationlog.AnalyticsReliabilityFilter{
+		TenantID: filter.TenantID, ProjectID: filter.ProjectID, Surface: invocationlog.AnalyticsReliabilitySurfaceProjectApplication,
+		From: filter.From, To: filter.To, IncidentLimit: 20,
+	})
+	if err != nil {
+		t.Fatalf("reliability: %v", err)
+	}
+	if len(reliability.RecentIncidents) != 1 || reliability.RecentIncidents[0].ProjectID == nil || *reliability.RecentIncidents[0].ProjectID != filter.ProjectID {
+		t.Fatalf("unexpected reliability incidents: %+v", reliability.RecentIncidents)
+	}
+	if len(queries) != 6 || !strings.Contains(queries[5], "project_id_text") || strings.Contains(queries[5], "toString(project_id) project_id,") {
+		t.Fatalf("reliability project alias must not shadow the UUID filter column: %v", queries)
 	}
 }
