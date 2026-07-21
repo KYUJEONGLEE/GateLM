@@ -1,0 +1,147 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gatelm.local/docs/testing/routing/difficulty/schemas/lightgbm-dimension-tuning-final-evidence.schema.json",
+  "title": "GateLM four-feature LightGBM tuning aggregate evidence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "experimentId",
+    "experimentVersion",
+    "status",
+    "promotionState",
+    "runtimeProfileGenerated",
+    "candidateOrder",
+    "splitCounts",
+    "splitMembershipSha256",
+    "hyperparameterCandidateCountPerFeature",
+    "completedFoldRuns",
+    "selectedCFn",
+    "selectedFeatureCandidate",
+    "selectedHyperparameterCandidateId",
+    "freezeSha256",
+    "testEvidenceSha256",
+    "validationCandidates",
+    "test",
+    "containsPromptMaterial",
+    "containsEmbeddingMatrix",
+    "containsPerSampleScore",
+    "evidenceSha256"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "gatelm.lightgbm-dimension-tuning-final-evidence.v1"
+    },
+    "experimentId": { "$ref": "#/$defs/identifier" },
+    "experimentVersion": { "$ref": "#/$defs/identifier" },
+    "status": { "const": "executed" },
+    "promotionState": { "const": "exploratory_only" },
+    "runtimeProfileGenerated": { "const": false },
+    "candidateOrder": {
+      "const": [
+        "rule_42_plus_e5_small_pca_64",
+        "rule_42_plus_semantic_heads_12",
+        "e5_base_raw_768",
+        "rule_42_plus_e5_base_raw_768"
+      ]
+    },
+    "splitCounts": {
+      "const": { "train": 350, "validation": 75, "test": 75 }
+    },
+    "splitMembershipSha256": { "$ref": "#/$defs/sha256" },
+    "hyperparameterCandidateCountPerFeature": { "const": 80 },
+    "completedFoldRuns": { "const": 1600 },
+    "selectedCFn": { "const": 5 },
+    "selectedFeatureCandidate": { "$ref": "#/$defs/candidateName" },
+    "selectedHyperparameterCandidateId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "freezeSha256": { "$ref": "#/$defs/sha256" },
+    "testEvidenceSha256": { "$ref": "#/$defs/sha256" },
+    "validationCandidates": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "items": { "$ref": "#/$defs/validationCandidate" }
+    },
+    "test": {
+      "type": "object",
+      "required": [
+        "selectedCandidateCount",
+        "overall",
+        "safety",
+        "categoryAndSlice",
+        "familyGroupBootstrap"
+      ],
+      "properties": {
+        "selectedCandidateCount": { "const": 1 },
+        "overall": { "type": "object" },
+        "safety": { "type": "object" },
+        "categoryAndSlice": { "type": "object" },
+        "familyGroupBootstrap": { "type": "object" }
+      }
+    },
+    "containsPromptMaterial": { "const": false },
+    "containsEmbeddingMatrix": { "const": false },
+    "containsPerSampleScore": { "const": false },
+    "evidenceSha256": { "$ref": "#/$defs/sha256" }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{0,159}$"
+    },
+    "candidateName": {
+      "enum": [
+        "rule_42_plus_e5_small_pca_64",
+        "rule_42_plus_semantic_heads_12",
+        "e5_base_raw_768",
+        "rule_42_plus_e5_base_raw_768"
+      ]
+    },
+    "artifactIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["relativePath", "sizeBytes", "sha256"],
+      "properties": {
+        "relativePath": { "type": "string", "minLength": 1 },
+        "sizeBytes": { "type": "integer", "minimum": 1 },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "validationCandidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "featureCandidate",
+        "dimension",
+        "selectedHyperparameterCandidateId",
+        "selectedParameters",
+        "bestIteration",
+        "calibratorType",
+        "threshold",
+        "eligibleForSelection",
+        "validation",
+        "model"
+      ],
+      "properties": {
+        "featureCandidate": { "$ref": "#/$defs/candidateName" },
+        "dimension": { "enum": [54, 106, 768, 810] },
+        "selectedHyperparameterCandidateId": {
+          "type": "string",
+          "pattern": "^lgb-[a-f0-9]{16}$"
+        },
+        "selectedParameters": { "type": "object" },
+        "bestIteration": { "type": "integer", "minimum": 1 },
+        "calibratorType": { "enum": ["none", "platt", "isotonic"] },
+        "threshold": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+        "eligibleForSelection": { "type": "boolean" },
+        "validation": { "type": "object" },
+        "model": { "$ref": "#/$defs/artifactIdentity" }
+      }
+    }
+  }
+}

@@ -18,21 +18,23 @@ from .lightgbm_input_ablation import (
     sha256_file,
 )
 from .semantic_heads_cli import load_training_input
+from .canonical_dataset import (
+    CANONICAL_DATASET,
+    CANONICAL_MANIFEST,
+    experiment_manifest,
+    require_canonical_dataset,
+)
 
 
 TOOL_ROOT = Path(__file__).resolve().parents[1]
 REPOSITORY_ROOT = TOOL_ROOT.parents[1]
-DEFAULT_DATASET = REPOSITORY_ROOT / (
-    "docs/v2.1.0/training/difficulty-training-candidate-500.owner-approved.jsonl"
-)
-DEFAULT_MANIFEST = REPOSITORY_ROOT / (
-    "docs/v2.1.0/training/difficulty-training-candidate-500.owner-approved.manifest.json"
-)
+DEFAULT_DATASET = CANONICAL_DATASET
+DEFAULT_MANIFEST = CANONICAL_MANIFEST
 DEFAULT_BASE_ARTIFACT_ROOT = REPOSITORY_ROOT / ".tmp/difficulty-lightgbm-e5-base-artifacts"
 DEFAULT_BASE_LOCK = TOOL_ROOT / (
-    "artifacts/lightgbm-four-way-owner-approved-500/e5-base-runtime-lock.v1.json"
+    "artifacts/lightgbm-four-way-owner-approved-15000/e5-base-runtime-lock.v1.json"
 )
-DEFAULT_OUTPUT = TOOL_ROOT / "artifacts/lightgbm-input-ablation-owner-approved-500"
+DEFAULT_OUTPUT = TOOL_ROOT / "artifacts/lightgbm-input-ablation-owner-approved-15000"
 DEFAULT_DESIGN = REPOSITORY_ROOT / (
     "docs/testing/routing/difficulty/lightgbm-input-ablation-experiment-design.md"
 )
@@ -52,13 +54,13 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
-    manifest = json.loads(args.dataset_manifest.read_text(encoding="utf-8"))
-    if manifest.get("trainingEligible") is not True or manifest.get("labelCoverageStatus") != "complete":
-        raise ValueError("input ablation requires the approved training-eligible dataset")
+    manifest = experiment_manifest(
+        require_canonical_dataset(args.dataset, args.dataset_manifest)
+    )
     exported = load_training_input(args.dataset, args.dataset_manifest, args.go)
     samples = exported.get("samples")
-    if not isinstance(samples, list) or len(samples) != 500:
-        raise ValueError("semantic exporter must return the approved 500 aligned records")
+    if not isinstance(samples, list) or len(samples) != 15_000:
+        raise ValueError("semantic exporter must return all 15,000 approved records")
 
     base_lock = load_lock(args.base_lock, artifact_root=args.base_artifact_root)
     runtime = E5BaseEncoderRuntime(artifact_root=args.base_artifact_root, lock=base_lock)
@@ -120,7 +122,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             "manifestSha256": exported["manifestSha256"],
             "splitPolicyVersion": manifest["splitPolicyVersion"],
             "trainingEligible": True,
-            "humanReviewedFamilies": manifest["counts"]["humanReviewedFamilies"],
+            "humanReviewedRecords": manifest["humanReviewedRecords"],
         },
         encoder_provenance=encoder_provenance,
         design_provenance={

@@ -13,12 +13,14 @@ gatelm-train-difficulty = "gatelm_difficulty_model.cli:main"
 gatelm-difficulty-e5-encoder = "gatelm_difficulty_model.e5_encoder_cli:main"
 gatelm-train-difficulty-semantic-heads = "gatelm_difficulty_model.semantic_heads_cli:main"
 gatelm-train-difficulty-semantic-candidates = "gatelm_difficulty_model.candidate_cli:main"
-gatelm-gateway-holdout-reference = "gatelm_difficulty_model.gateway_holdout_reference:main"
+gatelm-replay-historical-gateway-holdout = "gatelm_difficulty_model.gateway_holdout_reference:main"
 gatelm-difficulty-calibration-feasibility = "gatelm_difficulty_model.calibration_feasibility_cli:main"
 gatelm-difficulty-threshold-candidate = "gatelm_difficulty_model.threshold_candidate_cli:main"
-gatelm-train-difficulty-model-path-5000 = "gatelm_difficulty_model.model_path_5000:main"
+gatelm-replay-historical-difficulty-model-path-5000 = "gatelm_difficulty_model.model_path_5000:main"
 gatelm-lightgbm-embedding-experiment = "gatelm_difficulty_model.lightgbm_embedding_experiment_cli:main"
 gatelm-lightgbm-four-way = "gatelm_difficulty_model.lightgbm_four_way_cli:main"
+gatelm-lightgbm-input-ablation = "gatelm_difficulty_model.lightgbm_input_ablation_cli:main"
+gatelm-lightgbm-dimension-tuning = "gatelm_difficulty_model.lightgbm_dimension_tuning_bridge_cli:main"
 
 [project.optional-dependencies]
 lightgbm-shadow = [

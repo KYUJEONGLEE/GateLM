@@ -10,50 +10,89 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 
 	"gatelm/apps/gateway-core/internal/domain/routing"
 )
 
 const (
-	defaultLabelDatasetPath  = "docs/v2.1.0/fixtures/difficulty-label-contract-smoke.fixture.jsonl"
-	defaultLabelManifestPath = "docs/v2.1.0/fixtures/difficulty-label-contract-smoke.manifest.json"
+	defaultLabelDatasetPath  = "docs/routing/datasets/difficulty/data/initial-routing-difficulty-15000.owner-approved.jsonl"
+	defaultLabelManifestPath = "docs/routing/datasets/difficulty/data/initial-routing-difficulty-15000.owner-approved.manifest.json"
 )
 
 type semanticHeadDatasetRecord struct {
-	SchemaVersion       string   `json:"schemaVersion"`
-	DatasetVersion      string   `json:"datasetVersion"`
-	SampleID            string   `json:"sampleId"`
-	RedactedPrompt      string   `json:"redactedPrompt"`
-	ExpectedCategory    string   `json:"expectedCategory"`
-	ExpectedDifficulty  string   `json:"expectedDifficulty"`
-	SemanticInputStatus string   `json:"semanticInputStatus"`
-	TaskBucket          string   `json:"taskBucket"`
-	ConstraintBucket    string   `json:"constraintBucket"`
-	ScopeBucket         string   `json:"scopeBucket"`
-	DependencyBucket    string   `json:"dependencyBucket"`
-	PromptFamily        string   `json:"promptFamily"`
-	Language            string   `json:"language"`
-	EvaluationSlices    []string `json:"evaluationSlices"`
-	LabelSource         string   `json:"labelSource"`
-	ReviewStatus        string   `json:"reviewStatus"`
-	ReviewerCount       int      `json:"reviewerCount"`
+	SchemaVersion               string   `json:"schemaVersion"`
+	DatasetVersion              string   `json:"datasetVersion"`
+	SampleID                    string   `json:"sampleId"`
+	RedactedPrompt              string   `json:"redactedPrompt"`
+	ExpectedCategory            string   `json:"expectedCategory"`
+	ExpectedDifficulty          string   `json:"expectedDifficulty"`
+	SemanticInputStatus         string   `json:"semanticInputStatus"`
+	TaskBucket                  string   `json:"taskBucket"`
+	ConstraintBucket            string   `json:"constraintBucket"`
+	ScopeBucket                 string   `json:"scopeBucket"`
+	DependencyBucket            string   `json:"dependencyBucket"`
+	PromptFamily                string   `json:"promptFamily"`
+	Language                    string   `json:"language"`
+	EvaluationSlices            []string `json:"evaluationSlices"`
+	LabelSource                 string   `json:"labelSource"`
+	ReviewStatus                string   `json:"reviewStatus"`
+	ReviewerCount               int      `json:"reviewerCount"`
+	CanonicalSchemaVersion      string   `json:"schema_version"`
+	CanonicalDatasetVersion     string   `json:"dataset_version"`
+	CanonicalSampleID           string   `json:"sample_id"`
+	CanonicalRedactedPrompt     string   `json:"redacted_prompt"`
+	CanonicalExpectedCategory   string   `json:"expected_category"`
+	CanonicalLabel              string   `json:"label"`
+	CanonicalHumanReviewed      bool     `json:"human_reviewed"`
+	CanonicalReviewStatus       string   `json:"review_status"`
+	CanonicalGroupID            string   `json:"group_id"`
+	CanonicalSplit              string   `json:"split"`
+	CanonicalLengthBucket       string   `json:"length_bucket"`
+	CanonicalReasoningLevel     string   `json:"reasoning_level"`
+	CanonicalTaskStepCount      int      `json:"task_step_count"`
+	CanonicalConstraintCount    int      `json:"constraint_count"`
+	CanonicalHasFile            bool     `json:"has_file"`
+	CanonicalToolRequired       bool     `json:"tool_required"`
+	CanonicalBoundaryCase       bool     `json:"boundary_case"`
+	CanonicalCounterexampleType *string  `json:"counterexample_type"`
+	CanonicalTaskType           string   `json:"task_type"`
+	CanonicalServiceDomain      string   `json:"service_domain"`
 }
 
 type semanticHeadDatasetManifest struct {
-	SchemaVersion       string                        `json:"schemaVersion"`
-	DatasetVersion      string                        `json:"datasetVersion"`
-	RecordSchemaVersion string                        `json:"recordSchemaVersion"`
-	DatasetSHA256       string                        `json:"datasetSha256"`
-	DatasetPurpose      string                        `json:"datasetPurpose"`
-	TrainingEligible    bool                          `json:"trainingEligible"`
-	LabelCoverageStatus string                        `json:"labelCoverageStatus"`
-	FamilyPolicyVersion string                        `json:"familyPolicyVersion"`
-	SplitPolicyVersion  string                        `json:"splitPolicyVersion"`
-	SplitSeed           int                           `json:"splitSeed"`
-	SplitCounts         map[string]semanticSplitCount `json:"splitCounts"`
-	TrainingGate        semanticHeadTrainingGate      `json:"trainingGate"`
-	Families            []semanticHeadManifestFamily  `json:"families"`
+	SchemaVersion                string                        `json:"schemaVersion"`
+	DatasetVersion               string                        `json:"datasetVersion"`
+	RecordSchemaVersion          string                        `json:"recordSchemaVersion"`
+	DatasetSHA256                string                        `json:"datasetSha256"`
+	DatasetPurpose               string                        `json:"datasetPurpose"`
+	TrainingEligible             bool                          `json:"trainingEligible"`
+	LabelCoverageStatus          string                        `json:"labelCoverageStatus"`
+	FamilyPolicyVersion          string                        `json:"familyPolicyVersion"`
+	SplitPolicyVersion           string                        `json:"splitPolicyVersion"`
+	SplitSeed                    int                           `json:"splitSeed"`
+	SplitCounts                  map[string]semanticSplitCount `json:"splitCounts"`
+	TrainingGate                 semanticHeadTrainingGate      `json:"trainingGate"`
+	Families                     []semanticHeadManifestFamily  `json:"families"`
+	CanonicalSchemaVersion       string                        `json:"schema_version"`
+	CanonicalDatasetVersion      string                        `json:"dataset_version"`
+	CanonicalRecordSchemaVersion string                        `json:"record_schema_version"`
+	CanonicalDatasetSHA256       string                        `json:"dataset_sha256"`
+	CanonicalGenerationSeed      int                           `json:"generation_seed"`
+	CanonicalScope               canonicalManifestScope        `json:"scope"`
+	CanonicalReview              canonicalManifestReview       `json:"review"`
+}
+
+type canonicalManifestScope struct {
+	TrainingEligible bool     `json:"training_eligible"`
+	TrainingBlockers []string `json:"training_blockers"`
+}
+
+type canonicalManifestReview struct {
+	HumanReviewed    bool `json:"human_reviewed"`
+	ProductionGold   bool `json:"production_gold"`
+	TrainingEligible bool `json:"training_eligible"`
 }
 
 type semanticSplitCount struct {
@@ -207,6 +246,9 @@ func buildSemanticHeadTrainingInputForPhase(
 	if err := json.Unmarshal(manifestBytes, &manifest); err != nil {
 		return semanticHeadTrainingInput{}, fmt.Errorf("decode semantic head manifest: %w", err)
 	}
+	if err := normalizeCanonicalManifest(&manifest, datasetBytes); err != nil {
+		return semanticHeadTrainingInput{}, err
+	}
 	if err := validateSemanticHeadManifest(manifest); err != nil {
 		return semanticHeadTrainingInput{}, err
 	}
@@ -274,6 +316,9 @@ func buildSemanticHeadTrainingInputForPhase(
 		var record semanticHeadDatasetRecord
 		if err := json.Unmarshal(scanner.Bytes(), &record); err != nil {
 			return semanticHeadTrainingInput{}, fmt.Errorf("decode semantic head record line %d: %w", lineNumber, err)
+		}
+		if err := normalizeCanonicalRecord(&record, manifest.DatasetVersion); err != nil {
+			return semanticHeadTrainingInput{}, fmt.Errorf("semantic head record line %d: %w", lineNumber, err)
 		}
 		if record.SchemaVersion != "gatelm.difficulty-label-record.v2" || record.DatasetVersion != manifest.DatasetVersion {
 			return semanticHeadTrainingInput{}, fmt.Errorf("semantic head record line %d has an unsupported schema or dataset version", lineNumber)
@@ -391,6 +436,224 @@ func buildSemanticHeadTrainingInputForPhase(
 	return result, nil
 }
 
+func normalizeCanonicalManifest(manifest *semanticHeadDatasetManifest, datasetBytes []byte) error {
+	if manifest.CanonicalSchemaVersion == "" {
+		return nil
+	}
+	if manifest.CanonicalSchemaVersion != "gatelm.routing-difficulty-dataset-manifest.v1" ||
+		manifest.CanonicalRecordSchemaVersion != "gatelm.routing-difficulty-dataset-record.v1" {
+		return errors.New("unsupported canonical routing dataset manifest schema")
+	}
+	if !manifest.CanonicalScope.TrainingEligible || len(manifest.CanonicalScope.TrainingBlockers) != 0 ||
+		!manifest.CanonicalReview.HumanReviewed || !manifest.CanonicalReview.ProductionGold ||
+		!manifest.CanonicalReview.TrainingEligible {
+		return errors.New("canonical routing dataset is not owner-approved training gold")
+	}
+	if strings.TrimSpace(manifest.CanonicalDatasetVersion) == "" || manifest.CanonicalGenerationSeed <= 0 {
+		return errors.New("canonical routing dataset identity is incomplete")
+	}
+
+	type familyState struct {
+		partition string
+		records   int
+	}
+	families := make(map[string]familyState)
+	scanner := bufio.NewScanner(bytes.NewReader(datasetBytes))
+	scanner.Buffer(make([]byte, 64*1024), 1024*1024)
+	for lineNumber := 1; scanner.Scan(); lineNumber++ {
+		if strings.TrimSpace(scanner.Text()) == "" {
+			continue
+		}
+		var record semanticHeadDatasetRecord
+		if err := json.Unmarshal(scanner.Bytes(), &record); err != nil {
+			return fmt.Errorf("decode canonical routing record line %d: %w", lineNumber, err)
+		}
+		if record.CanonicalSchemaVersion != "gatelm.routing-difficulty-dataset-record.v1" ||
+			strings.TrimSpace(record.CanonicalGroupID) == "" {
+			return fmt.Errorf("canonical routing record line %d has invalid schema or group", lineNumber)
+		}
+		partition, err := canonicalPartition(record.CanonicalSplit)
+		if err != nil {
+			return fmt.Errorf("canonical routing record line %d: %w", lineNumber, err)
+		}
+		state, exists := families[record.CanonicalGroupID]
+		if exists && state.partition != partition {
+			return fmt.Errorf("canonical routing group %q crosses splits", record.CanonicalGroupID)
+		}
+		state.partition = partition
+		state.records++
+		families[record.CanonicalGroupID] = state
+	}
+	if err := scanner.Err(); err != nil {
+		return fmt.Errorf("read canonical routing dataset: %w", err)
+	}
+	if len(families) == 0 {
+		return errors.New("canonical routing dataset contains no groups")
+	}
+
+	ids := make([]string, 0, len(families))
+	for id := range families {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	splitCounts := map[string]semanticSplitCount{
+		"train": {}, "calibration": {}, "holdout": {},
+	}
+	manifest.Families = make([]semanticHeadManifestFamily, 0, len(ids))
+	for _, id := range ids {
+		state := families[id]
+		manifest.Families = append(manifest.Families, semanticHeadManifestFamily{
+			PromptFamily: id, ReviewStatus: "approved", HumanReviewed: true,
+			Partition: state.partition, Records: state.records,
+		})
+		count := splitCounts[state.partition]
+		count.Families++
+		count.Records += state.records
+		splitCounts[state.partition] = count
+	}
+
+	manifest.SchemaVersion = "gatelm.difficulty-label-dataset-manifest.v2"
+	manifest.DatasetVersion = manifest.CanonicalDatasetVersion
+	manifest.RecordSchemaVersion = "gatelm.difficulty-label-record.v2"
+	manifest.DatasetSHA256 = manifest.CanonicalDatasetSHA256
+	manifest.DatasetPurpose = "training_candidate"
+	manifest.TrainingEligible = true
+	manifest.LabelCoverageStatus = "complete"
+	manifest.FamilyPolicyVersion = "routing-difficulty-group-id.v1"
+	manifest.SplitPolicyVersion = "routing-difficulty-group-split.2026-07-21.v1"
+	manifest.SplitSeed = manifest.CanonicalGenerationSeed
+	manifest.SplitCounts = splitCounts
+	manifest.TrainingGate = semanticHeadTrainingGate{
+		MinimumFamilyPolicyStatus: "versioned",
+		PolicyVersion:             "routing-difficulty-owner-approved-15000.v1",
+	}
+	return nil
+}
+
+func normalizeCanonicalRecord(record *semanticHeadDatasetRecord, datasetVersion string) error {
+	if record.CanonicalSchemaVersion == "" {
+		return nil
+	}
+	if record.CanonicalSchemaVersion != "gatelm.routing-difficulty-dataset-record.v1" ||
+		!record.CanonicalHumanReviewed || record.CanonicalReviewStatus != "approved" {
+		return errors.New("canonical routing record is not human-approved")
+	}
+	partition, err := canonicalPartition(record.CanonicalSplit)
+	if err != nil {
+		return err
+	}
+	if record.CanonicalLabel != routing.DifficultySimple && record.CanonicalLabel != routing.DifficultyComplex {
+		return errors.New("canonical routing record has an unsupported difficulty label")
+	}
+	if strings.TrimSpace(record.CanonicalSampleID) == "" || strings.TrimSpace(record.CanonicalGroupID) == "" ||
+		strings.TrimSpace(record.CanonicalRedactedPrompt) == "" {
+		return errors.New("canonical routing record identity is incomplete")
+	}
+
+	record.SchemaVersion = "gatelm.difficulty-label-record.v2"
+	record.DatasetVersion = datasetVersion
+	record.SampleID = record.CanonicalSampleID
+	record.RedactedPrompt = record.CanonicalRedactedPrompt
+	record.ExpectedCategory = record.CanonicalExpectedCategory
+	record.ExpectedDifficulty = record.CanonicalLabel
+	record.SemanticInputStatus = "eligible"
+	record.TaskBucket = countBucket(record.CanonicalTaskStepCount, 1)
+	record.ConstraintBucket = countBucket(record.CanonicalConstraintCount, 0)
+	scopeCount := record.CanonicalTaskStepCount
+	if record.CanonicalHasFile {
+		scopeCount++
+	}
+	if record.CanonicalToolRequired {
+		scopeCount++
+	}
+	record.ScopeBucket = scopeBucket(scopeCount)
+	record.DependencyBucket = dependencyBucket(record.CanonicalReasoningLevel)
+	record.PromptFamily = record.CanonicalGroupID
+	record.EvaluationSlices = canonicalEvaluationSlices(record)
+	record.LabelSource = "human_review"
+	record.ReviewStatus = "approved"
+	record.ReviewerCount = 1
+	_ = partition // family-derived partition remains authoritative in the normalized manifest.
+	return nil
+}
+
+func canonicalPartition(value string) (string, error) {
+	switch value {
+	case "train":
+		return "train", nil
+	case "validation":
+		return "calibration", nil
+	case "test":
+		return "holdout", nil
+	default:
+		return "", errors.New("canonical routing record has an invalid split")
+	}
+}
+
+func countBucket(value int, zeroFloor int) string {
+	if zeroFloor == 0 {
+		if value <= 1 {
+			return "count_0_to_1"
+		}
+		if value == 2 {
+			return "count_2"
+		}
+		return "count_3_plus"
+	}
+	if value <= 1 {
+		return "count_1"
+	}
+	if value == 2 {
+		return "count_2"
+	}
+	return "count_3_plus"
+}
+
+func scopeBucket(value int) string {
+	if value <= 1 {
+		return "count_1"
+	}
+	if value <= 3 {
+		return "count_2_to_3"
+	}
+	return "count_4_plus"
+}
+
+func dependencyBucket(value string) string {
+	switch value {
+	case "low":
+		return "depth_0_to_1"
+	case "medium":
+		return "depth_2"
+	case "high":
+		return "depth_3_plus"
+	default:
+		return ""
+	}
+}
+
+func canonicalEvaluationSlices(record *semanticHeadDatasetRecord) []string {
+	slices := []string{
+		"language_" + record.Language,
+		"length_" + record.CanonicalLengthBucket,
+		"task_" + record.CanonicalTaskType,
+		"domain_" + record.CanonicalServiceDomain,
+	}
+	if record.CanonicalLengthBucket == "long" && record.CanonicalLabel == routing.DifficultySimple {
+		slices = append(slices, "long_simple")
+	}
+	if record.CanonicalLengthBucket == "short" && record.CanonicalLabel == routing.DifficultyComplex {
+		slices = append(slices, "short_complex")
+	}
+	if record.CanonicalBoundaryCase {
+		slices = append(slices, "boundary_case")
+	}
+	if record.CanonicalCounterexampleType != nil && strings.TrimSpace(*record.CanonicalCounterexampleType) != "" {
+		slices = append(slices, "counterexample_"+*record.CanonicalCounterexampleType)
+	}
+	return slices
+}
+
 func orderedSemanticPartitions(included map[string]bool) []string {
 	partitions := make([]string, 0, len(included))
 	for _, partition := range []string{"train", "calibration", "holdout"} {
@@ -420,7 +683,8 @@ func validateSemanticHeadManifest(manifest semanticHeadDatasetManifest) error {
 	if manifest.DatasetPurpose != "training_candidate" || manifest.LabelCoverageStatus != "complete" {
 		return errors.New("semantic head training requires a complete training_candidate dataset")
 	}
-	if manifest.FamilyPolicyVersion != "difficulty-prompt-family.v1" ||
+	if (manifest.FamilyPolicyVersion != "difficulty-prompt-family.v1" &&
+		manifest.FamilyPolicyVersion != "routing-difficulty-group-id.v1") ||
 		manifest.TrainingGate.MinimumFamilyPolicyStatus != "versioned" ||
 		strings.TrimSpace(manifest.TrainingGate.PolicyVersion) == "" {
 		return errors.New("semantic head training requires a versioned family coverage policy")

@@ -34,6 +34,8 @@ CANDIDATE_COMPARISON_SCHEMA = "gatelm.difficulty-offline-candidate-comparison.v2
 EXPECTED_SPLIT_RECORDS = {"train": 300, "calibration": 100, "holdout": 100}
 EXPECTED_MODEL_PATH_SPLIT_RECORDS = {"train": 244, "calibration": 85, "holdout": 64}
 EXPECTED_TOTAL_RECORDS = sum(EXPECTED_SPLIT_RECORDS.values())
+CANONICAL_DATASET_VERSION = "routing_difficulty_initial_15000_owner_approved_2026_07_22"
+CANONICAL_SPLIT_RECORDS = {"train": 10_500, "calibration": 2_250, "holdout": 2_250}
 EXPECTED_PROJECTION_DIMENSION = 64
 EXPECTED_POOLED_DIMENSION = 384
 EXPECTED_CANDIDATE_DIMENSIONS = {
@@ -162,7 +164,7 @@ def select_candidate_by_calibration_evidence(
 
 
 def validate_candidate_training_input(exported_input: Mapping[str, Any]) -> list[Mapping[str, Any]]:
-    """Validate the single canonical 500-record input shared by all candidates."""
+    """Validate the exact approved input shared by all candidates in one run."""
 
     if exported_input.get("schemaVersion") != "gatelm.difficulty-semantic-head-training-input.v1":
         raise ValueError("unsupported semantic candidate training input schema")
@@ -192,7 +194,12 @@ def validate_candidate_training_input(exported_input: Mapping[str, Any]) -> list
     declared_split_counts = exported_input.get("splitCounts")
     if not isinstance(declared_split_counts, Mapping) or set(declared_split_counts) != ALLOWED_SPLITS:
         raise ValueError("semantic candidate input must declare exact train/calibration/holdout counts")
-    for split, expected_records in EXPECTED_SPLIT_RECORDS.items():
+    expected_split_records = (
+        CANONICAL_SPLIT_RECORDS
+        if exported_input.get("datasetVersion") == CANONICAL_DATASET_VERSION
+        else EXPECTED_SPLIT_RECORDS
+    )
+    for split, expected_records in expected_split_records.items():
         declared = declared_split_counts[split]
         if (
             not isinstance(declared, Mapping)
@@ -206,14 +213,17 @@ def validate_candidate_training_input(exported_input: Mapping[str, Any]) -> list
     samples = exported_input.get("samples")
     if isinstance(samples, (str, bytes)) or not isinstance(samples, Sequence):
         raise ValueError("semantic candidate samples must be a sequence")
-    if len(samples) != EXPECTED_TOTAL_RECORDS:
-        raise ValueError("semantic candidate input must contain exactly 500 records")
+    expected_total_records = sum(expected_split_records.values())
+    if len(samples) != expected_total_records:
+        raise ValueError(
+            f"semantic candidate input must contain exactly {expected_total_records} records"
+        )
 
     seen_sample_ids: set[str] = set()
     family_splits: dict[str, set[str]] = defaultdict(set)
-    actual_split_records = {split: 0 for split in EXPECTED_SPLIT_RECORDS}
-    actual_model_path_records = {split: 0 for split in EXPECTED_SPLIT_RECORDS}
-    actual_split_families = {split: set() for split in EXPECTED_SPLIT_RECORDS}
+    actual_split_records = {split: 0 for split in expected_split_records}
+    actual_model_path_records = {split: 0 for split in expected_split_records}
+    actual_split_families = {split: set() for split in expected_split_records}
     for index, sample in enumerate(samples):
         if not isinstance(sample, Mapping):
             raise ValueError(f"semantic candidate sample {index} must be an object")
@@ -269,14 +279,21 @@ def validate_candidate_training_input(exported_input: Mapping[str, Any]) -> list
 
     if any(len(splits) != 1 for splits in family_splits.values()):
         raise ValueError("semantic candidate prompt family leaked across splits")
-    if actual_split_records != EXPECTED_SPLIT_RECORDS:
-        raise ValueError("semantic candidate actual split counts are not exactly 300/100/100")
-    if actual_model_path_records != EXPECTED_MODEL_PATH_SPLIT_RECORDS:
+    if actual_split_records != expected_split_records:
+        raise ValueError("semantic candidate actual split counts differ from the approved manifest")
+    if (
+        expected_split_records == EXPECTED_SPLIT_RECORDS
+        and actual_model_path_records != EXPECTED_MODEL_PATH_SPLIT_RECORDS
+    ):
         raise ValueError(
             "semantic candidate model-path counts must be exactly "
             "train=244 calibration=85 holdout=64 within the 300/100/100 partitions"
         )
-    for split in EXPECTED_SPLIT_RECORDS:
+    if expected_split_records == CANONICAL_SPLIT_RECORDS and any(
+        actual_model_path_records[split] <= 0 for split in expected_split_records
+    ):
+        raise ValueError("canonical semantic candidate requires model-path coverage in every split")
+    for split in expected_split_records:
         if len(actual_split_families[split]) != declared_split_counts[split]["families"]:
             raise ValueError(f"semantic candidate {split} family count does not match the manifest")
     return list(samples)
@@ -309,7 +326,7 @@ def assemble_candidate_samples(
 
     projected = np.asarray(projected_embeddings, dtype=np.float64)
     if projected.shape != (len(samples), EXPECTED_PROJECTION_DIMENSION) or not np.all(np.isfinite(projected)):
-        raise ValueError("semantic projection must be finite float material with shape [500,64]")
+        raise ValueError("semantic projection must be finite float material with shape [records,64]")
 
     result = {candidate: [] for candidate in OfflineFeatureCandidate}
     for index, sample in enumerate(samples):
@@ -605,10 +622,11 @@ def train_candidate_suite(
 
     pooled = np.asarray(pooled_embeddings, dtype=np.float32)
     projected = np.asarray(projected_embeddings, dtype=np.float32)
-    if pooled.shape != (EXPECTED_TOTAL_RECORDS, EXPECTED_POOLED_DIMENSION) or not np.all(np.isfinite(pooled)):
-        raise ValueError("pooled semantic embeddings must have finite shape [500,384]")
-    if projected.shape != (EXPECTED_TOTAL_RECORDS, EXPECTED_PROJECTION_DIMENSION) or not np.all(np.isfinite(projected)):
-        raise ValueError("projected semantic embeddings must have finite shape [500,64]")
+    record_count = len(samples)
+    if pooled.shape != (record_count, EXPECTED_POOLED_DIMENSION) or not np.all(np.isfinite(pooled)):
+        raise ValueError("pooled semantic embeddings must have finite shape [records,384]")
+    if projected.shape != (record_count, EXPECTED_PROJECTION_DIMENSION) or not np.all(np.isfinite(projected)):
+        raise ValueError("projected semantic embeddings must have finite shape [records,64]")
 
     cursor = 0
 
@@ -629,8 +647,8 @@ def train_candidate_suite(
         pooling_version=str(encoder_manifest["pooling"]["version"]),
         evaluation_splits=("calibration",),
     )
-    if cursor != EXPECTED_TOTAL_RECORDS:
-        raise ValueError("semantic head workflow did not consume all 500 canonical samples")
+    if cursor != record_count:
+        raise ValueError("semantic head workflow did not consume all canonical samples")
     semantic_head_probabilities = predict_semantic_head_probabilities(
         semantic_heads_artifact, projected
     )

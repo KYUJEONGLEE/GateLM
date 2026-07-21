@@ -1,0 +1,103 @@
+{
+  "candidateArtifacts": [
+    {
+      "calibrator": {
+        "relativePath": "candidates/rule_42_plus_e5_small_pca_64/calibrator.json",
+        "sha256": "3669433c3e8e6f9076794050bce09d1195be91d9b35a02d802a7bf91819f9c79",
+        "sizeBytes": 449
+      },
+      "featureCandidate": "rule_42_plus_e5_small_pca_64",
+      "model": {
+        "relativePath": "candidates/rule_42_plus_e5_small_pca_64/model.lightgbm.txt",
+        "sha256": "c7753194e176cea37c5e410ff506ff04a0485cddbbc48058fffbeae0610a11b7",
+        "sizeBytes": 700404
+      }
+    },
+    {
+      "calibrator": {
+        "relativePath": "candidates/rule_42_plus_semantic_heads_12/calibrator.json",
+        "sha256": "e46945e902b430b1111831be659539939cf302927ea59bc0b6e1680b22e03ce6",
+        "sizeBytes": 371
+      },
+      "featureCandidate": "rule_42_plus_semantic_heads_12",
+      "model": {
+        "relativePath": "candidates/rule_42_plus_semantic_heads_12/model.lightgbm.txt",
+        "sha256": "dd9dfcbf901d529a09b829e35fc3f8bbd0714dab54c4ac9e0804536f6fb2228f",
+        "sizeBytes": 222288
+      }
+    },
+    {
+      "calibrator": {
+        "relativePath": "candidates/e5_base_raw_768/calibrator.json",
+        "sha256": "a8483c73b8ea2472e68e47a818b548019cf4c7f0556c471691223787d36d7e2e",
+        "sizeBytes": 448
+      },
+      "featureCandidate": "e5_base_raw_768",
+      "model": {
+        "relativePath": "candidates/e5_base_raw_768/model.lightgbm.txt",
+        "sha256": "831a4151e4f365e1885eaaee3b5f87341ad254baec3319bdd06a7fc3f1e38313",
+        "sizeBytes": 230954
+      }
+    },
+    {
+      "calibrator": {
+        "relativePath": "candidates/rule_42_plus_e5_base_raw_768/calibrator.json",
+        "sha256": "55e4c89af86f93a053324307d4ce95c6c6798d5d11c21b90ae10139e0d56e4ee",
+        "sizeBytes": 1535
+      },
+      "featureCandidate": "rule_42_plus_e5_base_raw_768",
+      "model": {
+        "relativePath": "candidates/rule_42_plus_e5_base_raw_768/model.lightgbm.txt",
+        "sha256": "8d7323d02e1571b4ebc9f3e5222b9bf069306b00d9c66b5c25ed7eec526088f7",
+        "sizeBytes": 125792
+      }
+    }
+  ],
+  "configSha256": "fef6aa7eba10d8e4c5566d9fe350f32b5f76c1d6ca3f67302139d21103579e4e",
+  "containsEmbeddingMatrix": false,
+  "containsPerSampleScore": false,
+  "containsPromptMaterial": false,
+  "experimentId": "difficulty-lightgbm-dimension-tuning.owner-approved-500.2026-07-22.v1",
+  "featureArtifacts": {
+    "e5SmallPca64": {
+      "relativePath": "feature-material/e5-small-pca64.train-only.v1.npz",
+      "sha256": "ac5ab6c4b0cb606b6a862f7a25ffc881a257d23db8414e66d7eccb20fdfa07e7",
+      "sizeBytes": 109739
+    },
+    "semanticHeads12": {
+      "relativePath": "feature-material/e5-small-pca64-semantic-heads12.train-only.v1.json",
+      "sha256": "7919aff3379e544824e9ed4f66cf56a9cba07077ea79c8cf4d4c9470d042831f",
+      "sizeBytes": 26344
+    }
+  },
+  "manifestSha256": "597db9389fe65a67c1bb3393b7652a5468066ac4006449fa9dde6a2db10b3ccb",
+  "promotionState": "exploratory_only",
+  "schemaVersion": "gatelm.lightgbm-dimension-tuning-reproducibility-manifest.v1",
+  "stageEvidence": {
+    "final": {
+      "relativePath": "final-evidence.v1.json",
+      "sha256": "4e1fb950f21c1abe5bd939d6322161e1f60b4c3b689c54616560f5688fde460c",
+      "sizeBytes": 19196
+    },
+    "freeze": {
+      "relativePath": "pretest-freeze.json",
+      "sha256": "2c7162ce0580989d82c282b279ae1f56d3c22690828971ed74b08fa5b22d5fe3",
+      "sizeBytes": 3598
+    },
+    "inputManifest": {
+      "relativePath": "input-manifest.v1.json",
+      "sha256": "7a755cb03af2e7cc3d4d23b6dbeff3a2eacdb93da6bdeafc71709f8c46ad3ecb",
+      "sizeBytes": 2328
+    },
+    "test": {
+      "relativePath": "test-evidence.v1.json",
+      "sha256": "fca2f28197b7a557acd7f762a41bf737e63e404dc0656864034bf729009856e6",
+      "sizeBytes": 9322
+    },
+    "tuning": {
+      "relativePath": "tuning-evidence.v1.json",
+      "sha256": "736103590bc6bae5ecea9b485ebc8daed9abebacfc93af4f3ff611eaf620ea9f",
+      "sizeBytes": 504131
+    }
+  }
+}

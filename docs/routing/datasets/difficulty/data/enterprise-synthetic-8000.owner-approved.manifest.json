@@ -1,0 +1,284 @@
+{
+  "schema_version": "gatelm.routing-difficulty-dataset-manifest.v1",
+  "dataset_version": "routing_difficulty_enterprise_synthetic_8000_owner_approved_2026_07_22",
+  "record_schema_version": "gatelm.routing-difficulty-dataset-record.v1",
+  "record_schema_path": "docs/routing/datasets/difficulty/schemas/difficulty-dataset-record.schema.json",
+  "dataset_path": "docs/routing/datasets/difficulty/data/enterprise-synthetic-8000.owner-approved.jsonl",
+  "dataset_sha256": "1b132b01e98f0d29729d7da2f9e239e1c8f47f1e08b92907bc6880f38869e197",
+  "generated_at": "2026-07-22T00:00:00Z",
+  "generation_seed": 20260720,
+  "scope": {
+    "initial_target_records": 15000,
+    "generated_records": 8000,
+    "deferred_public_records": 0,
+    "public_records": 0,
+    "training_eligible": true,
+    "training_blockers": []
+  },
+  "counts": {
+    "records": 8000,
+    "groups": 1751,
+    "synthetic_records": 6000,
+    "boundary_records": 2000,
+    "human_reviewed_records": 8000
+  },
+  "distributions": {
+    "label": {
+      "complex": 4632,
+      "simple": 3368
+    },
+    "language": {
+      "ko": 7800,
+      "mixed": 200
+    },
+    "source": {
+      "boundary": 2000,
+      "synthetic": 6000
+    },
+    "split": {
+      "test": 1200,
+      "train": 5600,
+      "validation": 1200
+    },
+    "task_type": {
+      "business_report": 432,
+      "code_explanation": 428,
+      "code_generation": 320,
+      "code_modification": 432,
+      "code_review": 428,
+      "comparison_evaluation": 416,
+      "data_analysis": 426,
+      "debugging": 428,
+      "document_writing": 320,
+      "fact_explanation": 202,
+      "file_processing": 428,
+      "general_query": 92,
+      "internal_document_query": 468,
+      "json_conversion": 430,
+      "math_problem": 156,
+      "multi_document_comparison": 424,
+      "planning": 156,
+      "rag_query": 428,
+      "search": 320,
+      "structured_data_processing": 88,
+      "summarization": 322,
+      "table_conversion": 428,
+      "translation": 428
+    },
+    "service_domain": {
+      "business_format_conversion": 360,
+      "business_reporting": 360,
+      "business_strategy": 360,
+      "compliance": 360,
+      "corporate_operations": 88,
+      "customer_support": 356,
+      "data_analysis": 360,
+      "document_management": 360,
+      "finance_accounting": 360,
+      "hr_recruiting": 360,
+      "internal_policy": 360,
+      "legal": 360,
+      "marketing": 364,
+      "meeting_minutes": 360,
+      "privacy": 360,
+      "product_planning": 364,
+      "project_management": 356,
+      "rag_internal_knowledge": 356,
+      "research": 360,
+      "sales": 360,
+      "security": 360,
+      "software_development": 360,
+      "training_onboarding": 356
+    },
+    "expression_style": {
+      "abbreviated": 499,
+      "compound_command": 499,
+      "conversational": 500,
+      "imperative": 502,
+      "incomplete": 500,
+      "informal": 500,
+      "interrogative": 501,
+      "keyword_list": 501,
+      "long_explanation": 500,
+      "messenger": 500,
+      "polite": 500,
+      "request_form": 499,
+      "spacing_error": 499,
+      "standard": 500,
+      "technical": 499,
+      "typo": 501
+    },
+    "prompt_structure": {
+      "keyword_list": 401,
+      "multi_paragraph": 2001,
+      "multi_sentence": 799,
+      "single_sentence": 4799
+    },
+    "length_bucket": {
+      "long": 1600,
+      "medium": 3374,
+      "short": 3026
+    },
+    "counterexample_type": {
+      "code_present_simple": 80,
+      "everyday_language_complex": 126,
+      "few_constraints_deep_complex": 126,
+      "file_simple_extraction": 76,
+      "implicit_multistep_complex": 126,
+      "independent_steps_simple": 76,
+      "json_output_simple": 76,
+      "long_answer_simple": 76,
+      "long_document_format_simple": 72,
+      "long_document_translation_simple": 76,
+      "long_input_copy_simple": 76,
+      "long_simple": 80,
+      "many_constraints_mechanical_simple": 82,
+      "no_code_complex": 128,
+      "no_file_expert_analysis": 122,
+      "no_output_format_complex": 122,
+      "no_search_logical_complex": 122,
+      "search_simple_fact": 76,
+      "short_complex": 128,
+      "single_task_long_context_simple": 74,
+      "technical_terms_simple": 80
+    },
+    "automatic_label": {
+      "complex": 4000,
+      "simple": 4000
+    },
+    "label_source": {
+      "llm_codex_advisory_candidate": 16,
+      "llm_gpt_risk_sensitive_candidate": 2663,
+      "synthetic_design": 5321
+    },
+    "review_status": {
+      "approved": 8000
+    }
+  },
+  "coverage": {
+    "task_types": 23,
+    "service_domains": 23,
+    "boundary_types": 21,
+    "every_task_type_has_both_labels": true,
+    "every_service_domain_has_both_labels": true,
+    "every_language_has_both_labels": true,
+    "long_simple_records": 800,
+    "long_complex_records": 800,
+    "label_ratio": "3368:4632",
+    "automatic_label_ratio": "4000:4000",
+    "current_label_distribution_by_language": {
+      "ko": {
+        "simple": 3294,
+        "complex": 4506
+      },
+      "mixed": {
+        "simple": 74,
+        "complex": 126
+      }
+    },
+    "length_label_distribution": {
+      "short": {
+        "complex": 1455,
+        "simple": 1571
+      },
+      "medium": {
+        "complex": 2377,
+        "simple": 997
+      },
+      "long": {
+        "complex": 800,
+        "simple": 800
+      }
+    },
+    "length_only_roc_auc": 0.5396988547089543,
+    "klue_label_distribution": {},
+    "klue_length_only_roc_auc": 0.5,
+    "every_task_type_label_share_between_35_and_65_percent": false,
+    "every_service_domain_label_share_between_35_and_65_percent": false,
+    "task_type_label_share_guardrail_violations": [
+      "document_writing",
+      "fact_explanation",
+      "file_processing",
+      "general_query",
+      "internal_document_query",
+      "math_problem",
+      "multi_document_comparison",
+      "planning",
+      "structured_data_processing"
+    ],
+    "service_domain_label_share_guardrail_violations": [
+      "corporate_operations"
+    ],
+    "reviewer_b_c_same_family_label_overrides": 0,
+    "reviewer_b_c_high_confidence_consensus_overrides": 0,
+    "reviewer_b_c_human_adjudication_queue_records_in_dataset": 19,
+    "independent_reviewer_a_complete": false,
+    "base_prompt_projection_sha256": "0df72ee6e2ddbe349f8f3393b7c79600eff6eb239a71fb95b6a22146688a69d3",
+    "revised_prompt_projection_sha256": "654981c4725afbe7ecbc909110aaa789cc718dcec4f20b6f7070f48ab5fd54b1",
+    "semantic_embedding_dedup_audit_path": "docs/routing/datasets/difficulty/data/initial-routing-difficulty-15000.owner-approved.semantic-dedup.json",
+    "semantic_embedding_dedup_threshold": 0.985,
+    "semantic_embedding_dedup_verified": true,
+    "codex_advisory_relabel_records": 19,
+    "codex_advisory_simple_records": 3,
+    "codex_advisory_complex_records": 16,
+    "reviewer_e_risk_sensitive_label_records": 2663,
+    "reviewer_e_needs_human_adjudication_records": 0,
+    "total_needs_adjudication_records": 0,
+    "base_prompt_content_sha256": "ddf82a4ac4c92e4f9edead3e63b663f03edbe32a2c71f3d18ebbe5b6f9b812c7",
+    "revised_prompt_content_sha256": "ddf82a4ac4c92e4f9edead3e63b663f03edbe32a2c71f3d18ebbe5b6f9b812c7",
+    "semantic_dedup_resolution_path": "docs/routing/datasets/difficulty/reviews/independent-llm/reviewer-e-gpt/reviewer-e-semantic-dedup-resolution.json",
+    "semantic_dedup_resolved_clusters": 1,
+    "semantic_dedup_split_reassigned_records": 0,
+    "dataset_owner_full_review_complete": true,
+    "dataset_owner_approved_records": 8000,
+    "owner_approval_attestation_path": "docs/routing/datasets/difficulty/reviews/human/dataset-owner-full-review-attestation.json",
+    "accepted_known_limitations": [
+      "direct_human_authored_share_below_60_percent",
+      "anonymous_real_user_source_unavailable",
+      "current_label_distribution_is_43_84_percent_simple_and_56_16_percent_complex",
+      "six_task_types_outside_35_to_65_percent_label_share",
+      "two_service_domains_outside_35_to_65_percent_label_share"
+    ],
+    "base_owner_approval_projection_sha256": "dd633677763c20190d59bc2a6b1f9430df592120a25c011430be907d86931f40",
+    "approved_owner_projection_sha256": "dd633677763c20190d59bc2a6b1f9430df592120a25c011430be907d86931f40"
+  },
+  "deduplication": {
+    "exact_duplicate_records": 0,
+    "normalized_duplicate_records": 0,
+    "cross_group_near_duplicate_pairs": 0,
+    "near_duplicate_method": "task-language-label bucketed normalized token Jaccard",
+    "near_duplicate_threshold": 0.94,
+    "within_group_variants_allowed": true,
+    "semantic_duplicate_candidate_pairs": 0,
+    "semantic_duplicate_method": "pinned multilingual-E5 native 384D cosine plus same-label/task/domain candidate policy after atomic semantic-group resolution",
+    "semantic_duplicate_threshold": 0.985,
+    "group_split_leaks": 0
+  },
+  "review": {
+    "label_source_distribution": {
+      "llm_codex_advisory_candidate": 16,
+      "llm_gpt_risk_sensitive_candidate": 2663,
+      "synthetic_design": 5321
+    },
+    "review_status_distribution": {
+      "approved": 8000
+    },
+    "reviewer_e_risk_sensitive_label_records": 2663,
+    "reviewer_e_policy": "Simple only when clearly bounded with high confidence; uncertainty defaults to Complex",
+    "independent_reviewer_credit": false,
+    "human_reviewed": true,
+    "production_gold": true,
+    "training_eligible": true,
+    "runtime_promotion_authorized": false,
+    "dataset_owner_full_review_complete": true,
+    "dataset_owner_approved_records": 8000,
+    "owner_approval_attestation_path": "docs/routing/datasets/difficulty/reviews/human/dataset-owner-full-review-attestation.json",
+    "accepted_known_limitations": [
+      "direct_human_authored_share_below_60_percent",
+      "anonymous_real_user_source_unavailable",
+      "current_label_distribution_is_43_84_percent_simple_and_56_16_percent_complex",
+      "six_task_types_outside_35_to_65_percent_label_share",
+      "two_service_domains_outside_35_to_65_percent_label_share"
+    ]
+  }
+}

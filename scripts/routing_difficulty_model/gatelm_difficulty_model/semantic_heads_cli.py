@@ -9,7 +9,6 @@ from typing import Any, Sequence
 
 from .encoder_runtime import (
     DEFAULT_ARTIFACT_ROOT,
-    DEFAULT_MANIFEST_PATH,
     REPO_ROOT,
     E5EncoderRuntime,
     install_network_guard,
@@ -17,6 +16,13 @@ from .encoder_runtime import (
     write_json,
 )
 from .semantic_heads import train_and_evaluate_semantic_heads
+from .canonical_dataset import (
+    CANONICAL_DATASET,
+    CANONICAL_ENCODER_MANIFEST,
+    CANONICAL_MANIFEST,
+    experiment_manifest,
+    require_canonical_dataset,
+)
 
 
 TOOL_DIR = Path(__file__).resolve().parents[1]
@@ -26,10 +32,10 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Train the offline fixed four-head semantic difficulty artifact."
     )
-    parser.add_argument("--dataset", type=Path, required=True)
-    parser.add_argument("--manifest", type=Path, required=True)
+    parser.add_argument("--dataset", type=Path, default=CANONICAL_DATASET)
+    parser.add_argument("--manifest", type=Path, default=CANONICAL_MANIFEST)
     parser.add_argument("--artifact-root", type=Path, default=DEFAULT_ARTIFACT_ROOT)
-    parser.add_argument("--encoder-manifest", type=Path, default=DEFAULT_MANIFEST_PATH)
+    parser.add_argument("--encoder-manifest", type=Path, default=CANONICAL_ENCODER_MANIFEST)
     parser.add_argument("--artifact-version", required=True)
     parser.add_argument("--artifact-output", type=Path, required=True)
     parser.add_argument("--report-output", type=Path, required=True)
@@ -41,6 +47,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 def load_training_input(
     dataset: Path, manifest: Path, go_executable: str
 ) -> dict[str, Any]:
+    canonical_manifest = require_canonical_dataset(dataset, manifest)
     command = [
         go_executable,
         "run",
@@ -79,6 +86,15 @@ def load_training_input(
     value = json.loads(completed.stdout)
     if value.get("schemaVersion") != "gatelm.difficulty-semantic-head-training-input.v1":
         raise ValueError("offline semantic head exporter returned an unsupported schema")
+    identity = experiment_manifest(canonical_manifest)
+    value.update(
+        {
+            "datasetVersion": identity["datasetVersion"],
+            "datasetSha256": identity["datasetSha256"],
+            "splitPolicyVersion": identity["splitPolicyVersion"],
+            "splitSeed": identity["splitSeed"],
+        }
+    )
     return value
 
 

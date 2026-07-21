@@ -344,7 +344,7 @@ export function buildPacket(datasetText) {
     review_set_sha256: reviewSetSha256,
     records: selected.length,
     selection_counts: { false_simple_risk: falseSimpleRisk, false_complex_risk: falseComplexRisk },
-    mapping: selected.map((row) => ({ item_id: row.item_id, review_group_id: row.review_group_id, sample_id: row.record.sample_id, group_id: row.record.group_id, current_label: row.record.label, selection_reasons: row.reasons, task_type: row.record.task_type, service_domain: row.record.service_domain, language: row.record.language, length_bucket: row.record.length_bucket, split: row.record.split })),
+    mapping: selected.map((row) => ({ item_id: row.item_id, review_group_id: row.review_group_id, sample_id: row.record.sample_id, group_id: row.record.group_id, current_label: row.record.label, selection_reasons: row.reasons, task_type: row.record.task_type, service_domain: row.record.service_domain, language: row.record.language, length_bucket: row.record.length_bucket, source: row.record.source, split: row.record.split })),
   };
 
   files.set("START-HERE.md", startHere(batches.length, selected.length));

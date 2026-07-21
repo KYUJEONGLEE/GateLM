@@ -14,6 +14,7 @@ import sys
 from collections import Counter
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -77,6 +78,13 @@ from .lightgbm_embedding_search import (
     save_model_with_parity,
     select_best_candidate,
     SearchIncompleteError,
+)
+from .canonical_dataset import (
+    CANONICAL_DATASET,
+    CANONICAL_MANIFEST,
+    CANONICAL_SPLIT_COUNTS,
+    experiment_manifest,
+    require_canonical_dataset,
 )
 
 
@@ -351,14 +359,44 @@ def _load_manifest(config: ExperimentConfig) -> tuple[dict[str, Any], str]:
             ExperimentStatus.BLOCKED_DATASET_INELIGIBLE,
             "DATASET_MANIFEST_INTEGRITY_MISMATCH",
         )
-    manifest = read_json_object(manifest_path)
+    try:
+        manifest = require_canonical_dataset(CANONICAL_DATASET, manifest_path)
+    except ValueError as exc:
+        raise ExperimentError(
+            ExperimentStatus.BLOCKED_DATASET_INELIGIBLE,
+            "ONLY_CANONICAL_15000_DATASET_ALLOWED",
+        ) from exc
     validate_dataset_eligibility(manifest)
-    if manifest.get("dataset_sha256") != dataset.get("datasetSha256"):
+    identity = experiment_manifest(manifest)
+    if (
+        identity["datasetSha256"] != dataset.get("datasetSha256")
+        or identity["datasetVersion"] != dataset.get("version")
+        or identity["splitPolicyVersion"] != dataset.get("splitPolicyVersion")
+    ):
         raise ExperimentError(
             ExperimentStatus.BLOCKED_DATASET_INELIGIBLE,
             "DATASET_IDENTITY_MISMATCH",
         )
     return manifest, expected_manifest_hash
+
+
+@lru_cache(maxsize=1)
+def _canonical_record_index() -> dict[str, dict[str, Any]]:
+    require_canonical_dataset(CANONICAL_DATASET, CANONICAL_MANIFEST)
+    index: dict[str, dict[str, Any]] = {}
+    with CANONICAL_DATASET.open("r", encoding="utf-8") as stream:
+        for line in stream:
+            if not line.strip():
+                continue
+            row = json.loads(line)
+            index[str(row["sample_id"])] = {
+                "family_id": row["group_id"],
+                "split": row["split"],
+                "label": 1 if row["label"] == "complex" else 0,
+                "category": row["expected_category"],
+                "redacted_prompt": row["redacted_prompt"],
+            }
+    return index
 
 
 def _load_records(
@@ -402,6 +440,37 @@ def _load_records(
         raise ExperimentError(
             ExperimentStatus.BLOCKED_INVALID_SPLIT,
             "DATASET_RECORD_FIELDS_INVALID",
+        )
+    canonical = _canonical_record_index()
+    expected_ids = {
+        sample_id
+        for sample_id, source in canonical.items()
+        if source["split"] == split
+    }
+    seen_ids: set[str] = set()
+    for row in rows:
+        sample_id = row.get("sample_id")
+        source = canonical.get(str(sample_id))
+        label = 1 if row.get("label") in (1, "complex", "Complex") else 0
+        if (
+            not isinstance(sample_id, str)
+            or sample_id in seen_ids
+            or source is None
+            or source["split"] != split
+            or row.get("family_id") != source["family_id"]
+            or label != source["label"]
+            or row.get("category") != source["category"]
+            or row.get("redacted_prompt") != source["redacted_prompt"]
+        ):
+            raise ExperimentError(
+                ExperimentStatus.BLOCKED_INVALID_SPLIT,
+                "NON_CANONICAL_DATASET_RECORD",
+            )
+        seen_ids.add(sample_id)
+    if seen_ids != expected_ids or len(rows) != CANONICAL_SPLIT_COUNTS[split]:
+        raise ExperimentError(
+            ExperimentStatus.BLOCKED_INVALID_SPLIT,
+            "CANONICAL_SPLIT_MEMBERSHIP_INCOMPLETE",
         )
     if any(row["split"] != split for row in rows):
         raise ExperimentError(

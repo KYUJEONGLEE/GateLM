@@ -2,18 +2,18 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
-import subprocess
 from pathlib import Path
 
 from .training import train_from_vector_export
+from .canonical_dataset import CANONICAL_DATASET, CANONICAL_MANIFEST
+from .semantic_heads_cli import load_training_input
 
 
 TOOL_DIR = Path(__file__).resolve().parents[1]
 REPO_ROOT = TOOL_DIR.parents[1]
-DEFAULT_DATASET = REPO_ROOT / "docs/v2.1.0/fixtures/difficulty-evaluation-training-pilot-500.fixture.jsonl"
-DEFAULT_MANIFEST = REPO_ROOT / "docs/v2.1.0/fixtures/difficulty-training-split-manifest.v1.json"
-DEFAULT_POLICY = TOOL_DIR / "training-policy.v1.json"
+DEFAULT_DATASET = CANONICAL_DATASET
+DEFAULT_MANIFEST = CANONICAL_MANIFEST
+DEFAULT_POLICY = TOOL_DIR / "training-policy.42d-owner-approved-15000.v1.json"
 
 
 def parse_args() -> argparse.Namespace:
@@ -28,26 +28,28 @@ def parse_args() -> argparse.Namespace:
 
 
 def load_vector_export(dataset: Path, manifest: Path) -> dict:
-    command = [
-        os.environ.get("GATELM_GO_EXECUTABLE", "go"),
-        "run",
-        "./apps/gateway-core/cmd/difficulty-training-vector-export",
-        "-dataset",
-        str(dataset.resolve()),
-        "-split-manifest",
-        str(manifest.resolve()),
-        "-category-source",
-        "actual",
-    ]
-    completed = subprocess.run(
-        command,
-        cwd=REPO_ROOT,
-        check=True,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-    )
-    return json.loads(completed.stdout)
+    exported = load_training_input(dataset, manifest, "go")
+    return {
+        "schemaVersion": "gatelm.difficulty-training-vector-export.v1",
+        "datasetVersion": exported["datasetVersion"],
+        "datasetSha256": exported["datasetSha256"],
+        "splitPolicyVersion": exported["splitPolicyVersion"],
+        "categorySource": "actual",
+        "featureVersion": exported["featureVersion"],
+        "featureNames": exported["featureNames"],
+        "samples": [
+            {
+                "sampleId": sample["sampleId"],
+                "familyId": sample["familyId"],
+                "split": sample["split"],
+                "label": sample["label"],
+                "expectedCategory": sample["expectedCategory"],
+                "modelPath": sample["modelPath"],
+                "vector": sample["ruleVectorV1"],
+            }
+            for sample in exported["samples"]
+        ],
+    }
 
 
 def main() -> int:

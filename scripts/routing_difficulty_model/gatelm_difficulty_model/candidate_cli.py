@@ -7,9 +7,13 @@ from pathlib import Path
 from typing import Any, Sequence
 
 from .candidate_training import train_candidate_suite
+from .canonical_dataset import (
+    CANONICAL_DATASET,
+    CANONICAL_ENCODER_MANIFEST,
+    CANONICAL_MANIFEST,
+)
 from .encoder_runtime import (
     DEFAULT_ARTIFACT_ROOT,
-    DEFAULT_MANIFEST_PATH,
     REPO_ROOT,
     encode_pooled_single_requests,
     install_network_guard,
@@ -20,14 +24,9 @@ from .semantic_heads_cli import load_training_input
 
 
 TOOL_DIR = Path(__file__).resolve().parents[1]
-DEFAULT_DATASET = (
-    REPO_ROOT / "docs/v2.1.0/training/difficulty-training-candidate-500.owner-approved.jsonl"
-)
-DEFAULT_DATASET_MANIFEST = (
-    REPO_ROOT
-    / "docs/v2.1.0/training/difficulty-training-candidate-500.owner-approved.manifest.json"
-)
-DEFAULT_POLICY = TOOL_DIR / "training-policy.semantic-candidates.v3.json"
+DEFAULT_DATASET = CANONICAL_DATASET
+DEFAULT_DATASET_MANIFEST = CANONICAL_MANIFEST
+DEFAULT_POLICY = TOOL_DIR / "training-policy.owner-approved-15000.v1.json"
 DEFAULT_OUTPUT_DIRECTORY = TOOL_DIR / "artifacts/candidates"
 
 
@@ -39,20 +38,20 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--manifest", type=Path, default=DEFAULT_DATASET_MANIFEST)
     parser.add_argument("--policy", type=Path, default=DEFAULT_POLICY)
     parser.add_argument("--artifact-root", type=Path, default=DEFAULT_ARTIFACT_ROOT)
-    parser.add_argument("--encoder-manifest", type=Path, default=DEFAULT_MANIFEST_PATH)
+    parser.add_argument("--encoder-manifest", type=Path, default=CANONICAL_ENCODER_MANIFEST)
     parser.add_argument("--output-directory", type=Path, default=DEFAULT_OUTPUT_DIRECTORY)
     parser.add_argument("--batch-size", type=int, choices=[1], default=1)
     parser.add_argument(
         "--semantic-heads-artifact-version",
-        default="difficulty-semantic-heads.owner-approved-500.single-request.2026-07-15.v2",
+        default="difficulty-semantic-heads.owner-approved-15000.single-request.2026-07-22.v1",
     )
     parser.add_argument(
         "--artifact-version-prefix",
-        default="difficulty-offline.owner-approved-500.single-request.2026-07-15",
+        default="difficulty-offline.owner-approved-15000.single-request.2026-07-22",
     )
     parser.add_argument(
         "--bundle-version",
-        default="difficulty-feature-bundle.owner-approved-500.single-request.2026-07-15.v3",
+        default="difficulty-feature-bundle.owner-approved-15000.single-request.2026-07-22.v1",
     )
     parser.add_argument("--go", default=os.environ.get("GATELM_GO_EXECUTABLE", "go"))
     return parser.parse_args(argv)
@@ -114,17 +113,17 @@ def run(args: argparse.Namespace) -> tuple[dict[str, Any], dict[str, Any], dict[
 
     output_directory = args.output_directory
     output_directory.mkdir(parents=True, exist_ok=True)
-    write_json(output_directory / "difficulty-semantic-heads.owner-approved-500.v2.json", semantic_heads)
+    write_json(output_directory / "difficulty-semantic-heads.owner-approved-15000.v1.json", semantic_heads)
     candidate_paths = {
-        "42d-rule-vector-v1": "difficulty-candidate-a-42d.owner-approved-500.v3.json",
-        "42d-rule-vector-v1-plus-projection": "difficulty-candidate-b-106d.owner-approved-500.v3.json",
+        "42d-rule-vector-v1": "difficulty-candidate-a-42d.owner-approved-15000.v1.json",
+        "42d-rule-vector-v1-plus-projection": "difficulty-candidate-b-106d.owner-approved-15000.v1.json",
         "42d-rule-vector-v1-plus-projection-plus-semantic-head-probabilities": (
-            "difficulty-candidate-c-118d.owner-approved-500.v3.json"
+            "difficulty-candidate-c-118d.owner-approved-15000.v1.json"
         ),
     }
     for candidate_name, artifact in artifacts.items():
         write_json(output_directory / candidate_paths[candidate_name], artifact)
-    write_json(output_directory / "difficulty-candidate-comparison.owner-approved-500.v3.json", report)
+    write_json(output_directory / "difficulty-candidate-comparison.owner-approved-15000.v1.json", report)
     return semantic_heads, artifacts, report
 
 
@@ -135,7 +134,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if sorted(dimensions.values()) != [42, 106, 118] or len(artifacts) != 3:
         raise ValueError("candidate training did not produce the fixed 42D/106D/118D set")
     print(f"wrote three offline difficulty candidates to {args.output_directory}")
-    print("split counts: train=300 calibration=100 holdout=100")
+    print("split counts: train=10500 calibration=2250 holdout=2250")
     return 0
 
 

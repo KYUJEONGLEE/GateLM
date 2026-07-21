@@ -61,11 +61,20 @@ if (schema.properties?.schemaVersion?.const !== "gatelm.routing-difficulty-light
   failures.push(`${schemaPath}: profile schema identity drifted`);
 }
 if (
-  defs.encoder?.properties?.modelId?.const !== "intfloat/multilingual-e5-base" ||
-  defs.encoder?.properties?.sourceRevision?.const !== "d13f1b27baf31030b7fd040960d60d909913633f" ||
-  defs.encoder?.properties?.outputDimension?.const !== 768
+  defs.e5BaseEncoder?.properties?.modelId?.const !== "intfloat/multilingual-e5-base" ||
+  defs.e5BaseEncoder?.properties?.sourceRevision?.const !== "d13f1b27baf31030b7fd040960d60d909913633f" ||
+  defs.e5BaseEncoder?.properties?.outputDimension?.const !== 768
 ) {
   failures.push(`${schemaPath}: pinned 768D encoder identity drifted`);
+}
+if (
+  defs.e5SmallEncoder?.properties?.modelId?.const !== "intfloat/multilingual-e5-small" ||
+  defs.e5SmallEncoder?.properties?.sourceRevision?.const !== "614241f622f53c4eeff9890bdc4f31cfecc418b3" ||
+  defs.e5SmallEncoder?.properties?.outputDimension?.const !== 384 ||
+  defs.e5SmallEncoder?.properties?.bundleSha256?.const !==
+    "0f828d6a93f5600dff529e4194736fe79d43c04fa4ec9257374f1e092126f76e"
+) {
+  failures.push(`${schemaPath}: pinned E5-small encoder identity drifted`);
 }
 const tabularFeatureShapes =
   defs.featureShape?.properties?.tabularFeatureNames?.oneOf?.map((entry) => entry.const) ?? [];
@@ -77,10 +86,26 @@ if (
 }
 if (
   !same(defs.featureShape?.properties?.ruleDimension?.enum, [0, 42]) ||
+  !same(defs.featureShape?.properties?.semanticMode?.enum, [
+    "raw_768", "pca_128", "pca_256", "pca_64", "semantic_heads_12",
+  ]) ||
+  !defs.featureShape?.properties?.totalDimension?.enum?.includes(54) ||
+  !defs.featureShape?.properties?.totalDimension?.enum?.includes(106) ||
   !defs.featureShape?.properties?.totalDimension?.enum?.includes(768) ||
+  !defs.model?.properties?.numFeatures?.enum?.includes(54) ||
+  !defs.model?.properties?.numFeatures?.enum?.includes(106) ||
   !defs.model?.properties?.numFeatures?.enum?.includes(768)
 ) {
-  failures.push(`${schemaPath}: embedding-only 768D runtime shape is missing`);
+  failures.push(`${schemaPath}: one or more fixed runtime shapes are missing`);
+}
+if (
+  defs.semanticHeads?.properties?.headOrder?.const?.length !== 4 ||
+  defs.semanticHeads?.properties?.classOrder?.const?.some(
+    (head) => head.classes?.length !== 3,
+  ) ||
+  defs.semanticHeads?.properties?.outputDimension?.const !== 12
+) {
+  failures.push(`${schemaPath}: fixed 4x3 semantic-head order drifted`);
 }
 const allowedCandidateSets =
   defs.trainingProvenance?.properties?.selectedFrom?.oneOf?.map((entry) => entry.const) ?? [];
@@ -95,7 +120,8 @@ if (
   fixture.schemaVersion !== "gatelm.routing-difficulty-lightgbm-shadow-profile.v1" ||
   fixture.profileVersion !== "difficulty-lightgbm-shadow.e5-base-768.v1" ||
   fixture.contractVersion !== "gatelm.internal.routing-difficulty-lightgbm-shadow.v1" ||
-  fixture.promotionState !== "offline_shadow_only"
+  fixture.promotionState !== "offline_shadow_only" ||
+  fixture.encoderMode !== "e5_base"
 ) {
   failures.push(`${fixturePath}: fixed profile identity is invalid`);
 }
@@ -111,10 +137,12 @@ if (!same(fixture.featureShape?.tabularFeatureNames, expectedFeatureNames)) {
   failures.push(`${fixturePath}: exact ruleVectorV1 feature order is invalid`);
 }
 if (
-  fixture.featureShape?.semanticMode !== "raw" ||
+  fixture.featureShape?.semanticMode !== "raw_768" ||
   fixture.featureShape?.semanticDimension !== 768 ||
   fixture.featureShape?.totalDimension !== 810 ||
+  !same(fixture.featureShape?.featureOrder, ["rule_vector_v1", "raw_embedding_768"]) ||
   fixture.featureShape?.projection !== null ||
+  fixture.featureShape?.semanticHeads !== null ||
   fixture.model?.numFeatures !== 810
 ) {
   failures.push(`${fixturePath}: raw 42D+768D fixture shape is invalid`);

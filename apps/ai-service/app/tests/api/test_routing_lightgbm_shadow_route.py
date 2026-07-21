@@ -88,7 +88,7 @@ class RoutingLightGBMShadowRouteTests(unittest.TestCase):
                 headers={"X-GateLM-AI-Service-Token": SERVICE_TOKEN},
                 json=payload,
             )
-            self.assertEqual(response.status_code, 422)
+            self.assertEqual(response.status_code, 400)
             self.assertEqual(runtime.calls, 0)
         finally:
             batcher.close()
@@ -143,7 +143,8 @@ class _FakeRuntime:
             profile_version="difficulty-lightgbm-shadow.e5-base-768.v1",
             model_version=MODEL_VERSION,
             model_content_hash=MODEL_HASH,
-            semantic_mode="raw",
+            encoder_mode="e5_base",
+            semantic_mode="raw_768",
             semantic_dimension=768,
             total_dimension=810,
         )

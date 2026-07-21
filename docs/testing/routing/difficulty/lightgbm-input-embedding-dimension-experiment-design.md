@@ -150,3 +150,16 @@ label support가 부족한 지표는 0으로 대체하지 않고 `not_computable
 - Test category/slice와 E4 head 보조 지표가 aggregate로 기록된다.
 - 모델과 aggregate JSON 이외에 embedding/matrix/sample score가 저장되지 않는다.
 - 결과 리포트에 실행 환경, provenance, deviation과 limitation이 명시된다.
+
+## 10. 구현 후 runtime 재사용 경계
+
+2026-07-22에 구현된 four-profile offline-shadow bundle과 이 설계서의 후보 대응은 다음과 같다. 이 대응은 실험 후보나 완료 기준을 변경하지 않으며 새로운 실험 evidence를 의미하지 않는다.
+
+| 설계 후보 | 현재 four-profile runtime 후보 | 대응 상태 |
+|---|---|---|
+| `E1_embedding_768` | `e5_base_raw_768` | 동일한 E5-base raw 768D 입력 표현 |
+| `E2_embedding_768_plus_rule_42` | `rule_42_plus_e5_base_raw_768` | 동일한 rule 42D + E5-base raw 768D 입력 표현 |
+| `E3_pca_128_plus_rule_42` | 없음 | runtime bundle의 106D 후보는 E5-small PCA64이므로 E3와 다름 |
+| `E4_semantic_heads_12_plus_rule_42` | 없음 | runtime bundle의 54D 후보는 E5-small PCA64 기반 semantic heads이므로 E4와 다름 |
+
+차원이 같다는 사실만으로 실험 artifact를 runtime profile에 재사용하지 않는다. Encoder model/revision, projection 또는 semantic-head provenance와 class order, feature order, dataset/split identity, LightGBM model hash가 모두 일치할 때만 같은 후보로 취급한다.

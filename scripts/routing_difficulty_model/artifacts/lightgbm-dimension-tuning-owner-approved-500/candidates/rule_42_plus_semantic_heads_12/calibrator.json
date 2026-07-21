@@ -1,0 +1,15 @@
+{
+  "containsPerSampleScore": false,
+  "contentSha256": "76508b646bbfa6505e5f4e00fb5cf203f7e0d1db097c34520b2de15d68aca8c3",
+  "libraryVersions": {
+    "numpy": "2.2.6",
+    "scikitLearn": "1.7.0"
+  },
+  "parameters": {
+    "identity": true
+  },
+  "schemaVersion": "gatelm.lightgbm-embedding-calibrator.v1",
+  "sizeBytes": 297,
+  "type": "none",
+  "unsafePickle": false
+}

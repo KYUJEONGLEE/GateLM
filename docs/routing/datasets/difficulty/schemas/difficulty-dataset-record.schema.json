@@ -103,7 +103,7 @@
       "maxLength": 80
     },
     "label_source": {
-      "enum": ["synthetic_design", "public_rule_candidate", "llm_same_family_consensus_candidate", "llm_codex_advisory_candidate"]
+      "enum": ["synthetic_design", "public_rule_candidate", "llm_same_family_consensus_candidate", "llm_codex_advisory_candidate", "llm_gpt_risk_sensitive_candidate"]
     },
     "label_confidence": {
       "type": "number",
@@ -325,7 +325,7 @@
           "boundary_case": { "const": false },
           "counterexample_type": { "type": "null" },
           "label_source": {
-            "enum": ["public_rule_candidate", "llm_same_family_consensus_candidate", "llm_codex_advisory_candidate"]
+            "enum": ["public_rule_candidate", "llm_same_family_consensus_candidate", "llm_codex_advisory_candidate", "llm_gpt_risk_sensitive_candidate"]
           }
         },
         "required": [
@@ -357,6 +357,15 @@
     },
     {
       "if": {
+        "properties": { "review_status": { "const": "approved" } },
+        "required": ["review_status"]
+      },
+      "then": {
+        "properties": { "human_reviewed": { "const": true } }
+      }
+    },
+    {
+      "if": {
         "properties": {
           "label_source": { "const": "llm_same_family_consensus_candidate" }
         },
@@ -364,10 +373,22 @@
       },
       "then": {
         "properties": {
-          "source": { "const": "public" },
-          "human_reviewed": { "const": false },
-          "review_status": { "enum": ["pending", "needs_adjudication"] }
-        }
+          "source": { "const": "public" }
+        },
+        "oneOf": [
+          {
+            "properties": {
+              "human_reviewed": { "const": false },
+              "review_status": { "enum": ["pending", "needs_adjudication"] }
+            }
+          },
+          {
+            "properties": {
+              "human_reviewed": { "const": true },
+              "review_status": { "const": "approved" }
+            }
+          }
+        ]
       }
     },
     {
@@ -378,10 +399,44 @@
         "required": ["label_source"]
       },
       "then": {
+        "oneOf": [
+          {
+            "properties": {
+              "human_reviewed": { "const": false },
+              "review_status": { "const": "needs_adjudication" }
+            }
+          },
+          {
+            "properties": {
+              "human_reviewed": { "const": true },
+              "review_status": { "const": "approved" }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "if": {
         "properties": {
-          "human_reviewed": { "const": false },
-          "review_status": { "const": "needs_adjudication" }
-        }
+          "label_source": { "const": "llm_gpt_risk_sensitive_candidate" }
+        },
+        "required": ["label_source"]
+      },
+      "then": {
+        "oneOf": [
+          {
+            "properties": {
+              "human_reviewed": { "const": false },
+              "review_status": { "enum": ["pending", "needs_adjudication"] }
+            }
+          },
+          {
+            "properties": {
+              "human_reviewed": { "const": true },
+              "review_status": { "const": "approved" }
+            }
+          }
+        ]
       }
     }
   ]

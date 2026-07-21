@@ -1,0 +1,646 @@
+{
+  "candidateOrder": [
+    "rule_42_plus_e5_small_pca_64",
+    "rule_42_plus_semantic_heads_12",
+    "e5_base_raw_768",
+    "rule_42_plus_e5_base_raw_768"
+  ],
+  "completedFoldRuns": 1600,
+  "containsEmbeddingMatrix": false,
+  "containsPerSampleScore": false,
+  "containsPromptMaterial": false,
+  "evidenceSha256": "bc08cf7ac89119e4fc54951142e4888222f0d992b9d06d3ef4125451d5e9b087",
+  "experimentId": "difficulty-lightgbm-dimension-tuning.owner-approved-500.2026-07-22.v1",
+  "experimentVersion": "difficulty-lightgbm-dimension-tuning.2026-07-22.v1",
+  "freezeSha256": "1915a02287cf9060ba135e1ce335cc23e80319f38affe0b3bca80174b7bfebb7",
+  "hyperparameterCandidateCountPerFeature": 80,
+  "promotionState": "exploratory_only",
+  "runtimeProfileGenerated": false,
+  "schemaVersion": "gatelm.lightgbm-dimension-tuning-final-evidence.v1",
+  "selectedCFn": 5.0,
+  "selectedFeatureCandidate": "rule_42_plus_semantic_heads_12",
+  "selectedHyperparameterCandidateId": "rule_42_plus_semantic_heads_12::lgb-f58cd856b4d655c1",
+  "splitCounts": {
+    "test": 75,
+    "train": 350,
+    "validation": 75
+  },
+  "splitMembershipSha256": "e1a5d1d9d97a7718f408dc52f1b9bc60d1772ece27651a4b3472d31f051fb98e",
+  "status": "executed",
+  "test": {
+    "categoryAndSlice": {
+      "categories": {
+        "code": {
+          "accuracy": 0.55,
+          "championFalseNegative": 0,
+          "complexRecall": 1.0,
+          "complexSupport": 10,
+          "evidence": "sufficient",
+          "falseNegative": 0,
+          "falsePositive": 9,
+          "families": 2,
+          "records": 20,
+          "safetyPassed": true,
+          "simpleSupport": 10
+        },
+        "general": {
+          "accuracy": 0.85,
+          "championFalseNegative": 0,
+          "complexRecall": "not_computable",
+          "complexSupport": 0,
+          "evidence": "insufficient",
+          "falseNegative": 0,
+          "falsePositive": 3,
+          "families": 2,
+          "records": 20,
+          "safetyPassed": "insufficient",
+          "simpleSupport": 20
+        },
+        "reasoning": {
+          "accuracy": 1.0,
+          "championFalseNegative": 0,
+          "complexRecall": 1.0,
+          "complexSupport": 16,
+          "evidence": "insufficient",
+          "falseNegative": 0,
+          "falsePositive": 0,
+          "families": 2,
+          "records": 16,
+          "safetyPassed": true,
+          "simpleSupport": 0
+        },
+        "summarization": {
+          "accuracy": 1.0,
+          "championFalseNegative": 0,
+          "complexRecall": "not_computable",
+          "complexSupport": 0,
+          "evidence": "insufficient",
+          "falseNegative": 0,
+          "falsePositive": 0,
+          "families": 3,
+          "records": 9,
+          "safetyPassed": "insufficient",
+          "simpleSupport": 9
+        },
+        "translation": {
+          "accuracy": 1.0,
+          "championFalseNegative": 0,
+          "complexRecall": 1.0,
+          "complexSupport": 10,
+          "evidence": "insufficient",
+          "falseNegative": 0,
+          "falsePositive": 0,
+          "families": 1,
+          "records": 10,
+          "safetyPassed": true,
+          "simpleSupport": 0
+        }
+      },
+      "slices": {
+        "category_confusion": {
+          "accuracy": 1.0,
+          "championFalseNegative": 0,
+          "complexRecall": "not_computable",
+          "complexSupport": 0,
+          "evidence": "insufficient",
+          "falseNegative": 0,
+          "falsePositive": 0,
+          "families": 1,
+          "records": 1,
+          "safetyPassed": "insufficient",
+          "simpleSupport": 1
+        },
+        "english": {
+          "accuracy": 0.8095238095238095,
+          "championFalseNegative": 0,
+          "complexRecall": 1.0,
+          "complexSupport": 10,
+          "evidence": "sufficient",
+          "falseNegative": 0,
+          "falsePositive": 4,
+          "families": 8,
+          "records": 21,
+          "safetyPassed": true,
+          "simpleSupport": 11
+        },
+        "indirect_expression": {
+          "accuracy": "not_computable",
+          "championFalseNegative": 0,
+          "complexRecall": "not_computable",
+          "complexSupport": 0,
+          "evidence": "insufficient",
+          "falseNegative": 0,
+          "falsePositive": 0,
+          "families": 0,
+          "records": 0,
+          "safetyPassed": "insufficient",
+          "simpleSupport": 0
+        },
+        "korean": {
+          "accuracy": 0.8297872340425532,
+          "championFalseNegative": 0,
+          "complexRecall": 1.0,
+          "complexSupport": 22,
+          "evidence": "sufficient",
+          "falseNegative": 0,
+          "falsePositive": 8,
+          "families": 10,
+          "records": 47,
+          "safetyPassed": true,
+          "simpleSupport": 25
+        },
+        "long_simple": {
+          "accuracy": 0.75,
+          "championFalseNegative": 0,
+          "complexRecall": "not_computable",
+          "complexSupport": 0,
+          "evidence": "insufficient",
+          "falseNegative": 0,
+          "falsePositive": 1,
+          "families": 2,
+          "records": 4,
+          "safetyPassed": "insufficient",
+          "simpleSupport": 4
+        },
+        "mixed_language": {
+          "accuracy": 1.0,
+          "championFalseNegative": 0,
+          "complexRecall": 1.0,
+          "complexSupport": 4,
+          "evidence": "sufficient",
+          "falseNegative": 0,
+          "falsePositive": 0,
+          "families": 7,
+          "records": 7,
+          "safetyPassed": true,
+          "simpleSupport": 3
+        },
+        "negation": {
+          "accuracy": 0.35294117647058826,
+          "championFalseNegative": 0,
+          "complexRecall": "not_computable",
+          "complexSupport": 0,
+          "evidence": "insufficient",
+          "falseNegative": 0,
+          "falsePositive": 11,
+          "families": 2,
+          "records": 17,
+          "safetyPassed": "insufficient",
+          "simpleSupport": 17
+        },
+        "ood_terminology": {
+          "accuracy": "not_computable",
+          "championFalseNegative": 0,
+          "complexRecall": "not_computable",
+          "complexSupport": 0,
+          "evidence": "insufficient",
+          "falseNegative": 0,
+          "falsePositive": 0,
+          "families": 0,
+          "records": 0,
+          "safetyPassed": "insufficient",
+          "simpleSupport": 0
+        },
+        "payload_contamination": {
+          "accuracy": "not_computable",
+          "championFalseNegative": 0,
+          "complexRecall": "not_computable",
+          "complexSupport": 0,
+          "evidence": "insufficient",
+          "falseNegative": 0,
+          "falsePositive": 0,
+          "families": 0,
+          "records": 0,
+          "safetyPassed": "insufficient",
+          "simpleSupport": 0
+        },
+        "short_complex": {
+          "accuracy": 1.0,
+          "championFalseNegative": 0,
+          "complexRecall": 1.0,
+          "complexSupport": 26,
+          "evidence": "insufficient",
+          "falseNegative": 0,
+          "falsePositive": 0,
+          "families": 4,
+          "records": 26,
+          "safetyPassed": true,
+          "simpleSupport": 0
+        },
+        "synonym": {
+          "accuracy": "not_computable",
+          "championFalseNegative": 0,
+          "complexRecall": "not_computable",
+          "complexSupport": 0,
+          "evidence": "insufficient",
+          "falseNegative": 0,
+          "falsePositive": 0,
+          "families": 0,
+          "records": 0,
+          "safetyPassed": "insufficient",
+          "simpleSupport": 0
+        }
+      }
+    },
+    "familyGroupBootstrap": {
+      "containsPerSampleResult": false,
+      "intervals": {
+        "accuracy": {
+          "lower": 0.6023287671232876,
+          "median": 0.8421052631578947,
+          "upper": 0.987365506329114
+        },
+        "averagePrecision": {
+          "lower": 0.9999999999999999,
+          "median": 1.0,
+          "upper": 1.0
+        },
+        "brierScore": {
+          "lower": 0.00026879588178871437,
+          "median": 0.04070669164832407,
+          "upper": 0.12717699849296973
+        },
+        "complexRecall": {
+          "lower": 1.0,
+          "median": 1.0,
+          "upper": 1.0
+        },
+        "falseNegative": {
+          "lower": 0.0,
+          "median": 0.0,
+          "upper": 0.0
+        },
+        "falsePositive": {
+          "lower": 1.0,
+          "median": 11.0,
+          "upper": 29.0
+        },
+        "macroF1": {
+          "lower": 0.5748235090491196,
+          "median": 0.8269230769230769,
+          "upper": 0.9844571786470274
+        }
+      },
+      "invalidReplicates": 5,
+      "method": "family_group_percentile",
+      "repeats": 1000,
+      "seed": 20260721,
+      "validReplicates": 995
+    },
+    "overall": {
+      "accuracy": 0.84,
+      "averagePrecision": 1.0,
+      "brierScore": 0.04168721408524895,
+      "complex": {
+        "f1": 0.8571428571428571,
+        "f2": 0.9375,
+        "precision": 0.75,
+        "recall": 1.0,
+        "support": 36
+      },
+      "confusionMatrix": {
+        "falseNegative": 0,
+        "falsePositive": 12,
+        "order": [
+          [
+            "actual_simple_predicted_simple",
+            "actual_simple_predicted_complex"
+          ],
+          [
+            "actual_complex_predicted_simple",
+            "actual_complex_predicted_complex"
+          ]
+        ],
+        "trueNegative": 27,
+        "truePositive": 36
+      },
+      "expectedDecisionLoss": {
+        "1.0": 0.16,
+        "10.0": 0.16,
+        "3.0": 0.16,
+        "5.0": 0.16
+      },
+      "falseNegative": 0,
+      "falsePositive": 12,
+      "logLoss": 0.14145597872233467,
+      "macroF1": 0.8376623376623377,
+      "records": 75,
+      "rocAuc": 1.0,
+      "simple": {
+        "f1": 0.8181818181818182,
+        "precision": 1.0,
+        "recall": 0.6923076923076923,
+        "support": 39
+      },
+      "threshold": 0.04911195184127985
+    },
+    "safety": {
+      "allCategoriesPassed": false,
+      "categories": {
+        "code": true,
+        "general": "insufficient",
+        "reasoning": true,
+        "summarization": "insufficient",
+        "translation": true
+      },
+      "minimumComplexRecallPassed": true,
+      "overall": {
+        "candidateFalseNegative": 0,
+        "championFalseNegative": 0,
+        "passed": true
+      }
+    },
+    "selectedCandidateCount": 1
+  },
+  "testEvidenceSha256": "070a15519ec87598a522c5677534de87c9154996704f46e152e12fbf37671225",
+  "validationCandidates": [
+    {
+      "bestIteration": 1051,
+      "calibratorType": "platt",
+      "dimension": 106,
+      "eligibleForSelection": true,
+      "featureCandidate": "rule_42_plus_e5_small_pca_64",
+      "model": {
+        "relativePath": "candidates/rule_42_plus_e5_small_pca_64/model.lightgbm.txt",
+        "sha256": "c7753194e176cea37c5e410ff506ff04a0485cddbbc48058fffbeae0610a11b7",
+        "sizeBytes": 700404
+      },
+      "selectedHyperparameterCandidateId": "lgb-3904860f2e5a3318",
+      "selectedParameters": {
+        "bagging_fraction": 1.0,
+        "feature_fraction": 0.5,
+        "lambda_l1": 0.1,
+        "lambda_l2": 10,
+        "learning_rate": 0.03,
+        "max_depth": 4,
+        "min_data_in_leaf": 20,
+        "min_gain_to_split": 0.05,
+        "num_leaves": 15
+      },
+      "threshold": 0.0027446525059613386,
+      "validation": {
+        "accuracy": 0.6666666666666666,
+        "averagePrecision": 0.9800114861405183,
+        "brierScore": 0.03924038488506348,
+        "complex": {
+          "f1": 0.7474747474747475,
+          "f2": 0.8809523809523809,
+          "precision": 0.5967741935483871,
+          "recall": 1.0,
+          "support": 37
+        },
+        "confusionMatrix": {
+          "falseNegative": 0,
+          "falsePositive": 25,
+          "order": [
+            [
+              "actual_simple_predicted_simple",
+              "actual_simple_predicted_complex"
+            ],
+            [
+              "actual_complex_predicted_simple",
+              "actual_complex_predicted_complex"
+            ]
+          ],
+          "trueNegative": 13,
+          "truePositive": 37
+        },
+        "expectedDecisionLoss": {
+          "1.0": 0.3333333333333333,
+          "10.0": 0.3333333333333333,
+          "3.0": 0.3333333333333333,
+          "5.0": 0.3333333333333333
+        },
+        "falseNegative": 0,
+        "falsePositive": 25,
+        "logLoss": 0.17908869270055752,
+        "macroF1": 0.6286393345216874,
+        "records": 75,
+        "rocAuc": 0.9708392603129444,
+        "simple": {
+          "f1": 0.5098039215686274,
+          "precision": 1.0,
+          "recall": 0.34210526315789475,
+          "support": 38
+        },
+        "threshold": 0.0027446525059613386
+      }
+    },
+    {
+      "bestIteration": 557,
+      "calibratorType": "none",
+      "dimension": 54,
+      "eligibleForSelection": true,
+      "featureCandidate": "rule_42_plus_semantic_heads_12",
+      "model": {
+        "relativePath": "candidates/rule_42_plus_semantic_heads_12/model.lightgbm.txt",
+        "sha256": "dd9dfcbf901d529a09b829e35fc3f8bbd0714dab54c4ac9e0804536f6fb2228f",
+        "sizeBytes": 222288
+      },
+      "selectedHyperparameterCandidateId": "lgb-f58cd856b4d655c1",
+      "selectedParameters": {
+        "bagging_fraction": 1.0,
+        "feature_fraction": 0.7,
+        "lambda_l1": 1,
+        "lambda_l2": 10,
+        "learning_rate": 0.03,
+        "max_depth": -1,
+        "min_data_in_leaf": 100,
+        "min_gain_to_split": 0,
+        "num_leaves": 63
+      },
+      "threshold": 0.04911195184127985,
+      "validation": {
+        "accuracy": 0.88,
+        "averagePrecision": 0.9865774865774866,
+        "brierScore": 0.02626372401017605,
+        "complex": {
+          "f1": 0.8888888888888888,
+          "f2": 0.9375,
+          "precision": 0.8181818181818182,
+          "recall": 0.972972972972973,
+          "support": 37
+        },
+        "confusionMatrix": {
+          "falseNegative": 1,
+          "falsePositive": 8,
+          "order": [
+            [
+              "actual_simple_predicted_simple",
+              "actual_simple_predicted_complex"
+            ],
+            [
+              "actual_complex_predicted_simple",
+              "actual_complex_predicted_complex"
+            ]
+          ],
+          "trueNegative": 30,
+          "truePositive": 36
+        },
+        "expectedDecisionLoss": {
+          "1.0": 0.12,
+          "10.0": 0.24,
+          "3.0": 0.14666666666666667,
+          "5.0": 0.17333333333333334
+        },
+        "falseNegative": 1,
+        "falsePositive": 8,
+        "logLoss": 0.121963263597241,
+        "macroF1": 0.8792270531400965,
+        "records": 75,
+        "rocAuc": 0.9822190611664295,
+        "simple": {
+          "f1": 0.8695652173913043,
+          "precision": 0.967741935483871,
+          "recall": 0.7894736842105263,
+          "support": 38
+        },
+        "threshold": 0.04911195184127985
+      }
+    },
+    {
+      "bestIteration": 817,
+      "calibratorType": "platt",
+      "dimension": 768,
+      "eligibleForSelection": true,
+      "featureCandidate": "e5_base_raw_768",
+      "model": {
+        "relativePath": "candidates/e5_base_raw_768/model.lightgbm.txt",
+        "sha256": "831a4151e4f365e1885eaaee3b5f87341ad254baec3319bdd06a7fc3f1e38313",
+        "sizeBytes": 230954
+      },
+      "selectedHyperparameterCandidateId": "lgb-37cdfb7a3d0fce1d",
+      "selectedParameters": {
+        "bagging_fraction": 0.7,
+        "feature_fraction": 0.7,
+        "lambda_l1": 0,
+        "lambda_l2": 0.1,
+        "learning_rate": 0.1,
+        "max_depth": 8,
+        "min_data_in_leaf": 100,
+        "min_gain_to_split": 0.05,
+        "num_leaves": 15
+      },
+      "threshold": 0.0007085388519203205,
+      "validation": {
+        "accuracy": 0.76,
+        "averagePrecision": 0.9755155226887915,
+        "brierScore": 0.0590028102097227,
+        "complex": {
+          "f1": 0.8043478260869565,
+          "f2": 0.9113300492610837,
+          "precision": 0.6727272727272727,
+          "recall": 1.0,
+          "support": 37
+        },
+        "confusionMatrix": {
+          "falseNegative": 0,
+          "falsePositive": 18,
+          "order": [
+            [
+              "actual_simple_predicted_simple",
+              "actual_simple_predicted_complex"
+            ],
+            [
+              "actual_complex_predicted_simple",
+              "actual_complex_predicted_complex"
+            ]
+          ],
+          "trueNegative": 20,
+          "truePositive": 37
+        },
+        "expectedDecisionLoss": {
+          "1.0": 0.24,
+          "10.0": 0.24,
+          "3.0": 0.24,
+          "5.0": 0.24
+        },
+        "falseNegative": 0,
+        "falsePositive": 18,
+        "logLoss": 0.2940416575269025,
+        "macroF1": 0.7470014992503748,
+        "records": 75,
+        "rocAuc": 0.9708392603129445,
+        "simple": {
+          "f1": 0.6896551724137931,
+          "precision": 1.0,
+          "recall": 0.5263157894736842,
+          "support": 38
+        },
+        "threshold": 0.0007085388519203205
+      }
+    },
+    {
+      "bestIteration": 146,
+      "calibratorType": "isotonic",
+      "dimension": 810,
+      "eligibleForSelection": true,
+      "featureCandidate": "rule_42_plus_e5_base_raw_768",
+      "model": {
+        "relativePath": "candidates/rule_42_plus_e5_base_raw_768/model.lightgbm.txt",
+        "sha256": "8d7323d02e1571b4ebc9f3e5222b9bf069306b00d9c66b5c25ed7eec526088f7",
+        "sizeBytes": 125792
+      },
+      "selectedHyperparameterCandidateId": "lgb-31fd11761cb77525",
+      "selectedParameters": {
+        "bagging_fraction": 0.7,
+        "feature_fraction": 1.0,
+        "lambda_l1": 0,
+        "lambda_l2": 0,
+        "learning_rate": 0.1,
+        "max_depth": 6,
+        "min_data_in_leaf": 50,
+        "min_gain_to_split": 0.1,
+        "num_leaves": 63
+      },
+      "threshold": 0.008695652173913044,
+      "validation": {
+        "accuracy": 0.56,
+        "averagePrecision": 0.9707914960425721,
+        "brierScore": 0.0628257318723163,
+        "complex": {
+          "f1": 0.6915887850467289,
+          "f2": 0.8486238532110092,
+          "precision": 0.5285714285714286,
+          "recall": 1.0,
+          "support": 37
+        },
+        "confusionMatrix": {
+          "falseNegative": 0,
+          "falsePositive": 33,
+          "order": [
+            [
+              "actual_simple_predicted_simple",
+              "actual_simple_predicted_complex"
+            ],
+            [
+              "actual_complex_predicted_simple",
+              "actual_complex_predicted_complex"
+            ]
+          ],
+          "trueNegative": 5,
+          "truePositive": 37
+        },
+        "expectedDecisionLoss": {
+          "1.0": 0.44,
+          "10.0": 0.44,
+          "3.0": 0.44,
+          "5.0": 0.44
+        },
+        "falseNegative": 0,
+        "falsePositive": 33,
+        "logLoss": 0.21028618410677352,
+        "macroF1": 0.4620734622908063,
+        "records": 75,
+        "rocAuc": 0.969416785206259,
+        "simple": {
+          "f1": 0.23255813953488372,
+          "precision": 1.0,
+          "recall": 0.13157894736842105,
+          "support": 38
+        },
+        "threshold": 0.008695652173913044
+      }
+    }
+  ]
+}

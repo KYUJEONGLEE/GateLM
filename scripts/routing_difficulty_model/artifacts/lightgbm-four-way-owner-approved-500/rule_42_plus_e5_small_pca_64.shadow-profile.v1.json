@@ -1,0 +1,201 @@
+{
+  "contractVersion": "gatelm.internal.routing-difficulty-lightgbm-shadow.v1",
+  "encoder": {
+    "artifactDirectory": "multilingual-e5-small/614241f622f53c4eeff9890bdc4f31cfecc418b3",
+    "bundleSha256": "0f828d6a93f5600dff529e4194736fe79d43c04fa4ec9257374f1e092126f76e",
+    "bundleVersion": "difficulty-e5-encoder-pca64-single-request.2026-07-15.v2",
+    "inputPrefix": "query: ",
+    "manifest": {
+      "relativePath": "difficulty-e5-encoder-manifest.v2.json",
+      "sha256": "94c4cdf6cc6caf9d9a640f56b88219a94956750152d14ac4ef21b52140766380",
+      "sizeBytes": 4915
+    },
+    "maximumTokenLength": 128,
+    "modelId": "intfloat/multilingual-e5-small",
+    "outputDimension": 384,
+    "pooling": "attention_mask_weighted_mean_excluding_padding",
+    "poolingVersion": "difficulty-attention-masked-mean.v2",
+    "runtimeArtifacts": [
+      {
+        "relativePath": "config.json",
+        "role": "model_config",
+        "sha256": "69137736cab8b8903a07fe8afaafdda25aac55415a12a55d1bffa9f581abf959",
+        "sizeBytes": 655
+      },
+      {
+        "relativePath": "sentence_bert_config.json",
+        "role": "sentence_transformer_config",
+        "sha256": "948201d8329907aae938fa62f9ceeed53f5694dacc2b87b9f3b78b37ee986529",
+        "sizeBytes": 57
+      },
+      {
+        "relativePath": "1_Pooling/config.json",
+        "role": "pooling_config",
+        "sha256": "987f7a67a38fa564c849bb5d277c52ab9088a84368fc0be31a354125aebb12a0",
+        "sizeBytes": 200
+      },
+      {
+        "relativePath": "special_tokens_map.json",
+        "role": "special_tokens",
+        "sha256": "d05497f1da52c5e09554c0cd874037a083e1dc1b9cfd48034d1c717f1afc07a7",
+        "sizeBytes": 167
+      },
+      {
+        "relativePath": "tokenizer.json",
+        "role": "tokenizer_json",
+        "sha256": "0b44a9d7b51c3c62626640cda0e2c2f70fdacdc25bbbd68038369d14ebdf4c39",
+        "sizeBytes": 17082730
+      },
+      {
+        "relativePath": "tokenizer_config.json",
+        "role": "tokenizer_config",
+        "sha256": "a1d6bc8734a6f635dc158508bef000f8e2e5a759c7d92f984b2c86e5ff53425b",
+        "sizeBytes": 443
+      },
+      {
+        "relativePath": "sentencepiece.bpe.model",
+        "role": "tokenizer_model",
+        "sha256": "cfc8146abe2a0488e9e2a0c56de7952f7c11ab059eca145a0a727afce0db2865",
+        "sizeBytes": 5069051
+      },
+      {
+        "relativePath": "generated/model.dynamic-qint8-matmul.onnx",
+        "role": "encoder_onnx_dynamic_qint8",
+        "sha256": "a374ca7b87cdafc3c2a4b8b3c7db4a6500803ced02c750351d5fa80f60e94a94",
+        "sizeBytes": 406734568
+      }
+    ],
+    "sourceRevision": "614241f622f53c4eeff9890bdc4f31cfecc418b3"
+  },
+  "encoderMode": "e5_small",
+  "executionShape": {
+    "batchSize": 1,
+    "paddingScope": "within_request_only",
+    "unit": "single_request"
+  },
+  "featureShape": {
+    "featureOrder": [
+      "rule_vector_v1",
+      "e5_small_pca_64"
+    ],
+    "projection": {
+      "fitRecordCount": 300,
+      "fitSplit": "train",
+      "inputDimension": 384,
+      "kind": "sklearn_pca_full_svd",
+      "l2Epsilon": 1e-12,
+      "l2Normalize": true,
+      "outputDimension": 64,
+      "parameterSha256": "a9a2258d9d68724af3a1edc4b063d671e42d4d2e68c430e4aa3f668371aadafa",
+      "relativePath": "difficulty-e5-pca-64.v2.npz",
+      "sha256": "fc2ae71057650884e88ace7a9a6ca1465219527558ab534746374d3632690eb9",
+      "sizeBytes": 100314,
+      "version": "difficulty-e5-pca-full-svd-64.single-request.v2"
+    },
+    "ruleDimension": 42,
+    "ruleVectorVersion": "difficulty-feature-vector.v1",
+    "semanticDimension": 64,
+    "semanticHeads": null,
+    "semanticMode": "pca_64",
+    "tabularFeatureNames": [
+      "ruleVectorV1.payloadEmpty",
+      "ruleVectorV1.payloadSmall",
+      "ruleVectorV1.payloadMedium",
+      "ruleVectorV1.payloadLarge",
+      "ruleVectorV1.taskCount",
+      "ruleVectorV1.constraintCount",
+      "ruleVectorV1.scopeCount",
+      "ruleVectorV1.dependencyDepth",
+      "ruleVectorV1.categoryGeneral",
+      "ruleVectorV1.categoryCode",
+      "ruleVectorV1.categoryTranslation",
+      "ruleVectorV1.categorySummarization",
+      "ruleVectorV1.categoryReasoning",
+      "ruleVectorV1.generalWorkflowDepth",
+      "ruleVectorV1.generalBranchOrExceptionCount",
+      "ruleVectorV1.generalExtractionBreadth",
+      "ruleVectorV1.generalHasCrossSourceSynthesis",
+      "ruleVectorV1.codeOperationUnknown",
+      "ruleVectorV1.codeOperationSyntax",
+      "ruleVectorV1.codeOperationExample",
+      "ruleVectorV1.codeOperationSmallEdit",
+      "ruleVectorV1.codeOperationDebug",
+      "ruleVectorV1.codeOperationRefactor",
+      "ruleVectorV1.codeOperationDesign",
+      "ruleVectorV1.codeOperationMigration",
+      "ruleVectorV1.codeOperationConcurrency",
+      "ruleVectorV1.codeOperationPerformance",
+      "ruleVectorV1.codeScopeBreadth",
+      "ruleVectorV1.codeCausalComplexity",
+      "ruleVectorV1.codeEngineeringConstraintCount",
+      "ruleVectorV1.translationScopeCount",
+      "ruleVectorV1.translationPreservationConstraintCount",
+      "ruleVectorV1.translationDomainTerminologyLevel",
+      "ruleVectorV1.translationLocalizationDegree",
+      "ruleVectorV1.summarizationSourceBreadth",
+      "ruleVectorV1.summarizationSynthesisLevel",
+      "ruleVectorV1.summarizationFacetCount",
+      "ruleVectorV1.summarizationHasTraceabilityConstraints",
+      "ruleVectorV1.reasoningAlternativeCount",
+      "ruleVectorV1.reasoningCriteriaAndConstraintCount",
+      "ruleVectorV1.reasoningDepth",
+      "ruleVectorV1.reasoningUncertaintyScenarioCount"
+    ],
+    "totalDimension": 106
+  },
+  "model": {
+    "contentHash": "sha256:387607fb3ef0b1438c5f249e54e14f9fea48cc3699c787c5071e91f38eb85934",
+    "format": "lightgbm_text",
+    "numFeatures": 106,
+    "objective": "binary",
+    "parameters": {
+      "bagging_fraction": 1.0,
+      "bagging_freq": 0,
+      "bagging_seed": 20260721,
+      "data_random_seed": 20260721,
+      "deterministic": true,
+      "feature_fraction": 1.0,
+      "feature_fraction_seed": 20260721,
+      "force_col_wise": true,
+      "lambda_l1": 0.0,
+      "lambda_l2": 0.1,
+      "learning_rate": 0.03,
+      "max_depth": -1,
+      "metric": "binary_logloss",
+      "min_data_in_leaf": 20,
+      "num_leaves": 31,
+      "num_threads": 1,
+      "objective": "binary",
+      "seed": 20260721,
+      "verbosity": -1
+    },
+    "relativePath": "rule_42_plus_e5_small_pca_64.lightgbm.txt",
+    "sha256": "387607fb3ef0b1438c5f249e54e14f9fea48cc3699c787c5071e91f38eb85934",
+    "sizeBytes": 130871,
+    "threshold": 0.5,
+    "version": "difficulty-lightgbm-four-way.owner-approved-500.2026-07-22.v1.rule_42_plus_e5_small_pca_64"
+  },
+  "profileVersion": "difficulty-lightgbm-shadow.rule42-e5-small-pca64.v1",
+  "promotionState": "offline_shadow_only",
+  "schemaVersion": "gatelm.routing-difficulty-lightgbm-shadow-profile.v1",
+  "trainingProvenance": {
+    "datasetSha256": "sha256:4f4b00a783ef6372a2d23baf77b0c793670a72f03f4636c6674c8e911662189f",
+    "datasetVersion": "difficulty_training_2026_07_15_owner_approved_500_v2",
+    "familyDisjoint": true,
+    "seed": 20260721,
+    "selectedFrom": [
+      "rule_42_plus_e5_small_pca_64",
+      "rule_42_plus_semantic_heads_12",
+      "e5_base_raw_768",
+      "rule_42_plus_e5_base_raw_768"
+    ],
+    "selectionSplit": "validation",
+    "splitCounts": {
+      "test": 100,
+      "train": 300,
+      "validation": 100
+    },
+    "splitPolicyVersion": "difficulty-family-constrained-split.2026-07-15.v1",
+    "testAccess": "after_selection_freeze"
+  }
+}

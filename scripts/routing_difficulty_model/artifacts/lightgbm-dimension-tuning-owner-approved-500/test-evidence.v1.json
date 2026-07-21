@@ -1,0 +1,344 @@
+{
+  "categoryAndSlice": {
+    "categories": {
+      "code": {
+        "accuracy": 0.55,
+        "championFalseNegative": 0,
+        "complexRecall": 1.0,
+        "complexSupport": 10,
+        "evidence": "sufficient",
+        "falseNegative": 0,
+        "falsePositive": 9,
+        "families": 2,
+        "records": 20,
+        "safetyPassed": true,
+        "simpleSupport": 10
+      },
+      "general": {
+        "accuracy": 0.85,
+        "championFalseNegative": 0,
+        "complexRecall": "not_computable",
+        "complexSupport": 0,
+        "evidence": "insufficient",
+        "falseNegative": 0,
+        "falsePositive": 3,
+        "families": 2,
+        "records": 20,
+        "safetyPassed": "insufficient",
+        "simpleSupport": 20
+      },
+      "reasoning": {
+        "accuracy": 1.0,
+        "championFalseNegative": 0,
+        "complexRecall": 1.0,
+        "complexSupport": 16,
+        "evidence": "insufficient",
+        "falseNegative": 0,
+        "falsePositive": 0,
+        "families": 2,
+        "records": 16,
+        "safetyPassed": true,
+        "simpleSupport": 0
+      },
+      "summarization": {
+        "accuracy": 1.0,
+        "championFalseNegative": 0,
+        "complexRecall": "not_computable",
+        "complexSupport": 0,
+        "evidence": "insufficient",
+        "falseNegative": 0,
+        "falsePositive": 0,
+        "families": 3,
+        "records": 9,
+        "safetyPassed": "insufficient",
+        "simpleSupport": 9
+      },
+      "translation": {
+        "accuracy": 1.0,
+        "championFalseNegative": 0,
+        "complexRecall": 1.0,
+        "complexSupport": 10,
+        "evidence": "insufficient",
+        "falseNegative": 0,
+        "falsePositive": 0,
+        "families": 1,
+        "records": 10,
+        "safetyPassed": true,
+        "simpleSupport": 0
+      }
+    },
+    "slices": {
+      "category_confusion": {
+        "accuracy": 1.0,
+        "championFalseNegative": 0,
+        "complexRecall": "not_computable",
+        "complexSupport": 0,
+        "evidence": "insufficient",
+        "falseNegative": 0,
+        "falsePositive": 0,
+        "families": 1,
+        "records": 1,
+        "safetyPassed": "insufficient",
+        "simpleSupport": 1
+      },
+      "english": {
+        "accuracy": 0.8095238095238095,
+        "championFalseNegative": 0,
+        "complexRecall": 1.0,
+        "complexSupport": 10,
+        "evidence": "sufficient",
+        "falseNegative": 0,
+        "falsePositive": 4,
+        "families": 8,
+        "records": 21,
+        "safetyPassed": true,
+        "simpleSupport": 11
+      },
+      "indirect_expression": {
+        "accuracy": "not_computable",
+        "championFalseNegative": 0,
+        "complexRecall": "not_computable",
+        "complexSupport": 0,
+        "evidence": "insufficient",
+        "falseNegative": 0,
+        "falsePositive": 0,
+        "families": 0,
+        "records": 0,
+        "safetyPassed": "insufficient",
+        "simpleSupport": 0
+      },
+      "korean": {
+        "accuracy": 0.8297872340425532,
+        "championFalseNegative": 0,
+        "complexRecall": 1.0,
+        "complexSupport": 22,
+        "evidence": "sufficient",
+        "falseNegative": 0,
+        "falsePositive": 8,
+        "families": 10,
+        "records": 47,
+        "safetyPassed": true,
+        "simpleSupport": 25
+      },
+      "long_simple": {
+        "accuracy": 0.75,
+        "championFalseNegative": 0,
+        "complexRecall": "not_computable",
+        "complexSupport": 0,
+        "evidence": "insufficient",
+        "falseNegative": 0,
+        "falsePositive": 1,
+        "families": 2,
+        "records": 4,
+        "safetyPassed": "insufficient",
+        "simpleSupport": 4
+      },
+      "mixed_language": {
+        "accuracy": 1.0,
+        "championFalseNegative": 0,
+        "complexRecall": 1.0,
+        "complexSupport": 4,
+        "evidence": "sufficient",
+        "falseNegative": 0,
+        "falsePositive": 0,
+        "families": 7,
+        "records": 7,
+        "safetyPassed": true,
+        "simpleSupport": 3
+      },
+      "negation": {
+        "accuracy": 0.35294117647058826,
+        "championFalseNegative": 0,
+        "complexRecall": "not_computable",
+        "complexSupport": 0,
+        "evidence": "insufficient",
+        "falseNegative": 0,
+        "falsePositive": 11,
+        "families": 2,
+        "records": 17,
+        "safetyPassed": "insufficient",
+        "simpleSupport": 17
+      },
+      "ood_terminology": {
+        "accuracy": "not_computable",
+        "championFalseNegative": 0,
+        "complexRecall": "not_computable",
+        "complexSupport": 0,
+        "evidence": "insufficient",
+        "falseNegative": 0,
+        "falsePositive": 0,
+        "families": 0,
+        "records": 0,
+        "safetyPassed": "insufficient",
+        "simpleSupport": 0
+      },
+      "payload_contamination": {
+        "accuracy": "not_computable",
+        "championFalseNegative": 0,
+        "complexRecall": "not_computable",
+        "complexSupport": 0,
+        "evidence": "insufficient",
+        "falseNegative": 0,
+        "falsePositive": 0,
+        "families": 0,
+        "records": 0,
+        "safetyPassed": "insufficient",
+        "simpleSupport": 0
+      },
+      "short_complex": {
+        "accuracy": 1.0,
+        "championFalseNegative": 0,
+        "complexRecall": 1.0,
+        "complexSupport": 26,
+        "evidence": "insufficient",
+        "falseNegative": 0,
+        "falsePositive": 0,
+        "families": 4,
+        "records": 26,
+        "safetyPassed": true,
+        "simpleSupport": 0
+      },
+      "synonym": {
+        "accuracy": "not_computable",
+        "championFalseNegative": 0,
+        "complexRecall": "not_computable",
+        "complexSupport": 0,
+        "evidence": "insufficient",
+        "falseNegative": 0,
+        "falsePositive": 0,
+        "families": 0,
+        "records": 0,
+        "safetyPassed": "insufficient",
+        "simpleSupport": 0
+      }
+    }
+  },
+  "containsEmbeddingMatrix": false,
+  "containsPerSampleScore": false,
+  "evidenceSha256": "070a15519ec87598a522c5677534de87c9154996704f46e152e12fbf37671225",
+  "familyGroupBootstrap": {
+    "containsPerSampleResult": false,
+    "intervals": {
+      "accuracy": {
+        "lower": 0.6023287671232876,
+        "median": 0.8421052631578947,
+        "upper": 0.987365506329114
+      },
+      "averagePrecision": {
+        "lower": 0.9999999999999999,
+        "median": 1.0,
+        "upper": 1.0
+      },
+      "brierScore": {
+        "lower": 0.00026879588178871437,
+        "median": 0.04070669164832407,
+        "upper": 0.12717699849296973
+      },
+      "complexRecall": {
+        "lower": 1.0,
+        "median": 1.0,
+        "upper": 1.0
+      },
+      "falseNegative": {
+        "lower": 0.0,
+        "median": 0.0,
+        "upper": 0.0
+      },
+      "falsePositive": {
+        "lower": 1.0,
+        "median": 11.0,
+        "upper": 29.0
+      },
+      "macroF1": {
+        "lower": 0.5748235090491196,
+        "median": 0.8269230769230769,
+        "upper": 0.9844571786470274
+      }
+    },
+    "invalidReplicates": 5,
+    "method": "family_group_percentile",
+    "repeats": 1000,
+    "seed": 20260721,
+    "validReplicates": 995
+  },
+  "freezeSha256": "1915a02287cf9060ba135e1ce335cc23e80319f38affe0b3bca80174b7bfebb7",
+  "frozenSelection": {
+    "calibratorType": "none",
+    "candidateId": "rule_42_plus_semantic_heads_12::lgb-f58cd856b4d655c1",
+    "embeddingDimension": 54,
+    "selectedCFn": 5.0,
+    "threshold": 0.04911195184127985,
+    "thresholdReselectedOnTest": false
+  },
+  "overall": {
+    "accuracy": 0.84,
+    "averagePrecision": 1.0,
+    "brierScore": 0.04168721408524895,
+    "complex": {
+      "f1": 0.8571428571428571,
+      "f2": 0.9375,
+      "precision": 0.75,
+      "recall": 1.0,
+      "support": 36
+    },
+    "confusionMatrix": {
+      "falseNegative": 0,
+      "falsePositive": 12,
+      "order": [
+        [
+          "actual_simple_predicted_simple",
+          "actual_simple_predicted_complex"
+        ],
+        [
+          "actual_complex_predicted_simple",
+          "actual_complex_predicted_complex"
+        ]
+      ],
+      "trueNegative": 27,
+      "truePositive": 36
+    },
+    "expectedDecisionLoss": {
+      "1.0": 0.16,
+      "10.0": 0.16,
+      "3.0": 0.16,
+      "5.0": 0.16
+    },
+    "falseNegative": 0,
+    "falsePositive": 12,
+    "logLoss": 0.14145597872233467,
+    "macroF1": 0.8376623376623377,
+    "records": 75,
+    "rocAuc": 1.0,
+    "simple": {
+      "f1": 0.8181818181818182,
+      "precision": 1.0,
+      "recall": 0.6923076923076923,
+      "support": 39
+    },
+    "threshold": 0.04911195184127985
+  },
+  "promotionState": "exploratory_only",
+  "runtimeProfileGenerated": false,
+  "safety": {
+    "allCategoriesPassed": false,
+    "categories": {
+      "code": true,
+      "general": "insufficient",
+      "reasoning": true,
+      "summarization": "insufficient",
+      "translation": true
+    },
+    "minimumComplexRecallPassed": true,
+    "overall": {
+      "candidateFalseNegative": 0,
+      "championFalseNegative": 0,
+      "passed": true
+    }
+  },
+  "schemaVersion": "gatelm.lightgbm-embedding-test-evidence.v1",
+  "testAccess": {
+    "evaluatedCandidateCount": 1,
+    "recordSha256": "b60a0a75473842468a1b46b33ba26e53d019b3a64b8d5195dde7f7455f7191f1",
+    "state": "consumed_on_test_input_access_start"
+  }
+}

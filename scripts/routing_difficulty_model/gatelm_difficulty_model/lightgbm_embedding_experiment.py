@@ -318,7 +318,9 @@ def validate_dataset_eligibility(
         scope.get("training_eligible") is True,
         review.get("production_gold") is True,
         review.get("human_reviewed") is True,
-        review.get("review_status") == "approved",
+        review.get("review_status") == "approved"
+        or review.get("review_status_distribution", {}).get("approved")
+        == counts.get("records"),
         isinstance(counts.get("human_reviewed_records"), int)
         and not isinstance(counts.get("human_reviewed_records"), bool)
         and int(counts["human_reviewed_records"]) > 0,

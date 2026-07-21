@@ -1,0 +1,38 @@
+{
+  "schemaVersion": "gatelm.lightgbm-dimension-tuning-bridge-config.v1",
+  "experimentId": "difficulty-lightgbm-dimension-tuning.owner-approved-15000.2026-07-22.v1",
+  "experimentVersion": "difficulty-lightgbm-dimension-tuning.2026-07-22.v1",
+  "inputRoot": ".tmp/difficulty-lightgbm-dimension-tuning-owner-approved-15000",
+  "outputRoot": "scripts/routing_difficulty_model/artifacts/lightgbm-dimension-tuning-owner-approved-15000",
+  "candidateOrder": [
+    "rule_42_plus_e5_small_pca_64",
+    "rule_42_plus_semantic_heads_12",
+    "e5_base_raw_768",
+    "rule_42_plus_e5_base_raw_768"
+  ],
+  "dataset": {
+    "path": "docs/routing/datasets/difficulty/data/initial-routing-difficulty-15000.owner-approved.jsonl",
+    "manifestPath": "docs/routing/datasets/difficulty/data/initial-routing-difficulty-15000.owner-approved.manifest.json"
+  },
+  "split": {
+    "policyVersion": "routing-difficulty-group-split.2026-07-21.v1",
+    "seed": 20260721,
+    "counts": {
+      "train": 10500,
+      "validation": 2250,
+      "test": 2250
+    }
+  },
+  "search": {
+    "candidateCount": 80,
+    "selectedCFn": 5,
+    "testBootstrapRepeats": 1000
+  },
+  "artifacts": {
+    "smallManifest": "scripts/routing_difficulty_model/artifacts/difficulty-e5-encoder-owner-approved-15000-manifest.v1.json",
+    "smallArtifactRoot": ".tmp/difficulty-semantic-encoder-artifacts",
+    "baseLock": "scripts/routing_difficulty_model/artifacts/lightgbm-four-way-owner-approved-15000/e5-base-runtime-lock.v1.json",
+    "baseArtifactRoot": ".tmp/difficulty-lightgbm-e5-base-artifacts",
+    "championArtifact": "scripts/routing_difficulty_model/artifacts/candidates/difficulty-candidate-b-106d.owner-approved-15000.v1.json"
+  }
+}

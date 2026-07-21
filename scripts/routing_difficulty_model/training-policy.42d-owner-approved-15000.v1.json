@@ -1,0 +1,42 @@
+{
+  "schemaVersion": "gatelm.difficulty-training-policy.v1",
+  "policyVersion": "difficulty-logistic-training.42d-owner-approved-15000.2026-07-22.v1",
+  "modelVersion": "difficulty-logistic-v1",
+  "featureVersion": "difficulty-feature-vector.v1",
+  "splitPolicyVersion": "routing-difficulty-group-split.2026-07-21.v1",
+  "regularization": {
+    "penalty": "l2",
+    "solver": "liblinear",
+    "cCandidates": [0.01, 0.03, 0.1, 0.3, 1.0, 3.0, 10.0],
+    "groupFolds": 5,
+    "selectionMetric": "mean_log_loss",
+    "tieTolerance": 0.000001,
+    "tieBreakers": ["mean_brier_score", "stronger_regularization"],
+    "maxIterations": 2000,
+    "randomSeed": 1729
+  },
+  "calibration": {
+    "policyVersion": "difficulty-calibration-v1",
+    "candidates": ["platt", "isotonic"],
+    "groupFolds": 5,
+    "selectionMetric": "mean_log_loss",
+    "tieTolerance": 0.000001,
+    "tieBreakers": ["mean_brier_score", "simplicity_order"],
+    "simplicityOrder": ["platt", "isotonic"],
+    "platt": { "solver": "lbfgs", "c": 1000000.0, "maxIterations": 2000 },
+    "isotonic": {
+      "algorithm": "pava",
+      "tieGrouping": "exact_float64",
+      "weighting": "sample_count",
+      "blockCanonicalization": "maximal_constant",
+      "lookup": "inclusive_lower_floor",
+      "outOfBounds": "clip",
+      "smallBlockMerge": "disabled"
+    }
+  },
+  "threshold": {
+    "policyVersion": "difficulty-threshold-v1",
+    "value": 0.45,
+    "selection": "fixed_not_optimized"
+  }
+}

@@ -10,6 +10,7 @@
     "contractVersion",
     "promotionState",
     "executionShape",
+    "encoderMode",
     "encoder",
     "featureShape",
     "model",
@@ -17,7 +18,13 @@
   ],
   "properties": {
     "schemaVersion": { "const": "gatelm.routing-difficulty-lightgbm-shadow-profile.v1" },
-    "profileVersion": { "const": "difficulty-lightgbm-shadow.e5-base-768.v1" },
+    "profileVersion": {
+      "enum": [
+        "difficulty-lightgbm-shadow.e5-base-768.v1",
+        "difficulty-lightgbm-shadow.rule42-e5-small-pca64.v1",
+        "difficulty-lightgbm-shadow.rule42-semantic-heads12.v1"
+      ]
+    },
     "contractVersion": { "const": "gatelm.internal.routing-difficulty-lightgbm-shadow.v1" },
     "promotionState": { "const": "offline_shadow_only" },
     "executionShape": {
@@ -30,11 +37,108 @@
         "paddingScope": { "const": "within_request_only" }
       }
     },
+    "encoderMode": { "enum": ["e5_small", "e5_base"] },
     "encoder": { "$ref": "#/$defs/encoder" },
     "featureShape": { "$ref": "#/$defs/featureShape" },
     "model": { "$ref": "#/$defs/model" },
     "trainingProvenance": { "$ref": "#/$defs/trainingProvenance" }
   },
+  "allOf": [
+    {
+      "if": { "properties": { "encoderMode": { "const": "e5_base" } } },
+      "then": {
+        "properties": {
+          "profileVersion": { "const": "difficulty-lightgbm-shadow.e5-base-768.v1" },
+          "encoder": { "$ref": "#/$defs/e5BaseEncoder" },
+          "featureShape": {
+            "properties": {
+              "semanticMode": { "enum": ["raw_768", "pca_128", "pca_256"] }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "encoderMode": { "const": "e5_small" } } },
+      "then": {
+        "properties": {
+          "encoder": { "$ref": "#/$defs/e5SmallEncoder" },
+          "featureShape": {
+            "properties": {
+              "semanticMode": { "enum": ["pca_64", "semantic_heads_12"] },
+              "ruleDimension": { "const": 42 }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "profileVersion": { "const": "difficulty-lightgbm-shadow.rule42-e5-small-pca64.v1" }
+        }
+      },
+      "then": {
+        "properties": {
+          "encoderMode": { "const": "e5_small" },
+          "featureShape": { "properties": { "semanticMode": { "const": "pca_64" } } }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "profileVersion": { "const": "difficulty-lightgbm-shadow.rule42-semantic-heads12.v1" }
+        }
+      },
+      "then": {
+        "properties": {
+          "encoderMode": { "const": "e5_small" },
+          "featureShape": { "properties": { "semanticMode": { "const": "semantic_heads_12" } } }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "featureShape": { "properties": { "semanticMode": { "const": "raw_768" } } }
+        }
+      },
+      "then": { "properties": { "model": { "properties": { "numFeatures": { "enum": [768, 810] } } } } }
+    },
+    {
+      "if": {
+        "properties": {
+          "featureShape": { "properties": { "semanticMode": { "const": "pca_128" } } }
+        }
+      },
+      "then": { "properties": { "model": { "properties": { "numFeatures": { "const": 170 } } } } }
+    },
+    {
+      "if": {
+        "properties": {
+          "featureShape": { "properties": { "semanticMode": { "const": "pca_256" } } }
+        }
+      },
+      "then": { "properties": { "model": { "properties": { "numFeatures": { "const": 298 } } } } }
+    },
+    {
+      "if": {
+        "properties": {
+          "featureShape": { "properties": { "semanticMode": { "const": "pca_64" } } }
+        }
+      },
+      "then": { "properties": { "model": { "properties": { "numFeatures": { "const": 106 } } } } }
+    },
+    {
+      "if": {
+        "properties": {
+          "featureShape": { "properties": { "semanticMode": { "const": "semantic_heads_12" } } }
+        }
+      },
+      "then": { "properties": { "model": { "properties": { "numFeatures": { "const": 54 } } } } }
+    }
+  ],
   "$defs": {
     "sha256": {
       "type": "string",
@@ -49,6 +153,16 @@
       "minLength": 1,
       "maxLength": 240,
       "pattern": "^(?![A-Za-z]:)(?![/\\\\])(?!.*(?:^|[/\\\\])\\.\\.(?:[/\\\\]|$)).+$"
+    },
+    "fileArtifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["relativePath", "sizeBytes", "sha256"],
+      "properties": {
+        "relativePath": { "$ref": "#/$defs/safeRelativePath" },
+        "sizeBytes": { "type": "integer", "minimum": 1, "maximum": 2147483648 },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
     },
     "runtimeArtifact": {
       "type": "object",
@@ -72,7 +186,7 @@
         "sha256": { "$ref": "#/$defs/sha256" }
       }
     },
-    "encoder": {
+    "e5BaseEncoder": {
       "type": "object",
       "additionalProperties": false,
       "required": [
@@ -101,6 +215,54 @@
         "pooling": { "const": "attention_mask_weighted_mean_excluding_padding" }
       }
     },
+    "e5SmallEncoder": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "modelId",
+        "sourceRevision",
+        "bundleVersion",
+        "bundleSha256",
+        "manifest",
+        "artifactDirectory",
+        "runtimeArtifacts",
+        "inputPrefix",
+        "maximumTokenLength",
+        "outputDimension",
+        "pooling",
+        "poolingVersion"
+      ],
+      "properties": {
+        "modelId": { "const": "intfloat/multilingual-e5-small" },
+        "sourceRevision": { "const": "614241f622f53c4eeff9890bdc4f31cfecc418b3" },
+        "bundleVersion": { "const": "difficulty-e5-encoder-pca64-single-request.2026-07-15.v2" },
+        "bundleSha256": { "const": "0f828d6a93f5600dff529e4194736fe79d43c04fa4ec9257374f1e092126f76e" },
+        "manifest": {
+          "allOf": [
+            { "$ref": "#/$defs/fileArtifact" },
+            { "properties": { "sha256": { "const": "94c4cdf6cc6caf9d9a640f56b88219a94956750152d14ac4ef21b52140766380" } } }
+          ]
+        },
+        "artifactDirectory": { "$ref": "#/$defs/safeRelativePath" },
+        "runtimeArtifacts": {
+          "type": "array",
+          "minItems": 8,
+          "maxItems": 8,
+          "items": { "$ref": "#/$defs/runtimeArtifact" }
+        },
+        "inputPrefix": { "const": "query: " },
+        "maximumTokenLength": { "const": 128 },
+        "outputDimension": { "const": 384 },
+        "pooling": { "const": "attention_mask_weighted_mean_excluding_padding" },
+        "poolingVersion": { "const": "difficulty-attention-masked-mean.v2" }
+      }
+    },
+    "encoder": {
+      "oneOf": [
+        { "$ref": "#/$defs/e5BaseEncoder" },
+        { "$ref": "#/$defs/e5SmallEncoder" }
+      ]
+    },
     "projection": {
       "type": "object",
       "additionalProperties": false,
@@ -118,15 +280,59 @@
       ],
       "properties": {
         "kind": { "const": "sklearn_pca_full_svd" },
+        "version": { "type": "string", "minLength": 1, "maxLength": 160 },
         "relativePath": { "$ref": "#/$defs/safeRelativePath" },
         "sizeBytes": { "type": "integer", "minimum": 1, "maximum": 8388608 },
         "sha256": { "$ref": "#/$defs/sha256" },
-        "inputDimension": { "const": 768 },
-        "outputDimension": { "enum": [128, 256] },
+        "parameterSha256": { "$ref": "#/$defs/sha256" },
+        "inputDimension": { "enum": [384, 768] },
+        "outputDimension": { "enum": [64, 128, 256] },
         "fitSplit": { "const": "train" },
         "fitRecordCount": { "type": "integer", "minimum": 256 },
         "l2Normalize": { "const": true },
         "l2Epsilon": { "const": 1e-12 }
+      }
+    },
+    "semanticHeads": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "contentHash",
+        "relativePath",
+        "sizeBytes",
+        "sha256",
+        "inputDimension",
+        "outputDimension",
+        "probabilityRule",
+        "headOrder",
+        "classOrder"
+      ],
+      "properties": {
+        "version": { "const": "difficulty-semantic-heads.owner-approved-500.single-request.2026-07-15.v2" },
+        "contentHash": { "const": "sha256:531bb72d1d22f134a11da76649cfde9102af5c116cf46765e03b8f2550d27386" },
+        "relativePath": { "$ref": "#/$defs/safeRelativePath" },
+        "sizeBytes": { "type": "integer", "minimum": 1, "maximum": 2097152 },
+        "sha256": { "const": "e13d7a4c066861bbdd310341bc85fc611d5ad7e28c3ac0d54b203e130ce052b5" },
+        "inputDimension": { "const": 64 },
+        "outputDimension": { "const": 12 },
+        "probabilityRule": { "const": "multinomial_linear_softmax.v1" },
+        "headOrder": {
+          "const": [
+            "semanticTaskBucket",
+            "semanticConstraintBucket",
+            "semanticScopeBucket",
+            "semanticDependencyBucket"
+          ]
+        },
+        "classOrder": {
+          "const": [
+            { "name": "semanticTaskBucket", "classes": ["count_1", "count_2", "count_3_plus"] },
+            { "name": "semanticConstraintBucket", "classes": ["count_0_to_1", "count_2", "count_3_plus"] },
+            { "name": "semanticScopeBucket", "classes": ["count_1", "count_2_to_3", "count_4_plus"] },
+            { "name": "semanticDependencyBucket", "classes": ["depth_0_to_1", "depth_2", "depth_3_plus"] }
+          ]
+        }
       }
     },
     "featureShape": {
@@ -139,7 +345,9 @@
         "semanticMode",
         "semanticDimension",
         "totalDimension",
-        "projection"
+        "featureOrder",
+        "projection",
+        "semanticHeads"
       ],
       "properties": {
         "ruleVectorVersion": { "const": "difficulty-feature-vector.v1" },
@@ -148,80 +356,184 @@
           "oneOf": [
             { "const": [] },
             { "const": [
-            "ruleVectorV1.payloadEmpty",
-            "ruleVectorV1.payloadSmall",
-            "ruleVectorV1.payloadMedium",
-            "ruleVectorV1.payloadLarge",
-            "ruleVectorV1.taskCount",
-            "ruleVectorV1.constraintCount",
-            "ruleVectorV1.scopeCount",
-            "ruleVectorV1.dependencyDepth",
-            "ruleVectorV1.categoryGeneral",
-            "ruleVectorV1.categoryCode",
-            "ruleVectorV1.categoryTranslation",
-            "ruleVectorV1.categorySummarization",
-            "ruleVectorV1.categoryReasoning",
-            "ruleVectorV1.generalWorkflowDepth",
-            "ruleVectorV1.generalBranchOrExceptionCount",
-            "ruleVectorV1.generalExtractionBreadth",
-            "ruleVectorV1.generalHasCrossSourceSynthesis",
-            "ruleVectorV1.codeOperationUnknown",
-            "ruleVectorV1.codeOperationSyntax",
-            "ruleVectorV1.codeOperationExample",
-            "ruleVectorV1.codeOperationSmallEdit",
-            "ruleVectorV1.codeOperationDebug",
-            "ruleVectorV1.codeOperationRefactor",
-            "ruleVectorV1.codeOperationDesign",
-            "ruleVectorV1.codeOperationMigration",
-            "ruleVectorV1.codeOperationConcurrency",
-            "ruleVectorV1.codeOperationPerformance",
-            "ruleVectorV1.codeScopeBreadth",
-            "ruleVectorV1.codeCausalComplexity",
-            "ruleVectorV1.codeEngineeringConstraintCount",
-            "ruleVectorV1.translationScopeCount",
-            "ruleVectorV1.translationPreservationConstraintCount",
-            "ruleVectorV1.translationDomainTerminologyLevel",
-            "ruleVectorV1.translationLocalizationDegree",
-            "ruleVectorV1.summarizationSourceBreadth",
-            "ruleVectorV1.summarizationSynthesisLevel",
-            "ruleVectorV1.summarizationFacetCount",
-            "ruleVectorV1.summarizationHasTraceabilityConstraints",
-            "ruleVectorV1.reasoningAlternativeCount",
-            "ruleVectorV1.reasoningCriteriaAndConstraintCount",
-            "ruleVectorV1.reasoningDepth",
-            "ruleVectorV1.reasoningUncertaintyScenarioCount"
+              "ruleVectorV1.payloadEmpty",
+              "ruleVectorV1.payloadSmall",
+              "ruleVectorV1.payloadMedium",
+              "ruleVectorV1.payloadLarge",
+              "ruleVectorV1.taskCount",
+              "ruleVectorV1.constraintCount",
+              "ruleVectorV1.scopeCount",
+              "ruleVectorV1.dependencyDepth",
+              "ruleVectorV1.categoryGeneral",
+              "ruleVectorV1.categoryCode",
+              "ruleVectorV1.categoryTranslation",
+              "ruleVectorV1.categorySummarization",
+              "ruleVectorV1.categoryReasoning",
+              "ruleVectorV1.generalWorkflowDepth",
+              "ruleVectorV1.generalBranchOrExceptionCount",
+              "ruleVectorV1.generalExtractionBreadth",
+              "ruleVectorV1.generalHasCrossSourceSynthesis",
+              "ruleVectorV1.codeOperationUnknown",
+              "ruleVectorV1.codeOperationSyntax",
+              "ruleVectorV1.codeOperationExample",
+              "ruleVectorV1.codeOperationSmallEdit",
+              "ruleVectorV1.codeOperationDebug",
+              "ruleVectorV1.codeOperationRefactor",
+              "ruleVectorV1.codeOperationDesign",
+              "ruleVectorV1.codeOperationMigration",
+              "ruleVectorV1.codeOperationConcurrency",
+              "ruleVectorV1.codeOperationPerformance",
+              "ruleVectorV1.codeScopeBreadth",
+              "ruleVectorV1.codeCausalComplexity",
+              "ruleVectorV1.codeEngineeringConstraintCount",
+              "ruleVectorV1.translationScopeCount",
+              "ruleVectorV1.translationPreservationConstraintCount",
+              "ruleVectorV1.translationDomainTerminologyLevel",
+              "ruleVectorV1.translationLocalizationDegree",
+              "ruleVectorV1.summarizationSourceBreadth",
+              "ruleVectorV1.summarizationSynthesisLevel",
+              "ruleVectorV1.summarizationFacetCount",
+              "ruleVectorV1.summarizationHasTraceabilityConstraints",
+              "ruleVectorV1.reasoningAlternativeCount",
+              "ruleVectorV1.reasoningCriteriaAndConstraintCount",
+              "ruleVectorV1.reasoningDepth",
+              "ruleVectorV1.reasoningUncertaintyScenarioCount"
             ] }
           ]
         },
-        "semanticMode": { "enum": ["raw", "pca"] },
-        "semanticDimension": { "enum": [128, 256, 768] },
-        "totalDimension": { "enum": [170, 298, 768, 810] },
+        "semanticMode": {
+          "enum": ["raw_768", "pca_128", "pca_256", "pca_64", "semantic_heads_12"]
+        },
+        "semanticDimension": { "enum": [12, 64, 128, 256, 768] },
+        "totalDimension": { "enum": [54, 106, 170, 298, 768, 810] },
+        "featureOrder": {
+          "oneOf": [
+            { "const": ["raw_embedding_768"] },
+            { "const": ["rule_vector_v1", "raw_embedding_768"] },
+            { "const": ["rule_vector_v1", "e5_base_pca_128"] },
+            { "const": ["rule_vector_v1", "e5_base_pca_256"] },
+            { "const": ["rule_vector_v1", "e5_small_pca_64"] },
+            { "const": ["rule_vector_v1", "semantic_heads_12"] }
+          ]
+        },
         "projection": {
           "oneOf": [
             { "type": "null" },
             { "$ref": "#/$defs/projection" }
           ]
+        },
+        "semanticHeads": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/semanticHeads" }
+          ]
         }
       },
       "allOf": [
         {
-          "if": { "properties": { "semanticMode": { "const": "raw" } } },
+          "if": { "properties": { "semanticMode": { "const": "raw_768" } } },
           "then": {
             "properties": {
               "semanticDimension": { "const": 768 },
               "totalDimension": { "enum": [768, 810] },
-              "projection": { "type": "null" }
+              "featureOrder": {
+                "oneOf": [
+                  { "const": ["raw_embedding_768"] },
+                  { "const": ["rule_vector_v1", "raw_embedding_768"] }
+                ]
+              },
+              "projection": { "type": "null" },
+              "semanticHeads": { "type": "null" }
             }
           }
         },
         {
-          "if": { "properties": { "semanticMode": { "const": "pca" } } },
+          "if": { "properties": { "semanticMode": { "const": "pca_128" } } },
           "then": {
             "properties": {
-              "semanticDimension": { "enum": [128, 256] },
-              "totalDimension": { "enum": [170, 298] },
               "ruleDimension": { "const": 42 },
-              "projection": { "$ref": "#/$defs/projection" }
+              "semanticDimension": { "const": 128 },
+              "totalDimension": { "const": 170 },
+              "featureOrder": { "const": ["rule_vector_v1", "e5_base_pca_128"] },
+              "projection": {
+                "allOf": [
+                  { "$ref": "#/$defs/projection" },
+                  { "properties": { "inputDimension": { "const": 768 }, "outputDimension": { "const": 128 } } }
+                ]
+              },
+              "semanticHeads": { "type": "null" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "semanticMode": { "const": "pca_256" } } },
+          "then": {
+            "properties": {
+              "ruleDimension": { "const": 42 },
+              "semanticDimension": { "const": 256 },
+              "totalDimension": { "const": 298 },
+              "featureOrder": { "const": ["rule_vector_v1", "e5_base_pca_256"] },
+              "projection": {
+                "allOf": [
+                  { "$ref": "#/$defs/projection" },
+                  { "properties": { "inputDimension": { "const": 768 }, "outputDimension": { "const": 256 } } }
+                ]
+              },
+              "semanticHeads": { "type": "null" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "semanticMode": { "const": "pca_64" } } },
+          "then": {
+            "properties": {
+              "ruleDimension": { "const": 42 },
+              "semanticDimension": { "const": 64 },
+              "totalDimension": { "const": 106 },
+              "featureOrder": { "const": ["rule_vector_v1", "e5_small_pca_64"] },
+              "projection": {
+                "allOf": [
+                  { "$ref": "#/$defs/projection" },
+                  {
+                    "required": ["version", "parameterSha256"],
+                    "properties": {
+                      "version": { "const": "difficulty-e5-pca-full-svd-64.single-request.v2" },
+                      "sha256": { "const": "fc2ae71057650884e88ace7a9a6ca1465219527558ab534746374d3632690eb9" },
+                      "parameterSha256": { "const": "a9a2258d9d68724af3a1edc4b063d671e42d4d2e68c430e4aa3f668371aadafa" },
+                      "inputDimension": { "const": 384 },
+                      "outputDimension": { "const": 64 }
+                    }
+                  }
+                ]
+              },
+              "semanticHeads": { "type": "null" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "semanticMode": { "const": "semantic_heads_12" } } },
+          "then": {
+            "properties": {
+              "ruleDimension": { "const": 42 },
+              "semanticDimension": { "const": 12 },
+              "totalDimension": { "const": 54 },
+              "featureOrder": { "const": ["rule_vector_v1", "semantic_heads_12"] },
+              "projection": {
+                "allOf": [
+                  { "$ref": "#/$defs/projection" },
+                  {
+                    "required": ["version", "parameterSha256"],
+                    "properties": {
+                      "version": { "const": "difficulty-e5-pca-full-svd-64.single-request.v2" },
+                      "sha256": { "const": "fc2ae71057650884e88ace7a9a6ca1465219527558ab534746374d3632690eb9" },
+                      "parameterSha256": { "const": "a9a2258d9d68724af3a1edc4b063d671e42d4d2e68c430e4aa3f668371aadafa" },
+                      "inputDimension": { "const": 384 },
+                      "outputDimension": { "const": 64 }
+                    }
+                  }
+                ]
+              },
+              "semanticHeads": { "$ref": "#/$defs/semanticHeads" }
             }
           }
         },
@@ -230,22 +542,12 @@
           "then": {
             "properties": {
               "tabularFeatureNames": { "const": [] },
-              "semanticMode": { "const": "raw" },
+              "semanticMode": { "const": "raw_768" },
               "semanticDimension": { "const": 768 },
               "totalDimension": { "const": 768 },
-              "projection": { "type": "null" }
-            }
-          }
-        },
-        {
-          "if": { "properties": { "ruleDimension": { "const": 42 } } },
-          "then": {
-            "properties": {
-              "tabularFeatureNames": {
-                "const": [
-                  "ruleVectorV1.payloadEmpty", "ruleVectorV1.payloadSmall", "ruleVectorV1.payloadMedium", "ruleVectorV1.payloadLarge", "ruleVectorV1.taskCount", "ruleVectorV1.constraintCount", "ruleVectorV1.scopeCount", "ruleVectorV1.dependencyDepth", "ruleVectorV1.categoryGeneral", "ruleVectorV1.categoryCode", "ruleVectorV1.categoryTranslation", "ruleVectorV1.categorySummarization", "ruleVectorV1.categoryReasoning", "ruleVectorV1.generalWorkflowDepth", "ruleVectorV1.generalBranchOrExceptionCount", "ruleVectorV1.generalExtractionBreadth", "ruleVectorV1.generalHasCrossSourceSynthesis", "ruleVectorV1.codeOperationUnknown", "ruleVectorV1.codeOperationSyntax", "ruleVectorV1.codeOperationExample", "ruleVectorV1.codeOperationSmallEdit", "ruleVectorV1.codeOperationDebug", "ruleVectorV1.codeOperationRefactor", "ruleVectorV1.codeOperationDesign", "ruleVectorV1.codeOperationMigration", "ruleVectorV1.codeOperationConcurrency", "ruleVectorV1.codeOperationPerformance", "ruleVectorV1.codeScopeBreadth", "ruleVectorV1.codeCausalComplexity", "ruleVectorV1.codeEngineeringConstraintCount", "ruleVectorV1.translationScopeCount", "ruleVectorV1.translationPreservationConstraintCount", "ruleVectorV1.translationDomainTerminologyLevel", "ruleVectorV1.translationLocalizationDegree", "ruleVectorV1.summarizationSourceBreadth", "ruleVectorV1.summarizationSynthesisLevel", "ruleVectorV1.summarizationFacetCount", "ruleVectorV1.summarizationHasTraceabilityConstraints", "ruleVectorV1.reasoningAlternativeCount", "ruleVectorV1.reasoningCriteriaAndConstraintCount", "ruleVectorV1.reasoningDepth", "ruleVectorV1.reasoningUncertaintyScenarioCount"
-                ]
-              }
+              "featureOrder": { "const": ["raw_embedding_768"] },
+              "projection": { "type": "null" },
+              "semanticHeads": { "type": "null" }
             }
           }
         }
@@ -274,7 +576,7 @@
         "relativePath": { "$ref": "#/$defs/safeRelativePath" },
         "sizeBytes": { "type": "integer", "minimum": 1, "maximum": 67108864 },
         "sha256": { "$ref": "#/$defs/sha256" },
-        "numFeatures": { "enum": [170, 298, 768, 810] },
+        "numFeatures": { "enum": [54, 106, 170, 298, 768, 810] },
         "threshold": { "type": "number", "minimum": 0, "maximum": 1 },
         "parameters": { "type": "object" }
       }

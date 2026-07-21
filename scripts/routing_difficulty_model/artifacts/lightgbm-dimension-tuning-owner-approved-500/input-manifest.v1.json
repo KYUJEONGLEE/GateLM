@@ -1,0 +1,67 @@
+{
+  "configSha256": "fef6aa7eba10d8e4c5566d9fe350f32b5f76c1d6ca3f67302139d21103579e4e",
+  "containsPromptMaterial": false,
+  "dataset": {
+    "manifestSha256": "7e6e81a79741eb5f1b1aeec33dcd7cb92621bc2832feb57414e425157b51a6f3",
+    "sha256": "4f4b00a783ef6372a2d23baf77b0c793670a72f03f4636c6674c8e911662189f",
+    "sourceSplitPolicyVersion": "difficulty-family-constrained-split.2026-07-15.v1",
+    "version": "difficulty_training_2026_07_15_owner_approved_500_v2"
+  },
+  "experimentId": "difficulty-lightgbm-dimension-tuning.owner-approved-500.2026-07-22.v1",
+  "familyOverlap": 0,
+  "partitions": {
+    "test": {
+      "categories": {
+        "code": 20,
+        "general": 20,
+        "reasoning": 16,
+        "summarization": 9,
+        "translation": 10
+      },
+      "complex": 36,
+      "families": 10,
+      "records": 75,
+      "relativePath": ".tmp/difficulty-lightgbm-dimension-tuning-owner-approved-500/test.jsonl",
+      "sha256": "7b7666ab5a27c279aaf136db2dba91b3d12a58b28d476098ef4e435cf8624f79",
+      "simple": 39,
+      "sizeBytes": 53610
+    },
+    "train": {
+      "categories": {
+        "code": 68,
+        "general": 68,
+        "reasoning": 63,
+        "summarization": 79,
+        "translation": 72
+      },
+      "complex": 177,
+      "families": 62,
+      "records": 350,
+      "relativePath": ".tmp/difficulty-lightgbm-dimension-tuning-owner-approved-500/train.jsonl",
+      "sha256": "0d8eb1f3ff219be8dcc3e1349c46899e510361d1c64fcb6651d677d8dfe8ce49",
+      "simple": 173,
+      "sizeBytes": 247960
+    },
+    "validation": {
+      "categories": {
+        "code": 12,
+        "general": 12,
+        "reasoning": 21,
+        "summarization": 12,
+        "translation": 18
+      },
+      "complex": 37,
+      "families": 17,
+      "records": 75,
+      "relativePath": ".tmp/difficulty-lightgbm-dimension-tuning-owner-approved-500/validation.jsonl",
+      "sha256": "8236e3596c76717995b4862dd68088c36cee1eb7c98b1befb061bd89f525dfe2",
+      "simple": 38,
+      "sizeBytes": 54461
+    }
+  },
+  "promotionState": "exploratory_only",
+  "schemaVersion": "gatelm.lightgbm-dimension-tuning-input-manifest.v1",
+  "splitMembershipSha256": "e1a5d1d9d97a7718f408dc52f1b9bc60d1772ece27651a4b3472d31f051fb98e",
+  "splitPolicyVersion": "difficulty-family-disjoint-70-15-15.2026-07-22.v1",
+  "splitSeed": 20260721
+}

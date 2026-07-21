@@ -6,7 +6,65 @@
   },
   "profiles": [
     {
+      "candidate": "rule_42_plus_e5_small_pca_64",
+      "encoderMode": "e5_small",
+      "model": {
+        "relativePath": "rule_42_plus_e5_small_pca_64.lightgbm.txt",
+        "sha256": "387607fb3ef0b1438c5f249e54e14f9fea48cc3699c787c5071e91f38eb85934",
+        "sizeBytes": 130871
+      },
+      "profile": {
+        "relativePath": "rule_42_plus_e5_small_pca_64.shadow-profile.v1.json",
+        "sha256": "a36cc571317da0590bed69152fcce323f4294cd47837a22c5abf2f7ede426de7",
+        "sizeBytes": 7493
+      },
+      "requiredArtifacts": [
+        {
+          "relativePath": "difficulty-e5-encoder-manifest.v2.json",
+          "sha256": "94c4cdf6cc6caf9d9a640f56b88219a94956750152d14ac4ef21b52140766380",
+          "sizeBytes": 4915
+        },
+        {
+          "relativePath": "difficulty-e5-pca-64.v2.npz",
+          "sha256": "fc2ae71057650884e88ace7a9a6ca1465219527558ab534746374d3632690eb9",
+          "sizeBytes": 100314
+        }
+      ]
+    },
+    {
+      "candidate": "rule_42_plus_semantic_heads_12",
+      "encoderMode": "e5_small",
+      "model": {
+        "relativePath": "rule_42_plus_semantic_heads_12.lightgbm.txt",
+        "sha256": "3f872c73b08b1764519cbbaba6e1258e331a793538afb73a880ff3c4e8452c6c",
+        "sizeBytes": 78147
+      },
+      "profile": {
+        "relativePath": "rule_42_plus_semantic_heads_12.shadow-profile.v1.json",
+        "sha256": "33aa40fa930f43f2dbdf0325ac2894af22e535c7cfd8e3484c4f7e5aca49e9b7",
+        "sizeBytes": 8902
+      },
+      "requiredArtifacts": [
+        {
+          "relativePath": "difficulty-e5-encoder-manifest.v2.json",
+          "sha256": "94c4cdf6cc6caf9d9a640f56b88219a94956750152d14ac4ef21b52140766380",
+          "sizeBytes": 4915
+        },
+        {
+          "relativePath": "difficulty-e5-pca-64.v2.npz",
+          "sha256": "fc2ae71057650884e88ace7a9a6ca1465219527558ab534746374d3632690eb9",
+          "sizeBytes": 100314
+        },
+        {
+          "relativePath": "difficulty-semantic-heads.owner-approved-500.v2.json",
+          "sha256": "e13d7a4c066861bbdd310341bc85fc611d5ad7e28c3ac0d54b203e130ce052b5",
+          "sizeBytes": 27645
+        }
+      ]
+    },
+    {
       "candidate": "e5_base_raw_768",
+      "encoderMode": "e5_base",
       "model": {
         "relativePath": "e5_base_raw_768.lightgbm.txt",
         "sha256": "1fa96022edad57b8191b74dd815eb70ee67b53403411af4827e095da0ea0bc0d",
@@ -14,12 +72,14 @@
       },
       "profile": {
         "relativePath": "e5_base_raw_768.shadow-profile.v1.json",
-        "sha256": "26f562d3b26d4662a6aec90e5da945371dfe8670d6766cd2dda540b5edb721f9",
-        "sizeBytes": 4487
-      }
+        "sha256": "75b994d5933442485aacfc4fadcf999284de2a9c9e8d0fca4a83a54f29d0fbf0",
+        "sizeBytes": 4601
+      },
+      "requiredArtifacts": []
     },
     {
       "candidate": "rule_42_plus_e5_base_raw_768",
+      "encoderMode": "e5_base",
       "model": {
         "relativePath": "rule_42_plus_e5_base_raw_768.lightgbm.txt",
         "sha256": "1922839f3630cc2c16114dac4d3a688ca338e55b7219385d0816cbf206b69a77",
@@ -27,11 +87,17 @@
       },
       "profile": {
         "relativePath": "rule_42_plus_e5_base_raw_768.shadow-profile.v1.json",
-        "sha256": "a09e6d96749810cb75e053636dce004c96208aa2bb284d9ccf0d5abc26934be3",
-        "sizeBytes": 6389
-      }
+        "sha256": "560cabd6e37adf24b1e2e63298d40e0d15e590ec00c3a089fea844b95fe3301b",
+        "sizeBytes": 6527
+      },
+      "requiredArtifacts": []
     }
   ],
   "promotionState": "offline_shadow_only",
-  "schemaVersion": "gatelm.routing-difficulty-lightgbm-runtime-bundles.v1"
+  "schemaVersion": "gatelm.routing-difficulty-lightgbm-runtime-bundles.v1",
+  "smallEncoderManifest": {
+    "relativePath": "difficulty-e5-encoder-manifest.v2.json",
+    "sha256": "94c4cdf6cc6caf9d9a640f56b88219a94956750152d14ac4ef21b52140766380",
+    "sizeBytes": 4915
+  }
 }

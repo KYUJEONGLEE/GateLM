@@ -1,0 +1,109 @@
+{
+  "schema_version": "gatelm.routing-difficulty-semantic-dedup-resolution.v1",
+  "generated_at": "2026-07-22T00:00:00Z",
+  "input_dataset_sha256": "624460037fa255b46c17f5e6e0f145d12dd7e95eed4bf72bc859fb0db2e80868",
+  "policy": "Merge confirmed semantic candidate components into atomic groups without changing Prompt or label; preserve exact split counts with one matched singleton rotation.",
+  "clusters": [
+    {
+      "cluster_id": "reviewer-e-semantic-001",
+      "resolved_split": "train",
+      "members": [
+        { "sample_id": "pub:openassistant_oasst1:d87d29bc54cbc37a2217d7bc", "expected_group_id": "pubgrp:c1b5e5d5415d9176aa6db0db", "expected_split": "test" },
+        { "sample_id": "pub:databricks_dolly_15k:a7321083ce3365684a58b778", "expected_group_id": "pubgrp:378330a6220dfe659a66478b", "expected_split": "train" },
+        { "sample_id": "pub:openassistant_oasst1:321c89e6e16d9aaa2b523276", "expected_group_id": "pubgrp:616c48aad6be557d0e18b9fc", "expected_split": "train" }
+      ]
+    },
+    {
+      "cluster_id": "reviewer-e-semantic-002",
+      "resolved_split": "validation",
+      "members": [
+        { "sample_id": "pub:aya_dataset:03c0feea647312d229acda64", "expected_group_id": "pubgrp:7ac81f15768bd06c6f870255", "expected_split": "train" },
+        { "sample_id": "pub:aya_dataset:f9d034247488744b50c27f6c", "expected_group_id": "pubgrp:891e02e903c68bc707f6fbdc", "expected_split": "validation" }
+      ]
+    },
+    {
+      "cluster_id": "reviewer-e-semantic-003",
+      "resolved_split": "train",
+      "members": [
+        { "sample_id": "pub:hrm8k_ksm:5a747d3ded9aa8259e5afa07", "expected_group_id": "pubgrp:95f048161016f87e1d37405f", "expected_split": "train" },
+        { "sample_id": "pub:hrm8k_ksm:8dbb9944679e579b3347675a", "expected_group_id": "pubgrp:369057da2ac602760a321e52", "expected_split": "train" }
+      ]
+    },
+    {
+      "cluster_id": "reviewer-e-semantic-004",
+      "resolved_split": "train",
+      "members": [
+        { "sample_id": "pub:kullm_v2_dolly:0b734de1a6c6da1785e8e46c", "expected_group_id": "pubgrp:5e094e711e3ed1e96671cc2a", "expected_split": "train" },
+        { "sample_id": "pub:kullm_v2_dolly:264930ca415ce860bf40f131", "expected_group_id": "pubgrp:1c6e396be336c2d462e939ed", "expected_split": "train" }
+      ]
+    },
+    {
+      "cluster_id": "reviewer-e-semantic-005",
+      "resolved_split": "validation",
+      "members": [
+        { "sample_id": "pub:aya_dataset:b3e0f683f80c6680016fdff4", "expected_group_id": "pubgrp:60e36400d7e18731a848e26f", "expected_split": "validation" },
+        { "sample_id": "pub:aya_dataset:b81bbb200822f1c5d5b237a3", "expected_group_id": "pubgrp:05c54db8e525fefe4197ad8e", "expected_split": "validation" }
+      ]
+    },
+    {
+      "cluster_id": "reviewer-e-semantic-006",
+      "resolved_split": "train",
+      "expand_expected_groups": true,
+      "members": [
+        { "sample_id": "syn_0154_simple_04", "expected_group_id": "enterprise.synthetic.g0154", "expected_split": "train" },
+        { "sample_id": "syn_0176_simple_02", "expected_group_id": "enterprise.synthetic.g0176", "expected_split": "train" }
+      ]
+    },
+    {
+      "cluster_id": "reviewer-e-semantic-007",
+      "resolved_split": "train",
+      "members": [
+        { "sample_id": "pub:aya_dataset:c086675c9efa56bd2fceb262", "expected_group_id": "pubgrp:ad46ca5564bfd4a33155baba", "expected_split": "test" },
+        { "sample_id": "pub:aya_dataset:7c09744ea8dc2683746feace", "expected_group_id": "pubgrp:84433182de6357406f101b58", "expected_split": "train" }
+      ]
+    },
+    {
+      "cluster_id": "reviewer-e-semantic-008",
+      "resolved_split": "train",
+      "members": [
+        { "sample_id": "pub:hrm8k_ksm:8f2f71dd2bc6947c488f0da1", "expected_group_id": "pubgrp:cbcbd25dba6f5fd45bd90bcb", "expected_split": "test" },
+        { "sample_id": "pub:hrm8k_ksm:e24feeb62f632375801d00f9", "expected_group_id": "pubgrp:248f39d64f605955d2ff3c04", "expected_split": "train" }
+      ]
+    }
+  ],
+  "split_compensation": [
+    {
+      "sample_id": "pub:openassistant_oasst1:57889b794b642af70fae7559",
+      "expected_group_id": "pubgrp:41e00c54dd606944fa524475",
+      "expected_split": "validation",
+      "resolved_split": "test",
+      "matches_sample_id": "pub:openassistant_oasst1:d87d29bc54cbc37a2217d7bc",
+      "matching_basis": ["label", "language", "source", "source_dataset", "task_type", "expected_category", "length_bucket", "reasoning_level", "automatic_label", "review_status", "label_source"]
+    },
+    {
+      "sample_id": "pub:aya_dataset:4f18b0b8fab536ce718a86c2",
+      "expected_group_id": "pubgrp:713846ad780dfb1b77465332",
+      "expected_split": "train",
+      "resolved_split": "test",
+      "matches_sample_id": "pub:aya_dataset:c086675c9efa56bd2fceb262",
+      "matching_basis": ["label", "language", "source", "source_dataset", "task_type", "service_domain", "expected_category", "length_bucket", "reasoning_level", "automatic_label", "review_status", "label_source", "expression_style", "prompt_structure"]
+    },
+    {
+      "sample_id": "pub:hrm8k_ksm:778891f6623e572ad95776e8",
+      "expected_group_id": "pubgrp:04b0bdec80b41347c9084f88",
+      "expected_split": "train",
+      "resolved_split": "test",
+      "matches_sample_id": "pub:hrm8k_ksm:8f2f71dd2bc6947c488f0da1",
+      "matching_basis": ["label", "language", "source", "source_dataset", "task_type", "service_domain", "expected_category", "length_bucket", "reasoning_level", "automatic_label", "review_status", "label_source", "expression_style", "prompt_structure", "quality_score"]
+    }
+  ],
+  "expected_invariants": {
+    "records": 15000,
+    "semantic_clusters_resolved": 8,
+    "semantic_candidate_pairs_resolved": 9,
+    "group_count_after_resolution": 8743,
+    "split_reassigned_records": 7,
+    "split_distribution": { "train": 10500, "validation": 2250, "test": 2250 },
+    "prompt_or_label_changes": 0
+  }
+}

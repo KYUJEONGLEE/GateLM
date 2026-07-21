@@ -48,11 +48,11 @@ GateLM은 current 계약을 versioned 계약과 별도로 복제하지 않는다
 - [`../routing/README.md`](../routing/README.md): 범위와 artifact 진입점
 - [`../routing/contracts.md`](../routing/contracts.md): active 의미 계약
 - [`../routing/classification-pipeline.md`](../routing/classification-pipeline.md): category·difficulty 분류의 active 내부 구현 계약
-- [`../routing/difficulty-lightgbm-shadow.md`](../routing/difficulty-lightgbm-shadow.md): 기존 106D LR authority를 유지하는 별도 768D LightGBM offline/제한 shadow 계약
+- [`../routing/difficulty-lightgbm-shadow.md`](../routing/difficulty-lightgbm-shadow.md): 기존 106D LR authority를 유지하는 E5-small 54D/106D와 E5-base 768D/810D LightGBM offline/제한 shadow 계약
 - [`../routing/schemas/routing-policy.schema.json`](../routing/schemas/routing-policy.schema.json): routing policy v2 schema
 - [`../routing/fixtures/routing-policy.fixture.json`](../routing/fixtures/routing-policy.fixture.json): safe Mock bootstrap fixture
 - [`../routing/schemas/runtime-snapshot-routing.schema.json`](../routing/schemas/runtime-snapshot-routing.schema.json): RuntimeSnapshot routing v2 schema
-- [`../routing/datasets/difficulty/README.md`](../routing/datasets/difficulty/README.md): 제품 SemVer와 분리된 난이도 데이터 구축 계획과 공개·합성·경계 15,000개 candidate 진입점. 이 dataset은 사람 검수와 training gate 전이므로 runtime promotion evidence가 아니다.
+- [`../routing/datasets/difficulty/README.md`](../routing/datasets/difficulty/README.md): 제품 SemVer와 분리된 난이도 데이터 구축 계획과 공개·합성·경계 15,000개 진입점. 후보 revision은 비승인 증거로 보존하고, 전수 사람 검수·dataset-owner 승인·의미 중복 감사를 통과한 통합 owner-approved 15,000개 revision만 새 라우팅 실험에 사용할 수 있다. 기존 Dataset 1·2는 historical replay 전용이며 이 승격은 runtime promotion 승인이 아니다.
 
 이 범위에서는 v2.0.0의 legacy category → tier → model, routingPolicy provider/model field, `selectedProvider`/`selectedModel` 계약을 상속하지 않는다. Tenant Chat의 별도 tier와 Provider Catalog의 `routing.costTier`는 이 scope 밖이다.
 

@@ -7,6 +7,9 @@ only aggregate reports and immutable component hashes are written.
 
 from __future__ import annotations
 
+# Frozen evidence replay only. New experiments are locked to canonical_dataset.py.
+HISTORICAL_REPLAY_ONLY = True
+
 import argparse
 import hashlib
 import importlib.metadata

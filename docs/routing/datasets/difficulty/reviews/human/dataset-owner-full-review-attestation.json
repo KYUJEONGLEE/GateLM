@@ -1,0 +1,35 @@
+{
+  "schema_version": "gatelm.routing-difficulty-human-review-attestation.v1",
+  "attestation_id": "dataset-owner-full-review-2026-07-22",
+  "attested_at": "2026-07-22T00:00:00+09:00",
+  "attestation_source": "interactive_dataset_owner_instruction",
+  "reviewer_role": "dataset_owner",
+  "reviewer_identity_persisted": false,
+  "reviewed_dataset_path": "docs/routing/datasets/difficulty/data/initial-routing-difficulty-15000.reviewer-e-risk-revised.jsonl",
+  "reviewed_dataset_sha256": "aa1b8820ba85228f1dc257cc0a7d8cd53727e8a7301ed9e3b59c1140dfd7d40c",
+  "reviewed_records": 15000,
+  "review_scope": [
+    "prompt_difficulty_label",
+    "current_group_and_split_assignment",
+    "training_use_authorization"
+  ],
+  "decision": {
+    "approve_all_current_labels": true,
+    "human_reviewed": true,
+    "review_status": "approved",
+    "training_eligible": true,
+    "runtime_promotion_authorized": false
+  },
+  "approved_label_distribution": {
+    "simple": 6576,
+    "complex": 8424
+  },
+  "accepted_known_limitations": [
+    "direct_human_authored_share_below_60_percent",
+    "anonymous_real_user_source_unavailable",
+    "current_label_distribution_is_43_84_percent_simple_and_56_16_percent_complex",
+    "six_task_types_outside_35_to_65_percent_label_share",
+    "two_service_domains_outside_35_to_65_percent_label_share"
+  ],
+  "raw_prompt_copied_into_attestation": false
+}

@@ -44,14 +44,28 @@
         "generated_records": { "type": "integer", "minimum": 0, "maximum": 15000 },
         "deferred_public_records": { "type": "integer", "minimum": 0, "maximum": 7000 },
         "public_records": { "type": "integer", "minimum": 0, "maximum": 7000 },
-        "training_eligible": { "const": false },
+        "training_eligible": { "type": "boolean" },
         "training_blockers": {
           "type": "array",
-          "minItems": 1,
+          "minItems": 0,
           "uniqueItems": true,
           "items": { "type": "string", "minLength": 1 }
         }
       },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "training_eligible": { "const": true } },
+            "required": ["training_eligible"]
+          },
+          "then": {
+            "properties": { "training_blockers": { "maxItems": 0 } }
+          },
+          "else": {
+            "properties": { "training_blockers": { "minItems": 1 } }
+          }
+        }
+      ],
       "required": [
         "initial_target_records",
         "generated_records",

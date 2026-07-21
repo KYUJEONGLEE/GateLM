@@ -1,0 +1,11 @@
+{
+  "accessConsumedAt": "2026-07-21T17:07:34Z",
+  "authorizationReference": "user-request-2026-07-22-test-once",
+  "authorizationTimestamp": "2026-07-21T17:07:34Z",
+  "containsEmbeddingMatrix": false,
+  "containsPerSampleScore": false,
+  "evaluatedCandidateCount": 1,
+  "freezeSha256": "1915a02287cf9060ba135e1ce335cc23e80319f38affe0b3bca80174b7bfebb7",
+  "schemaVersion": "gatelm.lightgbm-embedding-test-access.v1",
+  "state": "consumed_on_test_input_access_start"
+}

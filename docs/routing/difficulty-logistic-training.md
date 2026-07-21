@@ -1,5 +1,10 @@
 # GateLM Difficulty Logistic Training Boundary
 
+> 2026-07-22 이후 새 라우팅 실험은
+> [`datasets/difficulty/data/initial-routing-difficulty-15000.owner-approved.jsonl`](datasets/difficulty/data/initial-routing-difficulty-15000.owner-approved.jsonl)
+> 하나만 사용한다. 아래 `docs/v2.1.0`의 500·2,000·5,000 데이터와 당시 artifact 설명은
+> historical replay 근거이며 새 학습, calibration, threshold 선택 또는 비교 실험의 입력이 아니다.
+
 | Field | Value |
 |---|---|
 | Status | Candidate C 118D selected and generated as an inactive Go shadow-preparation bundle; not runtime-promoted |
@@ -12,6 +17,9 @@
 이 문서는 [`classification-pipeline.md`](classification-pipeline.md)의 target 계산을 실제 offline 학습과 generated Go artifact로 연결하는 준비 경계를 설명한다. Selected coefficient, calibrator와 holdout selection evidence가 존재하더라도 이 문서와 tooling만으로 product runtime 승격을 뜻하지 않는다.
 
 ## Dataset Roles
+
+- [`datasets/difficulty/data/initial-routing-difficulty-15000.owner-approved.jsonl`](datasets/difficulty/data/initial-routing-difficulty-15000.owner-approved.jsonl): 새 실험의 유일한 training dataset. 기존 group 기준 train 10,500 / validation 2,250 / test 2,250을 그대로 사용한다.
+- [`datasets/difficulty/data/initial-routing-difficulty-15000.owner-approved.manifest.json`](datasets/difficulty/data/initial-routing-difficulty-15000.owner-approved.manifest.json): dataset-owner 승인, 15,000개 전수 사람 검수, 학습 적격성과 dataset hash를 고정한다.
 
 - [`../v2.1.0/fixtures/difficulty-evaluation-dataset.fixture.jsonl`](../v2.1.0/fixtures/difficulty-evaluation-dataset.fixture.jsonl): 10건 contract smoke. 학습에 사용하지 않는다.
 - [`../v2.1.0/difficulty-label-guide.md`](../v2.1.0/difficulty-label-guide.md): 실제 학습 데이터가 따라야 하는 label, review, family와 slice 계약이다.
@@ -28,7 +36,7 @@
 500건은 다음 명령으로 결정론적으로 다시 만든다.
 
 ```powershell
-corepack pnpm run v2.1:routing:generate-difficulty-training-pilot
+corepack pnpm run historical:v2.1:routing:generate-difficulty-training-pilot
 corepack pnpm run verify:v2.1-difficulty-eval
 ```
 

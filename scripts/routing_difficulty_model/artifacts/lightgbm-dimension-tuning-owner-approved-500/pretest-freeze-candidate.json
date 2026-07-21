@@ -1,0 +1,204 @@
+{
+  "bestIteration": 557,
+  "calibrator": {
+    "relativePath": "candidates/rule_42_plus_semantic_heads_12/calibrator.json",
+    "sha256": "e46945e902b430b1111831be659539939cf302927ea59bc0b6e1680b22e03ce6",
+    "sizeBytes": 371,
+    "type": "none"
+  },
+  "candidateSetSha256": "3d920c492d1cce56e141069d7e11bf4a2994cbc63b41e814af484c86d9ee888f",
+  "candidateSha256": "6aec8fe3fe0b42b8706d8b76f579f3409ebdff2779588ba2fd1a43ebc88d6622",
+  "champion": {
+    "sha256": "c29161fa5b137f78f4a1eb41525b7c638baeb6d2a5407a00e41e4b38b506c5a0",
+    "version": "difficulty-authoritative-lr106.2026-07-15.v3"
+  },
+  "codeConfigSha256": "fef6aa7eba10d8e4c5566d9fe350f32b5f76c1d6ca3f67302139d21103579e4e",
+  "containsEmbeddingMatrix": false,
+  "containsPerSampleScore": false,
+  "dataset": {
+    "manifestSha256": "7e6e81a79741eb5f1b1aeec33dcd7cb92621bc2832feb57414e425157b51a6f3",
+    "sha256": "4f4b00a783ef6372a2d23baf77b0c793670a72f03f4636c6674c8e911662189f",
+    "splitMembershipSha256": "e1a5d1d9d97a7718f408dc52f1b9bc60d1772ece27651a4b3472d31f051fb98e",
+    "splitPolicyVersion": "difficulty-family-disjoint-70-15-15.2026-07-22.v1",
+    "testDataSha256": "7b7666ab5a27c279aaf136db2dba91b3d12a58b28d476098ef4e435cf8624f79",
+    "version": "difficulty_training_2026_07_15_owner_approved_500_v2"
+  },
+  "embeddingDimension": 54,
+  "encoder": {
+    "artifactIdentitySha256": "78249c0777d1ce634b4de32332bdbaf8c8ebe8ca15cfa36f233d7cf60e23744e",
+    "inputPrefix": "query: ",
+    "maximumTokenLength": 128,
+    "modelId": "rule_42_plus_semantic_heads_12",
+    "normalization": "candidate_specific_frozen_v1",
+    "outputDimension": 54,
+    "outputDtype": "float32",
+    "pooling": "attention_mask_weighted_mean_excluding_padding",
+    "providerKind": "gatelm_lightgbm_composite_feature_v1",
+    "sourceRevision": "d077b9727709f2701638b5b64d5ccd4f66fd036639138f8c4804dfe0ab104b2f"
+  },
+  "experimentId": "difficulty-lightgbm-dimension-tuning.owner-approved-500.2026-07-22.v1",
+  "experimentVersion": "difficulty-lightgbm-dimension-tuning.2026-07-22.v1",
+  "foldMembershipSha256": "e89a23a31493f28c72c5e63818d7a240e30bc3a6e0c169da74808c1a1e09591d",
+  "model": {
+    "relativePath": "candidates/rule_42_plus_semantic_heads_12/model.lightgbm.txt",
+    "sha256": "dd9dfcbf901d529a09b829e35fc3f8bbd0714dab54c4ac9e0804536f6fb2228f",
+    "sizeBytes": 222288
+  },
+  "promotionState": "exploratory_only",
+  "runtimeProfileGenerated": false,
+  "schemaVersion": "gatelm.lightgbm-embedding-pretest-candidate.v1",
+  "selectedCandidateId": "rule_42_plus_semantic_heads_12::lgb-f58cd856b4d655c1",
+  "selectedParameters": {
+    "bagging_fraction": 1.0,
+    "feature_fraction": 0.7,
+    "lambda_l1": 1,
+    "lambda_l2": 10,
+    "learning_rate": 0.03,
+    "max_depth": -1,
+    "min_data_in_leaf": 100,
+    "min_gain_to_split": 0,
+    "num_leaves": 63
+  },
+  "slicePolicy": {
+    "sha256": "c84b75b522224190a026e72fd20a6cea4c03538f739dc1057e5f05ccbf6fd3c1",
+    "version": "difficulty-evaluation-slices.owner-approved-500.v1"
+  },
+  "validationThresholdScenarios": [
+    {
+      "bayesThreshold": 0.5,
+      "cFn": 1.0,
+      "cFp": 1.0,
+      "feasibleCandidateCount": 19,
+      "reasonCode": null,
+      "selected": {
+        "categoryFalseNegative": {
+          "code": 1,
+          "general": 0,
+          "reasoning": 0,
+          "summarization": 0,
+          "translation": 0
+        },
+        "categorySafetyPassed": true,
+        "championCategoryFalseNegative": {
+          "code": 1,
+          "general": 0,
+          "reasoning": 0,
+          "summarization": 0,
+          "translation": 0
+        },
+        "championFalseNegative": 1,
+        "complexRecall": 0.972972972972973,
+        "expectedDecisionLoss": 0.12,
+        "falseNegative": 1,
+        "falsePositive": 8,
+        "overallSafetyPassed": true,
+        "threshold": 0.04911195184127985,
+        "trueNegative": 30,
+        "truePositive": 36
+      },
+      "status": "feasible"
+    },
+    {
+      "bayesThreshold": 0.25,
+      "cFn": 3.0,
+      "cFp": 1.0,
+      "feasibleCandidateCount": 19,
+      "reasonCode": null,
+      "selected": {
+        "categoryFalseNegative": {
+          "code": 1,
+          "general": 0,
+          "reasoning": 0,
+          "summarization": 0,
+          "translation": 0
+        },
+        "categorySafetyPassed": true,
+        "championCategoryFalseNegative": {
+          "code": 1,
+          "general": 0,
+          "reasoning": 0,
+          "summarization": 0,
+          "translation": 0
+        },
+        "championFalseNegative": 1,
+        "complexRecall": 0.972972972972973,
+        "expectedDecisionLoss": 0.14666666666666667,
+        "falseNegative": 1,
+        "falsePositive": 8,
+        "overallSafetyPassed": true,
+        "threshold": 0.04911195184127985,
+        "trueNegative": 30,
+        "truePositive": 36
+      },
+      "status": "feasible"
+    },
+    {
+      "bayesThreshold": 0.16666666666666666,
+      "cFn": 5.0,
+      "cFp": 1.0,
+      "feasibleCandidateCount": 19,
+      "reasonCode": null,
+      "selected": {
+        "categoryFalseNegative": {
+          "code": 1,
+          "general": 0,
+          "reasoning": 0,
+          "summarization": 0,
+          "translation": 0
+        },
+        "categorySafetyPassed": true,
+        "championCategoryFalseNegative": {
+          "code": 1,
+          "general": 0,
+          "reasoning": 0,
+          "summarization": 0,
+          "translation": 0
+        },
+        "championFalseNegative": 1,
+        "complexRecall": 0.972972972972973,
+        "expectedDecisionLoss": 0.17333333333333334,
+        "falseNegative": 1,
+        "falsePositive": 8,
+        "overallSafetyPassed": true,
+        "threshold": 0.04911195184127985,
+        "trueNegative": 30,
+        "truePositive": 36
+      },
+      "status": "feasible"
+    },
+    {
+      "bayesThreshold": 0.09090909090909091,
+      "cFn": 10.0,
+      "cFp": 1.0,
+      "feasibleCandidateCount": 19,
+      "reasonCode": null,
+      "selected": {
+        "categoryFalseNegative": {
+          "code": 0,
+          "general": 0,
+          "reasoning": 0,
+          "summarization": 0,
+          "translation": 0
+        },
+        "categorySafetyPassed": true,
+        "championCategoryFalseNegative": {
+          "code": 1,
+          "general": 0,
+          "reasoning": 0,
+          "summarization": 0,
+          "translation": 0
+        },
+        "championFalseNegative": 1,
+        "complexRecall": 1.0,
+        "expectedDecisionLoss": 0.22666666666666666,
+        "falseNegative": 0,
+        "falsePositive": 17,
+        "overallSafetyPassed": true,
+        "threshold": 0.01118695249798261,
+        "trueNegative": 21,
+        "truePositive": 37
+      },
+      "status": "feasible"
+    }
+  ]
+}

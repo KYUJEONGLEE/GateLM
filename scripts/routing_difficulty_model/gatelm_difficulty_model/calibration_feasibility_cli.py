@@ -14,7 +14,6 @@ from .calibration_feasibility import (
 from .candidate_training import assemble_candidate_samples, validate_candidate_training_input
 from .encoder_runtime import (
     DEFAULT_ARTIFACT_ROOT,
-    DEFAULT_MANIFEST_PATH,
     REPO_ROOT,
     encode_pooled_single_requests,
     install_network_guard,
@@ -24,26 +23,26 @@ from .encoder_runtime import (
 from .semantic_features import OfflineFeatureCandidate, OfflineFeatureShape
 from .semantic_heads import predict_semantic_head_probabilities
 from .semantic_heads_cli import load_training_input
+from .canonical_dataset import (
+    CANONICAL_DATASET,
+    CANONICAL_ENCODER_MANIFEST,
+    CANONICAL_MANIFEST,
+)
 
 
 TOOL_DIR = Path(__file__).resolve().parents[1]
-DEFAULT_DATASET = (
-    REPO_ROOT / "docs/v2.1.0/training/difficulty-training-candidate-500.owner-approved.jsonl"
-)
-DEFAULT_DATASET_MANIFEST = (
-    REPO_ROOT
-    / "docs/v2.1.0/training/difficulty-training-candidate-500.owner-approved.manifest.json"
-)
-DEFAULT_POLICY = TOOL_DIR / "training-policy.semantic-candidates.v3.json"
+DEFAULT_DATASET = CANONICAL_DATASET
+DEFAULT_DATASET_MANIFEST = CANONICAL_MANIFEST
+DEFAULT_POLICY = TOOL_DIR / "training-policy.owner-approved-15000.v1.json"
 DEFAULT_ARTIFACT = (
     TOOL_DIR
-    / "artifacts/candidates/difficulty-candidate-c-118d.owner-approved-500.v3.json"
+    / "artifacts/candidates/difficulty-candidate-c-118d.owner-approved-15000.v1.json"
 )
 DEFAULT_SEMANTIC_HEADS = (
     TOOL_DIR
-    / "artifacts/candidates/difficulty-semantic-heads.owner-approved-500.v2.json"
+    / "artifacts/candidates/difficulty-semantic-heads.owner-approved-15000.v1.json"
 )
-DEFAULT_OUTPUT = REPO_ROOT / "docs/testing/difficulty-v3-calibration-threshold-feasibility.json"
+DEFAULT_OUTPUT = REPO_ROOT / "docs/testing/difficulty-15000-calibration-threshold-feasibility.json"
 V3_TRAINING_DECISION_BOUNDARY_VERSION = (
     "difficulty-decision-boundary.payload-empty-separate-score-3.2026-07-15.v1"
 )
@@ -59,7 +58,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--artifact", type=Path, default=DEFAULT_ARTIFACT)
     parser.add_argument("--semantic-heads", type=Path, default=DEFAULT_SEMANTIC_HEADS)
     parser.add_argument("--artifact-root", type=Path, default=DEFAULT_ARTIFACT_ROOT)
-    parser.add_argument("--encoder-manifest", type=Path, default=DEFAULT_MANIFEST_PATH)
+    parser.add_argument("--encoder-manifest", type=Path, default=CANONICAL_ENCODER_MANIFEST)
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
     parser.add_argument("--batch-size", type=int, choices=[1], default=1)
     parser.add_argument("--go", default=os.environ.get("GATELM_GO_EXECUTABLE", "go"))

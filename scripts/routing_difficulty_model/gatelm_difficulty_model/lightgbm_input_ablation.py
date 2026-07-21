@@ -38,7 +38,7 @@ from .semantic_heads import evaluate_semantic_head_probabilities
 
 
 SCHEMA_VERSION = "gatelm.lightgbm-input-ablation-evidence.v1"
-EXPERIMENT_ID = "difficulty-lightgbm-input-ablation.owner-approved-500.2026-07-22.v1"
+EXPERIMENT_ID = "difficulty-lightgbm-input-ablation.owner-approved-15000.2026-07-22.v1"
 TRAINING_SEED = 20260721
 HEAD_C = 1.0
 HEAD_MAX_ITERATIONS = 1000

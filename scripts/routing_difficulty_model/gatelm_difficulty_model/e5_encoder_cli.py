@@ -7,8 +7,6 @@ from typing import Any, Sequence
 from .encoder_runtime import (
     ARTIFACT_DIRECTORY,
     DEFAULT_ARTIFACT_ROOT,
-    DEFAULT_MANIFEST_PATH,
-    DEFAULT_PCA_PATH,
     MODEL_ID,
     PINNED_SOURCE_HASHES,
     QINT8_MODEL_PATH,
@@ -21,35 +19,37 @@ from .encoder_runtime import (
     fit_pca,
     install_network_guard,
     load_runtime,
-    read_json,
     sha256_file,
     validate_manifest,
     write_json,
 )
 from .semantic_heads_cli import load_training_input
+from .canonical_dataset import (
+    CANONICAL_DATASET,
+    CANONICAL_ENCODER_MANIFEST,
+    CANONICAL_MANIFEST,
+    CANONICAL_PCA,
+    experiment_manifest,
+    require_canonical_dataset,
+)
 
 
 TOOL_DIR = Path(__file__).resolve().parents[1]
 REPO_ROOT = TOOL_DIR.parents[1]
-DEFAULT_DATASET = (
-    REPO_ROOT / "docs/v2.1.0/training/difficulty-training-candidate-500.owner-approved.jsonl"
-)
-DEFAULT_DATASET_MANIFEST = (
-    REPO_ROOT
-    / "docs/v2.1.0/training/difficulty-training-candidate-500.owner-approved.manifest.json"
-)
+DEFAULT_DATASET = CANONICAL_DATASET
+DEFAULT_DATASET_MANIFEST = CANONICAL_MANIFEST
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Prepare and verify the canonical offline E5 encoder.")
     parser.add_argument("--artifact-root", type=Path, default=DEFAULT_ARTIFACT_ROOT)
-    parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST_PATH)
+    parser.add_argument("--manifest", type=Path, default=CANONICAL_ENCODER_MANIFEST)
     subcommands = parser.add_subparsers(dest="command", required=True)
     subcommands.add_parser("prepare")
     fit = subcommands.add_parser("fit-pca")
     fit.add_argument("--dataset", type=Path, default=DEFAULT_DATASET)
     fit.add_argument("--dataset-manifest", type=Path, default=DEFAULT_DATASET_MANIFEST)
-    fit.add_argument("--pca-output", type=Path, default=DEFAULT_PCA_PATH)
+    fit.add_argument("--pca-output", type=Path, default=CANONICAL_PCA)
     fit.add_argument("--batch-size", type=int, choices=[1], default=1)
     fit.add_argument("--go", default="go")
     subcommands.add_parser("verify")
@@ -110,11 +110,14 @@ def _encode_pooled_batches(
 
 
 def fit_and_write(args: argparse.Namespace) -> dict[str, Any]:
-    dataset_manifest = read_json(args.dataset_manifest)
+    dataset_manifest = experiment_manifest(
+        require_canonical_dataset(args.dataset, args.dataset_manifest)
+    )
     exported = load_training_input(args.dataset, args.dataset_manifest, args.go)
+    dataset_manifest["splitCounts"] = exported["splitCounts"]
     train_samples = [sample for sample in exported["samples"] if sample["split"] == "train"]
-    if len(train_samples) != 300:
-        raise ValueError("PCA fit requires exactly 300 eligible train samples")
+    if len(train_samples) != 10_500:
+        raise ValueError("PCA fit requires all 10,500 eligible canonical train samples")
     if len({sample["familyId"] for sample in train_samples}) != int(
         dataset_manifest["splitCounts"]["train"]["families"]
     ):

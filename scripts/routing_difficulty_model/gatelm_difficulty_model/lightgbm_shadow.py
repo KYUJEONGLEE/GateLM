@@ -253,11 +253,11 @@ def train_lightgbm_shadow_candidates(
     )
     model_sha = _sha256_file(model_path)
     projection_descriptor: dict[str, Any] | None = None
-    semantic_mode = "raw"
+    semantic_mode = "raw_768"
     semantic_dimension = NATIVE_DIMENSION
     if selected.candidate.startswith("pca_"):
-        semantic_mode = "pca"
         semantic_dimension = int(selected.candidate.removeprefix("pca_"))
+        semantic_mode = f"pca_{semantic_dimension}"
         pca = pca_by_candidate[selected.candidate]
         projection_path = output_directory / (
             f"difficulty-lightgbm-shadow-pca-{semantic_dimension}.v1.npz"
@@ -294,6 +294,7 @@ def train_lightgbm_shadow_candidates(
             "batchSize": 1,
             "paddingScope": "within_request_only",
         },
+        "encoderMode": "e5_base",
         "encoder": dict(encoder_descriptor),
         "featureShape": {
             "ruleVectorVersion": RULE_VECTOR_V1_VERSION,
@@ -308,7 +309,20 @@ def train_lightgbm_shadow_candidates(
             "semanticMode": semantic_mode,
             "semanticDimension": semantic_dimension,
             "totalDimension": total_dimension,
+            "featureOrder": (
+                ["raw_embedding_768"]
+                if rule_dimension == 0
+                else [
+                    "rule_vector_v1",
+                    (
+                        "raw_embedding_768"
+                        if semantic_mode == "raw_768"
+                        else f"e5_base_pca_{semantic_dimension}"
+                    ),
+                ]
+            ),
             "projection": projection_descriptor,
+            "semanticHeads": None,
         },
         "model": {
             "version": model_version,

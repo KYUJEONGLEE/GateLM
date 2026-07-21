@@ -13,17 +13,17 @@ from .threshold_candidate import derive_threshold_candidate
 TOOL_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_SOURCE_ARTIFACT = (
     TOOL_DIR
-    / "artifacts/candidates/difficulty-candidate-c-118d.owner-approved-500.v3.json"
+    / "artifacts/candidates/difficulty-candidate-c-118d.owner-approved-15000.v1.json"
 )
 DEFAULT_FEASIBILITY = (
-    REPO_ROOT / "docs/testing/difficulty-v3-calibration-threshold-feasibility.json"
+    REPO_ROOT / "docs/testing/difficulty-15000-calibration-threshold-feasibility.json"
 )
 DEFAULT_ARTIFACT_OUTPUT = (
     TOOL_DIR
-    / "artifacts/candidates/difficulty-candidate-c-118d.owner-approved-500.v4.json"
+    / "artifacts/candidates/difficulty-candidate-c-118d.owner-approved-15000.threshold.v1.json"
 )
 DEFAULT_EVIDENCE_OUTPUT = (
-    REPO_ROOT / "docs/testing/difficulty-v4-threshold-selection-evidence.json"
+    REPO_ROOT / "docs/testing/difficulty-15000-threshold-selection-evidence.json"
 )
 
 
@@ -38,13 +38,13 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--artifact-version",
         default=(
-            "difficulty-offline.owner-approved-500.single-request.2026-07-15."
-            "42d-rule-vector-v1-plus-projection-plus-semantic-head-probabilities.v4"
+            "difficulty-offline.owner-approved-15000.single-request.2026-07-22."
+            "42d-rule-vector-v1-plus-projection-plus-semantic-head-probabilities.threshold.v1"
         ),
     )
     parser.add_argument(
         "--bundle-version",
-        default="difficulty-feature-bundle.owner-approved-500.single-request.2026-07-15.v4",
+        default="difficulty-feature-bundle.owner-approved-15000.single-request.2026-07-22.threshold.v1",
     )
     parser.add_argument("--threshold-policy-version", default="difficulty-threshold-v2")
     return parser.parse_args(argv)

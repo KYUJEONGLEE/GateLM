@@ -274,8 +274,13 @@ def fit_pca(train_embeddings: Any) -> PCAProjection:
     from sklearn.decomposition import PCA
 
     values = np.asarray(train_embeddings, dtype=np.float32)
-    if values.shape != (300, NATIVE_DIMENSION) or not np.all(np.isfinite(values)):
-        raise ValueError("PCA fit requires exactly 300 finite pooled E5 embeddings with 384 dimensions")
+    if (
+        values.ndim != 2
+        or values.shape[0] < PROJECTION_DIMENSION
+        or values.shape[1] != NATIVE_DIMENSION
+        or not np.all(np.isfinite(values))
+    ):
+        raise ValueError("PCA fit requires at least 64 finite pooled E5 embeddings with 384 dimensions")
     pca = PCA(n_components=PROJECTION_DIMENSION, svd_solver="full", whiten=False)
     pca.fit(values)
     projection = PCAProjection(
@@ -428,10 +433,19 @@ def build_manifest(
     if not pca_path.is_file():
         raise ValueError("PCA NPZ must exist before its manifest is built")
     split_counts = dataset_manifest.get("splitCounts")
-    if not isinstance(split_counts, Mapping) or {
-        key: split_counts.get(key, {}).get("records") for key in ("train", "calibration", "holdout")
-    } != {"train": 300, "calibration": 100, "holdout": 100}:
-        raise ValueError("dataset manifest must declare exact 300/100/100 split counts")
+    split_record_counts = (
+        {
+            key: split_counts.get(key, {}).get("records")
+            for key in ("train", "calibration", "holdout")
+        }
+        if isinstance(split_counts, Mapping)
+        else {}
+    )
+    if set(split_record_counts) != {"train", "calibration", "holdout"} or any(
+        isinstance(value, bool) or not isinstance(value, int) or value <= 0
+        for value in split_record_counts.values()
+    ):
+        raise ValueError("dataset manifest must declare positive train/calibration/holdout counts")
     manifest: dict[str, Any] = {
         "schemaVersion": MANIFEST_SCHEMA,
         "bundleVersion": BUNDLE_VERSION,
@@ -489,7 +503,7 @@ def build_manifest(
             "componentsShape": [PROJECTION_DIMENSION, NATIVE_DIMENSION],
             "dtype": "float32",
             "fitSplit": "train",
-            "fitRecordCount": 300,
+            "fitRecordCount": split_record_counts["train"],
             "svdSolver": "full",
             "whiten": False,
         },
@@ -616,12 +630,18 @@ def validate_manifest(
         "componentsShape": [PROJECTION_DIMENSION, NATIVE_DIMENSION],
         "dtype": "float32",
         "fitSplit": "train",
-        "fitRecordCount": 300,
         "svdSolver": "full",
         "whiten": False,
     }
-    if not isinstance(projection_material, Mapping) or any(
-        projection_material.get(key) != value for key, value in expected_projection.items()
+    if (
+        not isinstance(projection_material, Mapping)
+        or isinstance(projection_material.get("fitRecordCount"), bool)
+        or not isinstance(projection_material.get("fitRecordCount"), int)
+        or projection_material.get("fitRecordCount", 0) < PROJECTION_DIMENSION
+        or any(
+            projection_material.get(key) != value
+            for key, value in expected_projection.items()
+        )
     ):
         raise ValueError("E5 PCA projection contract mismatch")
     if manifest.get("normalization") != {
@@ -632,10 +652,22 @@ def validate_manifest(
     }:
         raise ValueError("E5 output normalization contract mismatch")
     dataset = manifest.get("dataset")
-    if not isinstance(dataset, Mapping) or {
-        split: dataset.get("splitCounts", {}).get(split, {}).get("records")
-        for split in ("train", "calibration", "holdout")
-    } != {"train": 300, "calibration": 100, "holdout": 100}:
+    dataset_split_counts = (
+        {
+            split: dataset.get("splitCounts", {}).get(split, {}).get("records")
+            for split in ("train", "calibration", "holdout")
+        }
+        if isinstance(dataset, Mapping)
+        else {}
+    )
+    if (
+        set(dataset_split_counts) != {"train", "calibration", "holdout"}
+        or any(
+            isinstance(value, bool) or not isinstance(value, int) or value <= 0
+            for value in dataset_split_counts.values()
+        )
+        or projection_material.get("fitRecordCount") != dataset_split_counts.get("train")
+    ):
         raise ValueError("E5 dataset split contract mismatch")
     if manifest.get("output") != {"shape": ["request", PROJECTION_DIMENSION], "dtype": "float32"}:
         raise ValueError("E5 output contract mismatch")

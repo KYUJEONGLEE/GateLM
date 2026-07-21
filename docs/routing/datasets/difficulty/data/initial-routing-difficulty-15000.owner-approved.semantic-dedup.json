@@ -1,0 +1,4521 @@
+{
+  "calibration": {
+    "minimum_required_precision": 0.95,
+    "negative_pairs": 13890,
+    "positive_pairs": 15993,
+    "precision_at_threshold": 1.0,
+    "precision_requirement_met": true,
+    "recall_at_threshold": 0.405115,
+    "reference_negative_definition": "different_group_id_same_label_task_and_domain_deterministic_sample",
+    "reference_positive_definition": "same_group_id_derivation_or_boundary_variant",
+    "threshold": 0.985
+  },
+  "clusters": [],
+  "dataset": {
+    "path": "docs/routing/datasets/difficulty/data/initial-routing-difficulty-15000.owner-approved.jsonl",
+    "record_count": 15000,
+    "sha256": "9b4b5c512102225c84843675b0c1fb1ef917540885dfd30c0d020cbd57b007ae"
+  },
+  "encoder": {
+    "embedding_dimension": 384,
+    "input_prefix": "query: ",
+    "maximum_token_length": 128,
+    "model_id": "intfloat/multilingual-e5-small",
+    "onnx_path": "generated/model.dynamic-qint8-matmul.onnx",
+    "onnx_sha256": "a374ca7b87cdafc3c2a4b8b3c7db4a6500803ced02c750351d5fa80f60e94a94",
+    "pooling": "attention_masked_mean_then_l2_normalize",
+    "revision": "614241f622f53c4eeff9890bdc4f31cfecc418b3"
+  },
+  "execution": {
+    "batch_size": 64,
+    "embeddings_persisted": false,
+    "network_access": "disabled_by_local_files_only",
+    "prompt_text_persisted": false,
+    "similarity": "cosine_on_l2_normalized_native_e5_embeddings"
+  },
+  "pairs": [
+    {
+      "left_sample_id": "syn_0001_simple_01",
+      "right_sample_id": "syn_0049_simple_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.988077
+    },
+    {
+      "left_sample_id": "syn_0001_simple_01",
+      "right_sample_id": "syn_0049_simple_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.986863
+    },
+    {
+      "left_sample_id": "syn_0001_simple_01",
+      "right_sample_id": "syn_0049_simple_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.987331
+    },
+    {
+      "left_sample_id": "syn_0001_simple_02",
+      "right_sample_id": "syn_0049_simple_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.986905
+    },
+    {
+      "left_sample_id": "syn_0001_simple_02",
+      "right_sample_id": "syn_0049_simple_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.9905
+    },
+    {
+      "left_sample_id": "syn_0001_simple_02",
+      "right_sample_id": "syn_0049_simple_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.987482
+    },
+    {
+      "left_sample_id": "syn_0001_simple_03",
+      "right_sample_id": "syn_0049_simple_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.987724
+    },
+    {
+      "left_sample_id": "syn_0001_simple_03",
+      "right_sample_id": "syn_0049_simple_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.98854
+    },
+    {
+      "left_sample_id": "syn_0001_simple_03",
+      "right_sample_id": "syn_0049_simple_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.990541
+    },
+    {
+      "left_sample_id": "syn_0001_simple_04",
+      "right_sample_id": "syn_0049_simple_04",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.989541
+    },
+    {
+      "left_sample_id": "syn_0002_simple_01",
+      "right_sample_id": "syn_0146_simple_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.986621
+    },
+    {
+      "left_sample_id": "syn_0002_simple_02",
+      "right_sample_id": "syn_0146_simple_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.987306
+    },
+    {
+      "left_sample_id": "syn_0002_simple_03",
+      "right_sample_id": "syn_0146_simple_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.988548
+    },
+    {
+      "left_sample_id": "syn_0002_simple_04",
+      "right_sample_id": "syn_0146_simple_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.986274
+    },
+    {
+      "left_sample_id": "syn_0002_simple_04",
+      "right_sample_id": "syn_0146_simple_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985787
+    },
+    {
+      "left_sample_id": "syn_0002_simple_04",
+      "right_sample_id": "syn_0146_simple_04",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.988321
+    },
+    {
+      "left_sample_id": "syn_0004_simple_01",
+      "right_sample_id": "syn_0148_simple_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.992012
+    },
+    {
+      "left_sample_id": "syn_0004_simple_01",
+      "right_sample_id": "syn_0148_simple_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985921
+    },
+    {
+      "left_sample_id": "syn_0004_simple_02",
+      "right_sample_id": "syn_0148_simple_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985266
+    },
+    {
+      "left_sample_id": "syn_0004_simple_02",
+      "right_sample_id": "syn_0148_simple_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.992036
+    },
+    {
+      "left_sample_id": "syn_0004_simple_03",
+      "right_sample_id": "syn_0148_simple_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.991782
+    },
+    {
+      "left_sample_id": "syn_0004_simple_04",
+      "right_sample_id": "syn_0148_simple_04",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.988478
+    },
+    {
+      "left_sample_id": "syn_0007_simple_01",
+      "right_sample_id": "syn_0012_simple_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.98776
+    },
+    {
+      "left_sample_id": "syn_0007_simple_01",
+      "right_sample_id": "syn_0012_simple_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.98701
+    },
+    {
+      "left_sample_id": "syn_0007_simple_01",
+      "right_sample_id": "syn_0012_simple_04",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985093
+    },
+    {
+      "left_sample_id": "syn_0007_simple_01",
+      "right_sample_id": "syn_0119_simple_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.990527
+    },
+    {
+      "left_sample_id": "syn_0007_simple_01",
+      "right_sample_id": "syn_0119_simple_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.988579
+    },
+    {
+      "left_sample_id": "syn_0007_simple_01",
+      "right_sample_id": "syn_0119_simple_04",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.988553
+    },
+    {
+      "left_sample_id": "syn_0007_simple_01",
+      "right_sample_id": "syn_0147_simple_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985324
+    },
+    {
+      "left_sample_id": "syn_0007_simple_01",
+      "right_sample_id": "syn_0147_simple_04",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.98606
+    },
+    {
+      "left_sample_id": "syn_0007_simple_02",
+      "right_sample_id": "syn_0012_simple_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985853
+    },
+    {
+      "left_sample_id": "syn_0007_simple_02",
+      "right_sample_id": "syn_0012_simple_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.988658
+    },
+    {
+      "left_sample_id": "syn_0007_simple_02",
+      "right_sample_id": "syn_0119_simple_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.990376
+    },
+    {
+      "left_sample_id": "syn_0007_simple_03",
+      "right_sample_id": "syn_0012_simple_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.986977
+    },
+    {
+      "left_sample_id": "syn_0007_simple_03",
+      "right_sample_id": "syn_0012_simple_04",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.988812
+    },
+    {
+      "left_sample_id": "syn_0007_simple_03",
+      "right_sample_id": "syn_0119_simple_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.987226
+    },
+    {
+      "left_sample_id": "syn_0007_simple_03",
+      "right_sample_id": "syn_0119_simple_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985598
+    },
+    {
+      "left_sample_id": "syn_0007_simple_03",
+      "right_sample_id": "syn_0119_simple_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.991621
+    },
+    {
+      "left_sample_id": "syn_0007_simple_03",
+      "right_sample_id": "syn_0119_simple_04",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.987593
+    },
+    {
+      "left_sample_id": "syn_0007_simple_04",
+      "right_sample_id": "syn_0012_simple_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.988505
+    },
+    {
+      "left_sample_id": "syn_0007_simple_04",
+      "right_sample_id": "syn_0012_simple_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985834
+    },
+    {
+      "left_sample_id": "syn_0007_simple_04",
+      "right_sample_id": "syn_0012_simple_04",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.98623
+    },
+    {
+      "left_sample_id": "syn_0007_simple_04",
+      "right_sample_id": "syn_0119_simple_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.98789
+    },
+    {
+      "left_sample_id": "syn_0007_simple_04",
+      "right_sample_id": "syn_0119_simple_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.987752
+    },
+    {
+      "left_sample_id": "syn_0007_simple_04",
+      "right_sample_id": "syn_0119_simple_04",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.990874
+    },
+    {
+      "left_sample_id": "syn_0007_simple_04",
+      "right_sample_id": "syn_0147_simple_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985927
+    },
+    {
+      "left_sample_id": "syn_0007_simple_04",
+      "right_sample_id": "syn_0147_simple_04",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.986497
+    },
+    {
+      "left_sample_id": "syn_0008_simple_01",
+      "right_sample_id": "syn_0040_simple_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.989543
+    },
+    {
+      "left_sample_id": "syn_0008_simple_01",
+      "right_sample_id": "syn_0040_simple_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.987139
+    },
+    {
+      "left_sample_id": "syn_0008_simple_01",
+      "right_sample_id": "syn_0040_simple_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985271
+    },
+    {
+      "left_sample_id": "syn_0008_simple_01",
+      "right_sample_id": "syn_0040_simple_04",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.98595
+    },
+    {
+      "left_sample_id": "syn_0008_simple_02",
+      "right_sample_id": "syn_0040_simple_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.986768
+    },
+    {
+      "left_sample_id": "syn_0008_simple_03",
+      "right_sample_id": "syn_0040_simple_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.987894
+    },
+    {
+      "left_sample_id": "syn_0008_simple_04",
+      "right_sample_id": "syn_0040_simple_04",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.987239
+    },
+    {
+      "left_sample_id": "syn_0009_simple_01",
+      "right_sample_id": "syn_0105_simple_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.98855
+    },
+    {
+      "left_sample_id": "syn_0009_simple_02",
+      "right_sample_id": "syn_0105_simple_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.986813
+    },
+    {
+      "left_sample_id": "syn_0009_simple_02",
+      "right_sample_id": "syn_0105_simple_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.989131
+    },
+    {
+      "left_sample_id": "syn_0009_simple_02",
+      "right_sample_id": "syn_0105_simple_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985251
+    },
+    {
+      "left_sample_id": "syn_0012_simple_04",
+      "right_sample_id": "syn_0119_simple_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985931
+    },
+    {
+      "left_sample_id": "syn_0012_simple_04",
+      "right_sample_id": "syn_0140_simple_04",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.986115
+    },
+    {
+      "left_sample_id": "syn_0013_simple_01",
+      "right_sample_id": "syn_0109_simple_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.991091
+    },
+    {
+      "left_sample_id": "syn_0013_simple_01",
+      "right_sample_id": "syn_0109_simple_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.987938
+    },
+    {
+      "left_sample_id": "syn_0013_simple_01",
+      "right_sample_id": "syn_0109_simple_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.988479
+    },
+    {
+      "left_sample_id": "syn_0013_simple_02",
+      "right_sample_id": "syn_0109_simple_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.988057
+    },
+    {
+      "left_sample_id": "syn_0013_simple_02",
+      "right_sample_id": "syn_0109_simple_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.990836
+    },
+    {
+      "left_sample_id": "syn_0013_simple_02",
+      "right_sample_id": "syn_0109_simple_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.988855
+    },
+    {
+      "left_sample_id": "syn_0013_simple_03",
+      "right_sample_id": "syn_0109_simple_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.98882
+    },
+    {
+      "left_sample_id": "syn_0013_simple_03",
+      "right_sample_id": "syn_0109_simple_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.98877
+    },
+    {
+      "left_sample_id": "syn_0013_simple_03",
+      "right_sample_id": "syn_0109_simple_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.990396
+    },
+    {
+      "left_sample_id": "syn_0013_simple_04",
+      "right_sample_id": "syn_0109_simple_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.9882
+    },
+    {
+      "left_sample_id": "syn_0013_simple_04",
+      "right_sample_id": "syn_0109_simple_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.987424
+    },
+    {
+      "left_sample_id": "syn_0013_simple_04",
+      "right_sample_id": "syn_0109_simple_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.98774
+    },
+    {
+      "left_sample_id": "syn_0013_simple_04",
+      "right_sample_id": "syn_0109_simple_04",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.98826
+    },
+    {
+      "left_sample_id": "syn_0014_simple_01",
+      "right_sample_id": "syn_0062_simple_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.986884
+    },
+    {
+      "left_sample_id": "syn_0014_simple_02",
+      "right_sample_id": "syn_0062_simple_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.988762
+    },
+    {
+      "left_sample_id": "syn_0014_simple_02",
+      "right_sample_id": "syn_0062_simple_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.98697
+    },
+    {
+      "left_sample_id": "syn_0014_simple_03",
+      "right_sample_id": "syn_0062_simple_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.988122
+    },
+    {
+      "left_sample_id": "syn_0014_simple_03",
+      "right_sample_id": "syn_0062_simple_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.992244
+    },
+    {
+      "left_sample_id": "syn_0014_simple_04",
+      "right_sample_id": "syn_0062_simple_04",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.991295
+    },
+    {
+      "left_sample_id": "syn_0016_simple_01",
+      "right_sample_id": "syn_0048_simple_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.987961
+    },
+    {
+      "left_sample_id": "syn_0016_simple_01",
+      "right_sample_id": "syn_0112_simple_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.988376
+    },
+    {
+      "left_sample_id": "syn_0016_simple_03",
+      "right_sample_id": "syn_0048_simple_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.98839
+    },
+    {
+      "left_sample_id": "syn_0016_simple_03",
+      "right_sample_id": "syn_0112_simple_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.987727
+    },
+    {
+      "left_sample_id": "syn_0016_simple_04",
+      "right_sample_id": "syn_0048_simple_04",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.986936
+    },
+    {
+      "left_sample_id": "syn_0022_simple_01",
+      "right_sample_id": "syn_0070_simple_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985524
+    },
+    {
+      "left_sample_id": "syn_0022_simple_03",
+      "right_sample_id": "syn_0070_simple_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985774
+    },
+    {
+      "left_sample_id": "syn_0024_simple_01",
+      "right_sample_id": "syn_0120_simple_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.986661
+    },
+    {
+      "left_sample_id": "syn_0024_simple_02",
+      "right_sample_id": "syn_0072_simple_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985796
+    },
+    {
+      "left_sample_id": "syn_0024_simple_02",
+      "right_sample_id": "syn_0120_simple_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985061
+    },
+    {
+      "left_sample_id": "syn_0024_simple_03",
+      "right_sample_id": "syn_0120_simple_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985081
+    },
+    {
+      "left_sample_id": "syn_0024_simple_04",
+      "right_sample_id": "syn_0120_simple_04",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.986737
+    },
+    {
+      "left_sample_id": "syn_0025_simple_03",
+      "right_sample_id": "syn_0121_simple_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.98735
+    },
+    {
+      "left_sample_id": "syn_0025_simple_04",
+      "right_sample_id": "syn_0121_simple_04",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.986496
+    },
+    {
+      "left_sample_id": "syn_0028_simple_02",
+      "right_sample_id": "syn_0076_simple_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985248
+    },
+    {
+      "left_sample_id": "syn_0028_simple_04",
+      "right_sample_id": "syn_0076_simple_04",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985699
+    },
+    {
+      "left_sample_id": "syn_0030_simple_01",
+      "right_sample_id": "syn_0046_simple_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.987316
+    },
+    {
+      "left_sample_id": "syn_0030_simple_02",
+      "right_sample_id": "syn_0046_simple_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.987336
+    },
+    {
+      "left_sample_id": "syn_0030_simple_03",
+      "right_sample_id": "syn_0046_simple_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985867
+    },
+    {
+      "left_sample_id": "syn_0030_simple_03",
+      "right_sample_id": "syn_0046_simple_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.989385
+    },
+    {
+      "left_sample_id": "syn_0030_simple_04",
+      "right_sample_id": "syn_0046_simple_04",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.989362
+    },
+    {
+      "left_sample_id": "syn_0052_simple_01",
+      "right_sample_id": "syn_0068_simple_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985844
+    },
+    {
+      "left_sample_id": "syn_0052_simple_01",
+      "right_sample_id": "syn_0116_simple_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.986668
+    },
+    {
+      "left_sample_id": "syn_0052_simple_02",
+      "right_sample_id": "syn_0068_simple_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.988205
+    },
+    {
+      "left_sample_id": "syn_0052_simple_02",
+      "right_sample_id": "syn_0116_simple_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.989112
+    },
+    {
+      "left_sample_id": "syn_0052_simple_02",
+      "right_sample_id": "syn_0180_simple_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.98546
+    },
+    {
+      "left_sample_id": "syn_0054_simple_01",
+      "right_sample_id": "syn_0166_simple_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.988401
+    },
+    {
+      "left_sample_id": "syn_0054_simple_03",
+      "right_sample_id": "syn_0166_simple_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985807
+    },
+    {
+      "left_sample_id": "syn_0056_simple_01",
+      "right_sample_id": "syn_0104_simple_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.990554
+    },
+    {
+      "left_sample_id": "syn_0056_simple_01",
+      "right_sample_id": "syn_0104_simple_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.988028
+    },
+    {
+      "left_sample_id": "syn_0056_simple_02",
+      "right_sample_id": "syn_0104_simple_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.986401
+    },
+    {
+      "left_sample_id": "syn_0056_simple_02",
+      "right_sample_id": "syn_0104_simple_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.989599
+    },
+    {
+      "left_sample_id": "syn_0056_simple_02",
+      "right_sample_id": "syn_0104_simple_04",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985611
+    },
+    {
+      "left_sample_id": "syn_0056_simple_03",
+      "right_sample_id": "syn_0104_simple_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.986664
+    },
+    {
+      "left_sample_id": "syn_0056_simple_04",
+      "right_sample_id": "syn_0104_simple_04",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.987846
+    },
+    {
+      "left_sample_id": "syn_0061_simple_03",
+      "right_sample_id": "syn_0141_simple_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985609
+    },
+    {
+      "left_sample_id": "syn_0064_simple_03",
+      "right_sample_id": "syn_0160_simple_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.987409
+    },
+    {
+      "left_sample_id": "syn_0068_simple_02",
+      "right_sample_id": "syn_0116_simple_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.986293
+    },
+    {
+      "left_sample_id": "syn_0070_simple_01",
+      "right_sample_id": "syn_0102_simple_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.987218
+    },
+    {
+      "left_sample_id": "syn_0070_simple_03",
+      "right_sample_id": "syn_0102_simple_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985507
+    },
+    {
+      "left_sample_id": "syn_0070_simple_04",
+      "right_sample_id": "syn_0102_simple_04",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985381
+    },
+    {
+      "left_sample_id": "syn_0071_simple_03",
+      "right_sample_id": "syn_0075_simple_04",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985495
+    },
+    {
+      "left_sample_id": "syn_0072_simple_01",
+      "right_sample_id": "syn_0120_simple_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.987002
+    },
+    {
+      "left_sample_id": "syn_0072_simple_01",
+      "right_sample_id": "syn_0120_simple_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985142
+    },
+    {
+      "left_sample_id": "syn_0072_simple_02",
+      "right_sample_id": "syn_0120_simple_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.987385
+    },
+    {
+      "left_sample_id": "syn_0072_simple_03",
+      "right_sample_id": "syn_0120_simple_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.987218
+    },
+    {
+      "left_sample_id": "syn_0072_simple_04",
+      "right_sample_id": "syn_0120_simple_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985241
+    },
+    {
+      "left_sample_id": "syn_0072_simple_04",
+      "right_sample_id": "syn_0120_simple_04",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.987142
+    },
+    {
+      "left_sample_id": "syn_0073_simple_01",
+      "right_sample_id": "syn_0089_simple_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.986936
+    },
+    {
+      "left_sample_id": "syn_0073_simple_01",
+      "right_sample_id": "syn_0169_simple_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985355
+    },
+    {
+      "left_sample_id": "syn_0073_simple_02",
+      "right_sample_id": "syn_0089_simple_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.987694
+    },
+    {
+      "left_sample_id": "syn_0073_simple_02",
+      "right_sample_id": "syn_0169_simple_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985386
+    },
+    {
+      "left_sample_id": "syn_0073_simple_02",
+      "right_sample_id": "syn_0169_simple_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.986898
+    },
+    {
+      "left_sample_id": "syn_0073_simple_03",
+      "right_sample_id": "syn_0089_simple_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.989343
+    },
+    {
+      "left_sample_id": "syn_0073_simple_03",
+      "right_sample_id": "syn_0169_simple_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.989635
+    },
+    {
+      "left_sample_id": "syn_0073_simple_04",
+      "right_sample_id": "syn_0169_simple_04",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.988079
+    },
+    {
+      "left_sample_id": "syn_0074_simple_01",
+      "right_sample_id": "syn_0122_simple_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.988623
+    },
+    {
+      "left_sample_id": "syn_0075_simple_02",
+      "right_sample_id": "syn_0171_simple_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.987443
+    },
+    {
+      "left_sample_id": "syn_0077_simple_01",
+      "right_sample_id": "syn_0173_simple_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.986272
+    },
+    {
+      "left_sample_id": "syn_0077_simple_02",
+      "right_sample_id": "syn_0173_simple_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.986076
+    },
+    {
+      "left_sample_id": "syn_0077_simple_02",
+      "right_sample_id": "syn_0173_simple_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985418
+    },
+    {
+      "left_sample_id": "syn_0077_simple_03",
+      "right_sample_id": "syn_0173_simple_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.987271
+    },
+    {
+      "left_sample_id": "syn_0077_simple_03",
+      "right_sample_id": "syn_0173_simple_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.98618
+    },
+    {
+      "left_sample_id": "syn_0077_simple_03",
+      "right_sample_id": "syn_0173_simple_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.988727
+    },
+    {
+      "left_sample_id": "syn_0077_simple_04",
+      "right_sample_id": "syn_0173_simple_04",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.98605
+    },
+    {
+      "left_sample_id": "syn_0078_simple_02",
+      "right_sample_id": "syn_0126_simple_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985436
+    },
+    {
+      "left_sample_id": "syn_0078_simple_03",
+      "right_sample_id": "syn_0126_simple_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985844
+    },
+    {
+      "left_sample_id": "syn_0078_simple_04",
+      "right_sample_id": "syn_0126_simple_04",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.986352
+    },
+    {
+      "left_sample_id": "syn_0080_simple_03",
+      "right_sample_id": "syn_0096_simple_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.986218
+    },
+    {
+      "left_sample_id": "syn_0081_simple_01",
+      "right_sample_id": "syn_0129_simple_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985588
+    },
+    {
+      "left_sample_id": "syn_0081_simple_02",
+      "right_sample_id": "syn_0129_simple_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.986845
+    },
+    {
+      "left_sample_id": "syn_0081_simple_02",
+      "right_sample_id": "syn_0129_simple_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.988787
+    },
+    {
+      "left_sample_id": "syn_0081_simple_02",
+      "right_sample_id": "syn_0129_simple_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.987934
+    },
+    {
+      "left_sample_id": "syn_0081_simple_03",
+      "right_sample_id": "syn_0129_simple_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985445
+    },
+    {
+      "left_sample_id": "syn_0081_simple_03",
+      "right_sample_id": "syn_0129_simple_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.98794
+    },
+    {
+      "left_sample_id": "syn_0081_simple_04",
+      "right_sample_id": "syn_0129_simple_04",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.987633
+    },
+    {
+      "left_sample_id": "syn_0082_simple_01",
+      "right_sample_id": "syn_0098_simple_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985678
+    },
+    {
+      "left_sample_id": "syn_0082_simple_02",
+      "right_sample_id": "syn_0098_simple_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.986169
+    },
+    {
+      "left_sample_id": "syn_0082_simple_02",
+      "right_sample_id": "syn_0098_simple_04",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985377
+    },
+    {
+      "left_sample_id": "syn_0082_simple_03",
+      "right_sample_id": "syn_0098_simple_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985388
+    },
+    {
+      "left_sample_id": "syn_0082_simple_04",
+      "right_sample_id": "syn_0098_simple_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.986315
+    },
+    {
+      "left_sample_id": "syn_0082_simple_04",
+      "right_sample_id": "syn_0098_simple_04",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.987467
+    },
+    {
+      "left_sample_id": "syn_0083_simple_01",
+      "right_sample_id": "syn_0089_simple_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.987115
+    },
+    {
+      "left_sample_id": "syn_0083_simple_01",
+      "right_sample_id": "syn_0119_simple_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985469
+    },
+    {
+      "left_sample_id": "syn_0083_simple_01",
+      "right_sample_id": "syn_0147_simple_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.987491
+    },
+    {
+      "left_sample_id": "syn_0083_simple_01",
+      "right_sample_id": "syn_0147_simple_04",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.986686
+    },
+    {
+      "left_sample_id": "syn_0083_simple_01",
+      "right_sample_id": "syn_0195_simple_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.98629
+    },
+    {
+      "left_sample_id": "syn_0083_simple_01",
+      "right_sample_id": "syn_0195_simple_04",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985322
+    },
+    {
+      "left_sample_id": "syn_0083_simple_03",
+      "right_sample_id": "syn_0089_simple_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985592
+    },
+    {
+      "left_sample_id": "syn_0083_simple_04",
+      "right_sample_id": "syn_0089_simple_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.987263
+    },
+    {
+      "left_sample_id": "syn_0083_simple_04",
+      "right_sample_id": "syn_0147_simple_04",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.986539
+    },
+    {
+      "left_sample_id": "syn_0089_simple_01",
+      "right_sample_id": "syn_0169_simple_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.986788
+    },
+    {
+      "left_sample_id": "syn_0089_simple_02",
+      "right_sample_id": "syn_0169_simple_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985201
+    },
+    {
+      "left_sample_id": "syn_0089_simple_02",
+      "right_sample_id": "syn_0169_simple_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.987058
+    },
+    {
+      "left_sample_id": "syn_0089_simple_03",
+      "right_sample_id": "syn_0169_simple_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.990338
+    },
+    {
+      "left_sample_id": "syn_0089_simple_04",
+      "right_sample_id": "syn_0169_simple_04",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985688
+    },
+    {
+      "left_sample_id": "syn_0115_simple_01",
+      "right_sample_id": "syn_0163_simple_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.987923
+    },
+    {
+      "left_sample_id": "syn_0115_simple_03",
+      "right_sample_id": "syn_0163_simple_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.986134
+    },
+    {
+      "left_sample_id": "syn_0115_simple_04",
+      "right_sample_id": "syn_0163_simple_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985952
+    },
+    {
+      "left_sample_id": "syn_0115_simple_04",
+      "right_sample_id": "syn_0163_simple_04",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.986406
+    },
+    {
+      "left_sample_id": "syn_0119_simple_03",
+      "right_sample_id": "syn_0125_simple_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.986976
+    },
+    {
+      "left_sample_id": "syn_0119_simple_04",
+      "right_sample_id": "syn_0125_simple_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.98599
+    },
+    {
+      "left_sample_id": "syn_0127_simple_01",
+      "right_sample_id": "syn_0175_simple_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.98736
+    },
+    {
+      "left_sample_id": "syn_0127_simple_02",
+      "right_sample_id": "syn_0175_simple_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.987093
+    },
+    {
+      "left_sample_id": "syn_0127_simple_03",
+      "right_sample_id": "syn_0175_simple_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.986027
+    },
+    {
+      "left_sample_id": "syn_0147_simple_01",
+      "right_sample_id": "syn_0169_simple_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985172
+    },
+    {
+      "left_sample_id": "syn_0147_simple_01",
+      "right_sample_id": "syn_0195_simple_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985339
+    },
+    {
+      "left_sample_id": "syn_0147_simple_03",
+      "right_sample_id": "syn_0169_simple_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985419
+    },
+    {
+      "left_sample_id": "syn_0147_simple_03",
+      "right_sample_id": "syn_0195_simple_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.986651
+    },
+    {
+      "left_sample_id": "syn_0149_simple_04",
+      "right_sample_id": "syn_0181_simple_04",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.987461
+    },
+    {
+      "left_sample_id": "syn_0152_simple_01",
+      "right_sample_id": "syn_0200_simple_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.987688
+    },
+    {
+      "left_sample_id": "syn_0152_simple_01",
+      "right_sample_id": "syn_0200_simple_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.98685
+    },
+    {
+      "left_sample_id": "syn_0152_simple_02",
+      "right_sample_id": "syn_0200_simple_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.988791
+    },
+    {
+      "left_sample_id": "syn_0152_simple_03",
+      "right_sample_id": "syn_0200_simple_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.987236
+    },
+    {
+      "left_sample_id": "syn_0152_simple_04",
+      "right_sample_id": "syn_0200_simple_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985239
+    },
+    {
+      "left_sample_id": "syn_0152_simple_04",
+      "right_sample_id": "syn_0200_simple_04",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.989552
+    },
+    {
+      "left_sample_id": "syn_0159_simple_01",
+      "right_sample_id": "syn_0191_simple_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.987229
+    },
+    {
+      "left_sample_id": "syn_0182_simple_01",
+      "right_sample_id": "syn_0192_simple_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.986526
+    },
+    {
+      "left_sample_id": "syn_0201_simple_03",
+      "right_sample_id": "syn_0249_simple_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985529
+    },
+    {
+      "left_sample_id": "syn_0201_simple_03",
+      "right_sample_id": "syn_0361_simple_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.986275
+    },
+    {
+      "left_sample_id": "syn_0201_simple_04",
+      "right_sample_id": "syn_0249_simple_04",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.990274
+    },
+    {
+      "left_sample_id": "syn_0201_simple_04",
+      "right_sample_id": "syn_0297_simple_04",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.987606
+    },
+    {
+      "left_sample_id": "syn_0202_simple_01",
+      "right_sample_id": "syn_0346_simple_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.988331
+    },
+    {
+      "left_sample_id": "syn_0205_simple_01",
+      "right_sample_id": "syn_1357_simple_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.986062
+    },
+    {
+      "left_sample_id": "syn_0205_simple_02",
+      "right_sample_id": "syn_1357_simple_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.986677
+    },
+    {
+      "left_sample_id": "syn_0205_simple_03",
+      "right_sample_id": "syn_1357_simple_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.987287
+    },
+    {
+      "left_sample_id": "syn_0206_simple_02",
+      "right_sample_id": "syn_0302_simple_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985173
+    },
+    {
+      "left_sample_id": "syn_0206_simple_03",
+      "right_sample_id": "syn_0302_simple_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.986804
+    },
+    {
+      "left_sample_id": "syn_0206_simple_04",
+      "right_sample_id": "syn_0302_simple_04",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.988098
+    },
+    {
+      "left_sample_id": "syn_0207_simple_02",
+      "right_sample_id": "syn_0447_simple_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.98635
+    },
+    {
+      "left_sample_id": "syn_0208_simple_01",
+      "right_sample_id": "syn_0224_simple_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985262
+    },
+    {
+      "left_sample_id": "syn_0208_simple_01",
+      "right_sample_id": "syn_0272_simple_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.986555
+    },
+    {
+      "left_sample_id": "syn_0208_simple_03",
+      "right_sample_id": "syn_0272_simple_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985655
+    },
+    {
+      "left_sample_id": "syn_0209_simple_02",
+      "right_sample_id": "syn_0273_simple_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.986728
+    },
+    {
+      "left_sample_id": "syn_0209_simple_03",
+      "right_sample_id": "syn_0273_simple_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.986596
+    },
+    {
+      "left_sample_id": "syn_0209_simple_04",
+      "right_sample_id": "syn_0273_simple_04",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.988817
+    },
+    {
+      "left_sample_id": "syn_0210_simple_01",
+      "right_sample_id": "syn_0402_simple_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.986336
+    },
+    {
+      "left_sample_id": "syn_0212_simple_03",
+      "right_sample_id": "syn_0260_simple_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.9858
+    },
+    {
+      "left_sample_id": "syn_0217_simple_02",
+      "right_sample_id": "syn_0409_simple_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.986461
+    },
+    {
+      "left_sample_id": "syn_0217_simple_03",
+      "right_sample_id": "syn_0233_simple_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985065
+    },
+    {
+      "left_sample_id": "syn_0217_simple_03",
+      "right_sample_id": "syn_0345_simple_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985079
+    },
+    {
+      "left_sample_id": "syn_0217_simple_03",
+      "right_sample_id": "syn_0409_simple_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.986006
+    },
+    {
+      "left_sample_id": "syn_0217_simple_04",
+      "right_sample_id": "syn_0409_simple_04",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.986196
+    },
+    {
+      "left_sample_id": "syn_0222_simple_04",
+      "right_sample_id": "syn_0318_simple_04",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.989071
+    },
+    {
+      "left_sample_id": "syn_0231_simple_02",
+      "right_sample_id": "syn_0279_simple_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985903
+    },
+    {
+      "left_sample_id": "syn_0238_simple_04",
+      "right_sample_id": "syn_0510_simple_04",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985026
+    },
+    {
+      "left_sample_id": "syn_0243_simple_01",
+      "right_sample_id": "syn_0435_simple_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.98518
+    },
+    {
+      "left_sample_id": "syn_0243_simple_04",
+      "right_sample_id": "syn_0435_simple_04",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985256
+    },
+    {
+      "left_sample_id": "syn_0248_simple_02",
+      "right_sample_id": "syn_0264_simple_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985002
+    },
+    {
+      "left_sample_id": "syn_0252_simple_03",
+      "right_sample_id": "syn_0439_simple_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985118
+    },
+    {
+      "left_sample_id": "syn_0258_simple_01",
+      "right_sample_id": "syn_0338_simple_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985226
+    },
+    {
+      "left_sample_id": "syn_0258_simple_02",
+      "right_sample_id": "syn_0338_simple_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.98538
+    },
+    {
+      "left_sample_id": "syn_0263_simple_02",
+      "right_sample_id": "syn_0279_simple_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.986363
+    },
+    {
+      "left_sample_id": "syn_0263_simple_03",
+      "right_sample_id": "syn_0279_simple_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.98501
+    },
+    {
+      "left_sample_id": "syn_0264_simple_02",
+      "right_sample_id": "syn_0456_simple_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985655
+    },
+    {
+      "left_sample_id": "syn_0279_simple_01",
+      "right_sample_id": "syn_0471_simple_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.9859
+    },
+    {
+      "left_sample_id": "syn_0279_simple_02",
+      "right_sample_id": "syn_0471_simple_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.988514
+    },
+    {
+      "left_sample_id": "syn_0279_simple_02",
+      "right_sample_id": "syn_1052_simple_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.985359
+    },
+    {
+      "left_sample_id": "syn_0279_simple_03",
+      "right_sample_id": "syn_0471_simple_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.986237
+    },
+    {
+      "left_sample_id": "syn_0282_simple_01",
+      "right_sample_id": "syn_0330_simple_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985657
+    },
+    {
+      "left_sample_id": "syn_0295_simple_02",
+      "right_sample_id": "syn_0343_simple_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985989
+    },
+    {
+      "left_sample_id": "syn_0295_simple_03",
+      "right_sample_id": "syn_0343_simple_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985636
+    },
+    {
+      "left_sample_id": "syn_0296_simple_02",
+      "right_sample_id": "syn_1064_simple_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.986916
+    },
+    {
+      "left_sample_id": "syn_0296_simple_04",
+      "right_sample_id": "syn_1064_simple_04",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.986811
+    },
+    {
+      "left_sample_id": "syn_0297_simple_03",
+      "right_sample_id": "syn_0361_simple_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.986065
+    },
+    {
+      "left_sample_id": "syn_0306_simple_01",
+      "right_sample_id": "syn_0498_simple_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.98708
+    },
+    {
+      "left_sample_id": "syn_0311_simple_02",
+      "right_sample_id": "syn_0359_simple_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985624
+    },
+    {
+      "left_sample_id": "syn_0313_simple_02",
+      "right_sample_id": "syn_1081_simple_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.986838
+    },
+    {
+      "left_sample_id": "syn_0313_simple_03",
+      "right_sample_id": "syn_1081_simple_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.988143
+    },
+    {
+      "left_sample_id": "syn_0327_simple_01",
+      "right_sample_id": "syn_1287_simple_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.985336
+    },
+    {
+      "left_sample_id": "syn_0327_simple_02",
+      "right_sample_id": "syn_1287_simple_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.990794
+    },
+    {
+      "left_sample_id": "syn_0327_simple_03",
+      "right_sample_id": "syn_1287_simple_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.988328
+    },
+    {
+      "left_sample_id": "syn_0327_simple_04",
+      "right_sample_id": "syn_1287_simple_04",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.986656
+    },
+    {
+      "left_sample_id": "syn_0330_simple_03",
+      "right_sample_id": "syn_0335_simple_04",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985887
+    },
+    {
+      "left_sample_id": "syn_0338_simple_01",
+      "right_sample_id": "syn_0354_simple_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985859
+    },
+    {
+      "left_sample_id": "syn_0338_simple_02",
+      "right_sample_id": "syn_0354_simple_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985222
+    },
+    {
+      "left_sample_id": "syn_0338_simple_03",
+      "right_sample_id": "syn_0354_simple_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985645
+    },
+    {
+      "left_sample_id": "syn_0351_simple_01",
+      "right_sample_id": "syn_0367_simple_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985858
+    },
+    {
+      "left_sample_id": "syn_0368_simple_01",
+      "right_sample_id": "syn_1136_simple_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.986921
+    },
+    {
+      "left_sample_id": "syn_0368_simple_03",
+      "right_sample_id": "syn_1136_simple_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.987022
+    },
+    {
+      "left_sample_id": "syn_0378_simple_03",
+      "right_sample_id": "syn_1146_simple_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.987063
+    },
+    {
+      "left_sample_id": "syn_0380_simple_03",
+      "right_sample_id": "syn_1148_simple_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.987553
+    },
+    {
+      "left_sample_id": "syn_0388_simple_01",
+      "right_sample_id": "syn_0484_simple_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.986815
+    },
+    {
+      "left_sample_id": "syn_0388_simple_02",
+      "right_sample_id": "syn_0420_simple_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.987797
+    },
+    {
+      "left_sample_id": "syn_0388_simple_02",
+      "right_sample_id": "syn_0484_simple_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.989505
+    },
+    {
+      "left_sample_id": "syn_0388_simple_03",
+      "right_sample_id": "syn_0484_simple_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.98677
+    },
+    {
+      "left_sample_id": "syn_0398_simple_02",
+      "right_sample_id": "syn_0446_simple_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.98582
+    },
+    {
+      "left_sample_id": "syn_0398_simple_03",
+      "right_sample_id": "syn_0446_simple_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.98771
+    },
+    {
+      "left_sample_id": "syn_0398_simple_04",
+      "right_sample_id": "syn_0446_simple_04",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.988275
+    },
+    {
+      "left_sample_id": "syn_0407_simple_02",
+      "right_sample_id": "syn_1367_simple_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.986985
+    },
+    {
+      "left_sample_id": "syn_0407_simple_03",
+      "right_sample_id": "syn_1367_simple_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.985939
+    },
+    {
+      "left_sample_id": "syn_0415_simple_02",
+      "right_sample_id": "syn_0511_simple_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985478
+    },
+    {
+      "left_sample_id": "syn_0420_simple_02",
+      "right_sample_id": "syn_0484_simple_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.98542
+    },
+    {
+      "left_sample_id": "syn_0456_simple_02",
+      "right_sample_id": "syn_0472_simple_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.986129
+    },
+    {
+      "left_sample_id": "syn_0484_simple_03",
+      "right_sample_id": "syn_1108_simple_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.987122
+    },
+    {
+      "left_sample_id": "syn_0489_simple_04",
+      "right_sample_id": "syn_1289_simple_04",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.985045
+    },
+    {
+      "left_sample_id": "syn_0532_complex_02",
+      "right_sample_id": "syn_0564_complex_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.986565
+    },
+    {
+      "left_sample_id": "syn_0532_complex_03",
+      "right_sample_id": "syn_0580_complex_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.986414
+    },
+    {
+      "left_sample_id": "syn_0582_complex_01",
+      "right_sample_id": "syn_0678_complex_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.991434
+    },
+    {
+      "left_sample_id": "syn_0582_complex_01",
+      "right_sample_id": "syn_0694_complex_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.989027
+    },
+    {
+      "left_sample_id": "syn_0582_complex_01",
+      "right_sample_id": "syn_0710_complex_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.98665
+    },
+    {
+      "left_sample_id": "syn_0582_complex_02",
+      "right_sample_id": "syn_0678_complex_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.988646
+    },
+    {
+      "left_sample_id": "syn_0582_complex_02",
+      "right_sample_id": "syn_0678_complex_04",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.987702
+    },
+    {
+      "left_sample_id": "syn_0582_complex_02",
+      "right_sample_id": "syn_0694_complex_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.988878
+    },
+    {
+      "left_sample_id": "syn_0582_complex_02",
+      "right_sample_id": "syn_0694_complex_04",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.987829
+    },
+    {
+      "left_sample_id": "syn_0582_complex_03",
+      "right_sample_id": "syn_0678_complex_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985537
+    },
+    {
+      "left_sample_id": "syn_0582_complex_03",
+      "right_sample_id": "syn_0678_complex_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.99039
+    },
+    {
+      "left_sample_id": "syn_0582_complex_03",
+      "right_sample_id": "syn_0678_complex_04",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.987206
+    },
+    {
+      "left_sample_id": "syn_0582_complex_03",
+      "right_sample_id": "syn_0694_complex_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.98555
+    },
+    {
+      "left_sample_id": "syn_0582_complex_03",
+      "right_sample_id": "syn_0694_complex_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.989342
+    },
+    {
+      "left_sample_id": "syn_0582_complex_03",
+      "right_sample_id": "syn_0694_complex_04",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.986818
+    },
+    {
+      "left_sample_id": "syn_0582_complex_03",
+      "right_sample_id": "syn_0710_complex_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.986231
+    },
+    {
+      "left_sample_id": "syn_0582_complex_04",
+      "right_sample_id": "syn_0678_complex_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.986169
+    },
+    {
+      "left_sample_id": "syn_0582_complex_04",
+      "right_sample_id": "syn_0678_complex_04",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.988891
+    },
+    {
+      "left_sample_id": "syn_0582_complex_04",
+      "right_sample_id": "syn_0694_complex_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.986102
+    },
+    {
+      "left_sample_id": "syn_0582_complex_04",
+      "right_sample_id": "syn_0694_complex_04",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.989109
+    },
+    {
+      "left_sample_id": "syn_0592_complex_03",
+      "right_sample_id": "syn_0624_complex_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.986248
+    },
+    {
+      "left_sample_id": "syn_0600_complex_01",
+      "right_sample_id": "syn_0664_complex_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985491
+    },
+    {
+      "left_sample_id": "syn_0601_complex_03",
+      "right_sample_id": "syn_0665_complex_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.986101
+    },
+    {
+      "left_sample_id": "syn_0606_complex_04",
+      "right_sample_id": "syn_0654_complex_04",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985736
+    },
+    {
+      "left_sample_id": "syn_0611_complex_01",
+      "right_sample_id": "syn_0691_complex_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.986956
+    },
+    {
+      "left_sample_id": "syn_0611_complex_04",
+      "right_sample_id": "syn_0691_complex_04",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.987939
+    },
+    {
+      "left_sample_id": "syn_0622_complex_03",
+      "right_sample_id": "syn_0670_complex_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.986978
+    },
+    {
+      "left_sample_id": "syn_0632_complex_01",
+      "right_sample_id": "syn_0664_complex_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.987067
+    },
+    {
+      "left_sample_id": "syn_0632_complex_01",
+      "right_sample_id": "syn_0664_complex_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985677
+    },
+    {
+      "left_sample_id": "syn_0632_complex_02",
+      "right_sample_id": "syn_0664_complex_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.989594
+    },
+    {
+      "left_sample_id": "syn_0632_complex_04",
+      "right_sample_id": "syn_0664_complex_04",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.986659
+    },
+    {
+      "left_sample_id": "syn_0672_complex_01",
+      "right_sample_id": "syn_0704_complex_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985419
+    },
+    {
+      "left_sample_id": "syn_0672_complex_03",
+      "right_sample_id": "syn_0704_complex_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.988944
+    },
+    {
+      "left_sample_id": "syn_0678_complex_01",
+      "right_sample_id": "syn_0694_complex_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.988517
+    },
+    {
+      "left_sample_id": "syn_0678_complex_01",
+      "right_sample_id": "syn_0710_complex_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.98548
+    },
+    {
+      "left_sample_id": "syn_0678_complex_02",
+      "right_sample_id": "syn_0694_complex_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.986865
+    },
+    {
+      "left_sample_id": "syn_0678_complex_02",
+      "right_sample_id": "syn_0694_complex_04",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985344
+    },
+    {
+      "left_sample_id": "syn_0678_complex_03",
+      "right_sample_id": "syn_0694_complex_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.988256
+    },
+    {
+      "left_sample_id": "syn_0678_complex_04",
+      "right_sample_id": "syn_0694_complex_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985785
+    },
+    {
+      "left_sample_id": "syn_0678_complex_04",
+      "right_sample_id": "syn_0694_complex_04",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.987765
+    },
+    {
+      "left_sample_id": "syn_0773_complex_01",
+      "right_sample_id": "syn_0917_complex_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985852
+    },
+    {
+      "left_sample_id": "syn_0773_complex_02",
+      "right_sample_id": "syn_0917_complex_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985748
+    },
+    {
+      "left_sample_id": "syn_0773_complex_04",
+      "right_sample_id": "syn_0917_complex_04",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985531
+    },
+    {
+      "left_sample_id": "syn_0776_complex_02",
+      "right_sample_id": "syn_0792_complex_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985724
+    },
+    {
+      "left_sample_id": "syn_0776_complex_02",
+      "right_sample_id": "syn_0808_complex_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985187
+    },
+    {
+      "left_sample_id": "syn_0776_complex_02",
+      "right_sample_id": "syn_0824_complex_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.986651
+    },
+    {
+      "left_sample_id": "syn_0781_complex_01",
+      "right_sample_id": "syn_0973_complex_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.986579
+    },
+    {
+      "left_sample_id": "syn_0781_complex_02",
+      "right_sample_id": "syn_0973_complex_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985779
+    },
+    {
+      "left_sample_id": "syn_0781_complex_03",
+      "right_sample_id": "syn_0973_complex_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985361
+    },
+    {
+      "left_sample_id": "syn_0783_complex_01",
+      "right_sample_id": "syn_0879_complex_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.988823
+    },
+    {
+      "left_sample_id": "syn_0783_complex_02",
+      "right_sample_id": "syn_0879_complex_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.989051
+    },
+    {
+      "left_sample_id": "syn_0783_complex_04",
+      "right_sample_id": "syn_0879_complex_04",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.987905
+    },
+    {
+      "left_sample_id": "syn_0792_complex_01",
+      "right_sample_id": "syn_0824_complex_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985287
+    },
+    {
+      "left_sample_id": "syn_0792_complex_02",
+      "right_sample_id": "syn_0824_complex_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985468
+    },
+    {
+      "left_sample_id": "syn_0798_complex_04",
+      "right_sample_id": "syn_0814_complex_04",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985188
+    },
+    {
+      "left_sample_id": "syn_0808_complex_02",
+      "right_sample_id": "syn_0824_complex_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.98611
+    },
+    {
+      "left_sample_id": "syn_0814_complex_04",
+      "right_sample_id": "syn_1390_complex_04",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.987442
+    },
+    {
+      "left_sample_id": "syn_0828_complex_03",
+      "right_sample_id": "syn_0844_complex_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.986233
+    },
+    {
+      "left_sample_id": "syn_0829_complex_03",
+      "right_sample_id": "syn_1213_complex_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.986584
+    },
+    {
+      "left_sample_id": "syn_0841_complex_03",
+      "right_sample_id": "syn_0937_complex_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.986091
+    },
+    {
+      "left_sample_id": "syn_0844_complex_03",
+      "right_sample_id": "syn_1228_complex_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.986794
+    },
+    {
+      "left_sample_id": "syn_0850_complex_01",
+      "right_sample_id": "syn_1234_complex_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.987376
+    },
+    {
+      "left_sample_id": "syn_0872_complex_02",
+      "right_sample_id": "syn_0936_complex_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985606
+    },
+    {
+      "left_sample_id": "syn_0877_complex_02",
+      "right_sample_id": "syn_1165_complex_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.985152
+    },
+    {
+      "left_sample_id": "syn_0877_complex_03",
+      "right_sample_id": "syn_1165_complex_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.985322
+    },
+    {
+      "left_sample_id": "syn_0900_complex_01",
+      "right_sample_id": "syn_1476_complex_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.986536
+    },
+    {
+      "left_sample_id": "syn_0900_complex_02",
+      "right_sample_id": "syn_1476_complex_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.987857
+    },
+    {
+      "left_sample_id": "syn_0900_complex_03",
+      "right_sample_id": "syn_1476_complex_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.987025
+    },
+    {
+      "left_sample_id": "syn_0902_complex_01",
+      "right_sample_id": "syn_1478_complex_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.986363
+    },
+    {
+      "left_sample_id": "syn_0964_complex_02",
+      "right_sample_id": "syn_1428_complex_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.986676
+    },
+    {
+      "left_sample_id": "syn_0964_complex_02",
+      "right_sample_id": "syn_1492_complex_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.987058
+    },
+    {
+      "left_sample_id": "syn_0964_complex_03",
+      "right_sample_id": "syn_1492_complex_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.986443
+    },
+    {
+      "left_sample_id": "syn_1085_simple_03",
+      "right_sample_id": "syn_1117_simple_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.98514
+    },
+    {
+      "left_sample_id": "syn_1099_simple_02",
+      "right_sample_id": "syn_1291_simple_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.987126
+    },
+    {
+      "left_sample_id": "syn_1108_simple_03",
+      "right_sample_id": "syn_1156_simple_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985421
+    },
+    {
+      "left_sample_id": "syn_1122_simple_01",
+      "right_sample_id": "syn_1314_simple_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.986602
+    },
+    {
+      "left_sample_id": "syn_1132_simple_03",
+      "right_sample_id": "syn_1324_simple_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.988678
+    },
+    {
+      "left_sample_id": "syn_1133_simple_01",
+      "right_sample_id": "syn_1325_simple_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.985569
+    },
+    {
+      "left_sample_id": "syn_1133_simple_02",
+      "right_sample_id": "syn_1325_simple_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.986399
+    },
+    {
+      "left_sample_id": "syn_1133_simple_03",
+      "right_sample_id": "syn_1325_simple_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.986748
+    },
+    {
+      "left_sample_id": "syn_1133_simple_04",
+      "right_sample_id": "syn_1325_simple_04",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.985797
+    },
+    {
+      "left_sample_id": "syn_1140_simple_01",
+      "right_sample_id": "syn_1332_simple_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.986859
+    },
+    {
+      "left_sample_id": "syn_1140_simple_02",
+      "right_sample_id": "syn_1332_simple_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.988371
+    },
+    {
+      "left_sample_id": "syn_1140_simple_03",
+      "right_sample_id": "syn_1332_simple_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.98658
+    },
+    {
+      "left_sample_id": "syn_1140_simple_04",
+      "right_sample_id": "syn_1332_simple_04",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.986151
+    },
+    {
+      "left_sample_id": "syn_1152_simple_03",
+      "right_sample_id": "syn_1344_simple_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.985882
+    },
+    {
+      "left_sample_id": "syn_1153_simple_04",
+      "right_sample_id": "syn_1345_simple_04",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.985617
+    },
+    {
+      "left_sample_id": "syn_1207_complex_02",
+      "right_sample_id": "syn_1399_complex_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.985685
+    },
+    {
+      "left_sample_id": "syn_1213_complex_03",
+      "right_sample_id": "syn_1245_complex_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985761
+    },
+    {
+      "left_sample_id": "syn_1311_simple_01",
+      "right_sample_id": "syn_1327_simple_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.987051
+    },
+    {
+      "left_sample_id": "syn_1399_complex_02",
+      "right_sample_id": "syn_1415_complex_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985056
+    },
+    {
+      "left_sample_id": "syn_1428_complex_01",
+      "right_sample_id": "syn_1492_complex_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.98782
+    },
+    {
+      "left_sample_id": "syn_1428_complex_02",
+      "right_sample_id": "syn_1492_complex_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.989836
+    },
+    {
+      "left_sample_id": "bnd_0002_complex_07",
+      "right_sample_id": "bnd_0018_complex_07",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.986209
+    },
+    {
+      "left_sample_id": "bnd_0002_complex_08",
+      "right_sample_id": "bnd_0018_complex_08",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.986624
+    },
+    {
+      "left_sample_id": "bnd_0003_complex_05",
+      "right_sample_id": "bnd_0019_complex_05",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985098
+    },
+    {
+      "left_sample_id": "bnd_0008_complex_07",
+      "right_sample_id": "bnd_0200_complex_07",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.988498
+    },
+    {
+      "left_sample_id": "bnd_0019_complex_06",
+      "right_sample_id": "bnd_0211_complex_06",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.985134
+    },
+    {
+      "left_sample_id": "bnd_0021_complex_08",
+      "right_sample_id": "bnd_0213_complex_08",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.987478
+    },
+    {
+      "left_sample_id": "bnd_0024_complex_05",
+      "right_sample_id": "bnd_0216_complex_05",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.986611
+    },
+    {
+      "left_sample_id": "bnd_0024_complex_06",
+      "right_sample_id": "bnd_0216_complex_06",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.986718
+    },
+    {
+      "left_sample_id": "bnd_0024_complex_07",
+      "right_sample_id": "bnd_0216_complex_07",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.987316
+    },
+    {
+      "left_sample_id": "bnd_0026_complex_05",
+      "right_sample_id": "bnd_0218_complex_05",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.986148
+    },
+    {
+      "left_sample_id": "bnd_0029_complex_08",
+      "right_sample_id": "bnd_0221_complex_08",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.985527
+    },
+    {
+      "left_sample_id": "bnd_0033_complex_07",
+      "right_sample_id": "bnd_0225_complex_07",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.98526
+    },
+    {
+      "left_sample_id": "bnd_0034_complex_08",
+      "right_sample_id": "bnd_0226_complex_08",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.986339
+    },
+    {
+      "left_sample_id": "bnd_0035_complex_06",
+      "right_sample_id": "bnd_0227_complex_06",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.986573
+    },
+    {
+      "left_sample_id": "bnd_0037_complex_08",
+      "right_sample_id": "bnd_0085_complex_08",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.986232
+    },
+    {
+      "left_sample_id": "bnd_0037_complex_08",
+      "right_sample_id": "bnd_0101_complex_08",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.986446
+    },
+    {
+      "left_sample_id": "bnd_0037_complex_08",
+      "right_sample_id": "bnd_0117_complex_08",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985934
+    },
+    {
+      "left_sample_id": "bnd_0037_complex_08",
+      "right_sample_id": "bnd_0133_complex_08",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.988009
+    },
+    {
+      "left_sample_id": "bnd_0037_complex_08",
+      "right_sample_id": "bnd_0149_complex_08",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.988105
+    },
+    {
+      "left_sample_id": "bnd_0037_complex_08",
+      "right_sample_id": "bnd_0181_complex_08",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.985041
+    },
+    {
+      "left_sample_id": "bnd_0037_complex_08",
+      "right_sample_id": "bnd_0197_complex_08",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.986426
+    },
+    {
+      "left_sample_id": "bnd_0038_complex_05",
+      "right_sample_id": "bnd_0086_complex_05",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.988105
+    },
+    {
+      "left_sample_id": "bnd_0038_complex_05",
+      "right_sample_id": "bnd_0118_complex_05",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.987799
+    },
+    {
+      "left_sample_id": "bnd_0038_complex_05",
+      "right_sample_id": "bnd_0134_complex_05",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.986112
+    },
+    {
+      "left_sample_id": "bnd_0038_complex_05",
+      "right_sample_id": "bnd_0150_complex_05",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.987389
+    },
+    {
+      "left_sample_id": "bnd_0038_complex_05",
+      "right_sample_id": "bnd_0198_complex_05",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.985292
+    },
+    {
+      "left_sample_id": "bnd_0038_complex_06",
+      "right_sample_id": "bnd_0086_complex_06",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985351
+    },
+    {
+      "left_sample_id": "bnd_0038_complex_06",
+      "right_sample_id": "bnd_0102_complex_06",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.986552
+    },
+    {
+      "left_sample_id": "bnd_0038_complex_06",
+      "right_sample_id": "bnd_0150_complex_06",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985396
+    },
+    {
+      "left_sample_id": "bnd_0038_complex_06",
+      "right_sample_id": "bnd_0182_complex_06",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.985613
+    },
+    {
+      "left_sample_id": "bnd_0040_complex_05",
+      "right_sample_id": "bnd_0088_complex_05",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.987023
+    },
+    {
+      "left_sample_id": "bnd_0040_complex_05",
+      "right_sample_id": "bnd_0104_complex_05",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.986174
+    },
+    {
+      "left_sample_id": "bnd_0040_complex_05",
+      "right_sample_id": "bnd_0120_complex_05",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985081
+    },
+    {
+      "left_sample_id": "bnd_0040_complex_05",
+      "right_sample_id": "bnd_0136_complex_05",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.98699
+    },
+    {
+      "left_sample_id": "bnd_0040_complex_05",
+      "right_sample_id": "bnd_0152_complex_05",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.988164
+    },
+    {
+      "left_sample_id": "bnd_0040_complex_06",
+      "right_sample_id": "bnd_0056_complex_06",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.987816
+    },
+    {
+      "left_sample_id": "bnd_0040_complex_06",
+      "right_sample_id": "bnd_0072_complex_06",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.986258
+    },
+    {
+      "left_sample_id": "bnd_0040_complex_06",
+      "right_sample_id": "bnd_0088_complex_06",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.989337
+    },
+    {
+      "left_sample_id": "bnd_0040_complex_06",
+      "right_sample_id": "bnd_0104_complex_06",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.987519
+    },
+    {
+      "left_sample_id": "bnd_0040_complex_06",
+      "right_sample_id": "bnd_0120_complex_06",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.988365
+    },
+    {
+      "left_sample_id": "bnd_0040_complex_06",
+      "right_sample_id": "bnd_0136_complex_06",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.990074
+    },
+    {
+      "left_sample_id": "bnd_0040_complex_06",
+      "right_sample_id": "bnd_0152_complex_06",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.990163
+    },
+    {
+      "left_sample_id": "bnd_0040_complex_06",
+      "right_sample_id": "bnd_0184_complex_06",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.98714
+    },
+    {
+      "left_sample_id": "bnd_0040_complex_06",
+      "right_sample_id": "bnd_0200_complex_06",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.986987
+    },
+    {
+      "left_sample_id": "bnd_0040_complex_07",
+      "right_sample_id": "bnd_0088_complex_07",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.988679
+    },
+    {
+      "left_sample_id": "bnd_0040_complex_07",
+      "right_sample_id": "bnd_0136_complex_07",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.98728
+    },
+    {
+      "left_sample_id": "bnd_0040_complex_07",
+      "right_sample_id": "bnd_0184_complex_07",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.986433
+    },
+    {
+      "left_sample_id": "bnd_0041_simple_02",
+      "right_sample_id": "bnd_0158_simple_03",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.98574
+    },
+    {
+      "left_sample_id": "bnd_0041_simple_03",
+      "right_sample_id": "bnd_0158_simple_04",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.986534
+    },
+    {
+      "left_sample_id": "bnd_0041_complex_08",
+      "right_sample_id": "bnd_0153_complex_08",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.986081
+    },
+    {
+      "left_sample_id": "bnd_0042_complex_05",
+      "right_sample_id": "bnd_0154_complex_05",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985422
+    },
+    {
+      "left_sample_id": "bnd_0043_complex_06",
+      "right_sample_id": "bnd_0091_complex_06",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.987427
+    },
+    {
+      "left_sample_id": "bnd_0043_complex_06",
+      "right_sample_id": "bnd_0139_complex_06",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985015
+    },
+    {
+      "left_sample_id": "bnd_0044_complex_06",
+      "right_sample_id": "bnd_0060_complex_06",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985446
+    },
+    {
+      "left_sample_id": "bnd_0044_complex_06",
+      "right_sample_id": "bnd_0124_complex_06",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985374
+    },
+    {
+      "left_sample_id": "bnd_0044_complex_08",
+      "right_sample_id": "bnd_0108_complex_08",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985023
+    },
+    {
+      "left_sample_id": "bnd_0045_complex_05",
+      "right_sample_id": "bnd_0157_complex_05",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985779
+    },
+    {
+      "left_sample_id": "bnd_0045_complex_06",
+      "right_sample_id": "bnd_0157_complex_06",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985381
+    },
+    {
+      "left_sample_id": "bnd_0045_complex_07",
+      "right_sample_id": "bnd_0093_complex_07",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.986285
+    },
+    {
+      "left_sample_id": "bnd_0045_complex_07",
+      "right_sample_id": "bnd_0141_complex_07",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.987536
+    },
+    {
+      "left_sample_id": "bnd_0045_complex_07",
+      "right_sample_id": "bnd_0157_complex_07",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.989489
+    },
+    {
+      "left_sample_id": "bnd_0045_complex_07",
+      "right_sample_id": "bnd_0189_complex_07",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.985574
+    },
+    {
+      "left_sample_id": "bnd_0046_complex_05",
+      "right_sample_id": "bnd_0094_complex_05",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.988202
+    },
+    {
+      "left_sample_id": "bnd_0046_complex_05",
+      "right_sample_id": "bnd_0142_complex_05",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.987627
+    },
+    {
+      "left_sample_id": "bnd_0046_complex_05",
+      "right_sample_id": "bnd_0190_complex_05",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.990712
+    },
+    {
+      "left_sample_id": "bnd_0046_complex_07",
+      "right_sample_id": "bnd_0158_complex_07",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985625
+    },
+    {
+      "left_sample_id": "bnd_0048_complex_07",
+      "right_sample_id": "bnd_0160_complex_07",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985042
+    },
+    {
+      "left_sample_id": "bnd_0049_complex_05",
+      "right_sample_id": "bnd_0129_complex_05",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985416
+    },
+    {
+      "left_sample_id": "bnd_0049_complex_05",
+      "right_sample_id": "bnd_0145_complex_05",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985563
+    },
+    {
+      "left_sample_id": "bnd_0049_complex_05",
+      "right_sample_id": "bnd_0209_complex_05",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.985297
+    },
+    {
+      "left_sample_id": "bnd_0049_complex_06",
+      "right_sample_id": "bnd_0145_complex_06",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.986161
+    },
+    {
+      "left_sample_id": "bnd_0049_complex_06",
+      "right_sample_id": "bnd_0145_complex_07",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985644
+    },
+    {
+      "left_sample_id": "bnd_0049_complex_06",
+      "right_sample_id": "bnd_0209_complex_06",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.985135
+    },
+    {
+      "left_sample_id": "bnd_0049_complex_07",
+      "right_sample_id": "bnd_0129_complex_07",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.987005
+    },
+    {
+      "left_sample_id": "bnd_0049_complex_07",
+      "right_sample_id": "bnd_0145_complex_07",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.987538
+    },
+    {
+      "left_sample_id": "bnd_0049_complex_07",
+      "right_sample_id": "bnd_0161_complex_07",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985133
+    },
+    {
+      "left_sample_id": "bnd_0049_complex_07",
+      "right_sample_id": "bnd_0209_complex_07",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.986327
+    },
+    {
+      "left_sample_id": "bnd_0050_complex_08",
+      "right_sample_id": "bnd_0098_complex_08",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.986678
+    },
+    {
+      "left_sample_id": "bnd_0050_complex_08",
+      "right_sample_id": "bnd_0130_complex_08",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.988001
+    },
+    {
+      "left_sample_id": "bnd_0050_complex_08",
+      "right_sample_id": "bnd_0162_complex_08",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.986468
+    },
+    {
+      "left_sample_id": "bnd_0050_complex_08",
+      "right_sample_id": "bnd_0194_complex_08",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.986776
+    },
+    {
+      "left_sample_id": "bnd_0051_complex_05",
+      "right_sample_id": "bnd_0147_complex_05",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.987019
+    },
+    {
+      "left_sample_id": "bnd_0051_complex_06",
+      "right_sample_id": "bnd_0099_complex_06",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.98577
+    },
+    {
+      "left_sample_id": "bnd_0051_complex_06",
+      "right_sample_id": "bnd_0147_complex_06",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.988869
+    },
+    {
+      "left_sample_id": "bnd_0054_simple_03",
+      "right_sample_id": "bnd_0067_simple_02",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985561
+    },
+    {
+      "left_sample_id": "bnd_0056_complex_06",
+      "right_sample_id": "bnd_0088_complex_06",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985683
+    },
+    {
+      "left_sample_id": "bnd_0056_complex_06",
+      "right_sample_id": "bnd_0120_complex_06",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.98597
+    },
+    {
+      "left_sample_id": "bnd_0056_complex_06",
+      "right_sample_id": "bnd_0136_complex_06",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.986243
+    },
+    {
+      "left_sample_id": "bnd_0056_complex_06",
+      "right_sample_id": "bnd_0152_complex_06",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985375
+    },
+    {
+      "left_sample_id": "bnd_0056_complex_07",
+      "right_sample_id": "bnd_0152_complex_07",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985853
+    },
+    {
+      "left_sample_id": "bnd_0056_complex_07",
+      "right_sample_id": "bnd_0248_complex_07",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.986488
+    },
+    {
+      "left_sample_id": "bnd_0072_complex_06",
+      "right_sample_id": "bnd_0152_complex_06",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985905
+    },
+    {
+      "left_sample_id": "bnd_0086_complex_05",
+      "right_sample_id": "bnd_0150_complex_05",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985193
+    },
+    {
+      "left_sample_id": "bnd_0088_complex_06",
+      "right_sample_id": "bnd_0152_complex_06",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985357
+    },
+    {
+      "left_sample_id": "bnd_0088_complex_07",
+      "right_sample_id": "bnd_0136_complex_07",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.98639
+    },
+    {
+      "left_sample_id": "bnd_0088_complex_07",
+      "right_sample_id": "bnd_0184_complex_07",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.98545
+    },
+    {
+      "left_sample_id": "bnd_0093_complex_07",
+      "right_sample_id": "bnd_0157_complex_07",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.986847
+    },
+    {
+      "left_sample_id": "bnd_0093_complex_08",
+      "right_sample_id": "bnd_0141_complex_08",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.989164
+    },
+    {
+      "left_sample_id": "bnd_0093_complex_08",
+      "right_sample_id": "bnd_0189_complex_08",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.986157
+    },
+    {
+      "left_sample_id": "bnd_0094_complex_05",
+      "right_sample_id": "bnd_0190_complex_05",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.988264
+    },
+    {
+      "left_sample_id": "bnd_0104_complex_07",
+      "right_sample_id": "bnd_0152_complex_07",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.987391
+    },
+    {
+      "left_sample_id": "bnd_0119_simple_04",
+      "right_sample_id": "bnd_0132_simple_01",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.986047
+    },
+    {
+      "left_sample_id": "bnd_0120_complex_06",
+      "right_sample_id": "bnd_0152_complex_06",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.987304
+    },
+    {
+      "left_sample_id": "bnd_0130_complex_08",
+      "right_sample_id": "bnd_0162_complex_08",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.98551
+    },
+    {
+      "left_sample_id": "bnd_0133_complex_08",
+      "right_sample_id": "bnd_0149_complex_08",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985635
+    },
+    {
+      "left_sample_id": "bnd_0134_complex_05",
+      "right_sample_id": "bnd_0198_complex_05",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.985138
+    },
+    {
+      "left_sample_id": "bnd_0136_complex_05",
+      "right_sample_id": "bnd_0152_complex_05",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985051
+    },
+    {
+      "left_sample_id": "bnd_0136_complex_06",
+      "right_sample_id": "bnd_0152_complex_06",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.987347
+    },
+    {
+      "left_sample_id": "bnd_0136_complex_06",
+      "right_sample_id": "bnd_0184_complex_06",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.985662
+    },
+    {
+      "left_sample_id": "bnd_0136_complex_06",
+      "right_sample_id": "bnd_0200_complex_06",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.985419
+    },
+    {
+      "left_sample_id": "bnd_0139_complex_06",
+      "right_sample_id": "bnd_0155_complex_06",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985716
+    },
+    {
+      "left_sample_id": "bnd_0139_complex_06",
+      "right_sample_id": "bnd_0187_complex_06",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.986126
+    },
+    {
+      "left_sample_id": "bnd_0141_complex_07",
+      "right_sample_id": "bnd_0157_complex_07",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985088
+    },
+    {
+      "left_sample_id": "bnd_0141_complex_07",
+      "right_sample_id": "bnd_0189_complex_07",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.985731
+    },
+    {
+      "left_sample_id": "bnd_0141_complex_08",
+      "right_sample_id": "bnd_0189_complex_08",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.987915
+    },
+    {
+      "left_sample_id": "bnd_0142_complex_05",
+      "right_sample_id": "bnd_0190_complex_05",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.985088
+    },
+    {
+      "left_sample_id": "bnd_0144_complex_07",
+      "right_sample_id": "bnd_0160_complex_07",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985254
+    },
+    {
+      "left_sample_id": "bnd_0145_complex_07",
+      "right_sample_id": "bnd_0209_complex_07",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.986089
+    },
+    {
+      "left_sample_id": "bnd_0146_complex_07",
+      "right_sample_id": "bnd_0194_complex_07",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.985364
+    },
+    {
+      "left_sample_id": "bnd_0147_complex_05",
+      "right_sample_id": "bnd_0163_complex_05",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": true,
+      "similarity": 0.985178
+    },
+    {
+      "left_sample_id": "bnd_0147_complex_06",
+      "right_sample_id": "bnd_0195_complex_06",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.985149
+    },
+    {
+      "left_sample_id": "bnd_0149_complex_08",
+      "right_sample_id": "bnd_0197_complex_08",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.98502
+    },
+    {
+      "left_sample_id": "bnd_0152_complex_07",
+      "right_sample_id": "bnd_0200_complex_07",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.986754
+    },
+    {
+      "left_sample_id": "pub:aya_dataset:b902029288891427dce44754",
+      "right_sample_id": "pub:aya_dataset:38e54ff6d330dc618d876920",
+      "same_label": false,
+      "same_service_domain": true,
+      "same_split": false,
+      "same_task_type": true,
+      "similarity": 0.991749
+    },
+    {
+      "left_sample_id": "pub:kullm_v2_dolly:744cc9dffc28767db73f7075",
+      "right_sample_id": "pub:kullm_v2_dolly:2f0e43a3c2ee8bc87bc965ac",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": false,
+      "similarity": 0.987097
+    },
+    {
+      "left_sample_id": "pub:kullm_v2_dolly:e55f73692b9f154cda3fc59d",
+      "right_sample_id": "pub:kullm_v2_dolly:0dbe1a696dfefea4679e5370",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": true,
+      "same_task_type": false,
+      "similarity": 0.988351
+    },
+    {
+      "left_sample_id": "pub:kullm_v2_dolly:ee6b9b513f00f087bb7f56f8",
+      "right_sample_id": "pub:kullm_v2_dolly:41f30b41b76c268e92ef32e0",
+      "same_label": true,
+      "same_service_domain": false,
+      "same_split": false,
+      "same_task_type": false,
+      "similarity": 0.992485
+    },
+    {
+      "left_sample_id": "pub:kullm_v2_dolly:43819ad330514c2d5149d8c5",
+      "right_sample_id": "pub:kullm_v2_dolly:6db5984c22154fe7fd356860",
+      "same_label": true,
+      "same_service_domain": true,
+      "same_split": false,
+      "same_task_type": false,
+      "similarity": 0.99045
+    },
+    {
+      "left_sample_id": "pub:kullm_v2_dolly:0ea6d63d56190a9106b5c2c1",
+      "right_sample_id": "pub:kullm_v2_dolly:db4fabf2ac9cfc8b1e1d0051",
+      "same_label": true,
+      "same_service_domain": true,
+      "same_split": true,
+      "same_task_type": false,
+      "similarity": 0.992201
+    }
+  ],
+  "result": {
+    "clusters": 0,
+    "domain_or_label_contrast_pairs": 497,
+    "maximum_cross_group_similarity": 0.992485,
+    "observed_cross_group_pairs_at_or_above_threshold": 497,
+    "semantic_duplicate_candidate_pairs": 0,
+    "semantic_duplicate_guardrail_met": true,
+    "split_conflict_clusters": 0
+  },
+  "schema_version": "gatelm.routing-difficulty-semantic-dedup-audit.v1"
+}

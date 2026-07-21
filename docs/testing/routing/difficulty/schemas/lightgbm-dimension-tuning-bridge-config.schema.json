@@ -1,0 +1,103 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gatelm.local/docs/testing/routing/difficulty/schemas/lightgbm-dimension-tuning-bridge-config.schema.json",
+  "title": "GateLM four-feature LightGBM dimension-to-tuning bridge configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "experimentId",
+    "experimentVersion",
+    "inputRoot",
+    "outputRoot",
+    "candidateOrder",
+    "dataset",
+    "split",
+    "search",
+    "artifacts"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "gatelm.lightgbm-dimension-tuning-bridge-config.v1"
+    },
+    "experimentId": { "$ref": "#/$defs/identifier" },
+    "experimentVersion": { "$ref": "#/$defs/identifier" },
+    "inputRoot": { "$ref": "#/$defs/repositoryPath" },
+    "outputRoot": { "$ref": "#/$defs/repositoryPath" },
+    "candidateOrder": {
+      "const": [
+        "rule_42_plus_e5_small_pca_64",
+        "rule_42_plus_semantic_heads_12",
+        "e5_base_raw_768",
+        "rule_42_plus_e5_base_raw_768"
+      ]
+    },
+    "dataset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "manifestPath"],
+      "properties": {
+        "path": { "$ref": "#/$defs/repositoryPath" },
+        "manifestPath": { "$ref": "#/$defs/repositoryPath" }
+      }
+    },
+    "split": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["policyVersion", "seed", "counts"],
+      "properties": {
+        "policyVersion": {
+          "const": "routing-difficulty-group-split.2026-07-21.v1"
+        },
+        "seed": { "const": 20260721 },
+        "counts": {
+          "const": { "train": 10500, "validation": 2250, "test": 2250 }
+        }
+      }
+    },
+    "search": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["candidateCount", "selectedCFn", "testBootstrapRepeats"],
+      "properties": {
+        "candidateCount": { "const": 80 },
+        "selectedCFn": { "const": 5 },
+        "testBootstrapRepeats": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100000
+        }
+      }
+    },
+    "artifacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "smallManifest",
+        "smallArtifactRoot",
+        "baseLock",
+        "baseArtifactRoot",
+        "championArtifact"
+      ],
+      "properties": {
+        "smallManifest": { "$ref": "#/$defs/repositoryPath" },
+        "smallArtifactRoot": { "$ref": "#/$defs/repositoryPath" },
+        "baseLock": { "$ref": "#/$defs/repositoryPath" },
+        "baseArtifactRoot": { "$ref": "#/$defs/repositoryPath" },
+        "championArtifact": { "$ref": "#/$defs/repositoryPath" }
+      }
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{0,159}$"
+    },
+    "repositoryPath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024,
+      "not": { "pattern": "^(?:[A-Za-z]:|/|\\\\)" }
+    }
+  }
+}

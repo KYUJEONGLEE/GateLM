@@ -21,34 +21,34 @@ from .lightgbm_four_way import (
     SPLIT_ALIASES,
     build_four_way_matrices,
     train_four_way_candidates,
-    write_e5_base_runtime_profiles,
+    write_runtime_profiles,
 )
 from .semantic_heads import predict_semantic_head_probabilities
 from .semantic_heads_cli import load_training_input
+from .canonical_dataset import (
+    CANONICAL_DATASET,
+    CANONICAL_ENCODER_MANIFEST,
+    CANONICAL_MANIFEST,
+    experiment_manifest,
+    require_canonical_dataset,
+)
 
 
 TOOL_ROOT = Path(__file__).resolve().parents[1]
 REPOSITORY_ROOT = TOOL_ROOT.parents[1]
-DEFAULT_DATASET = REPOSITORY_ROOT / (
-    "docs/v2.1.0/training/difficulty-training-candidate-500.owner-approved.jsonl"
-)
-DEFAULT_DATASET_MANIFEST = REPOSITORY_ROOT / (
-    "docs/v2.1.0/training/"
-    "difficulty-training-candidate-500.owner-approved.manifest.json"
-)
+DEFAULT_DATASET = CANONICAL_DATASET
+DEFAULT_DATASET_MANIFEST = CANONICAL_MANIFEST
 DEFAULT_SMALL_ARTIFACT_ROOT = (
     REPOSITORY_ROOT / ".tmp/difficulty-semantic-encoder-artifacts"
 )
-DEFAULT_SMALL_MANIFEST = (
-    TOOL_ROOT / "artifacts/difficulty-e5-encoder-manifest.v2.json"
-)
+DEFAULT_SMALL_MANIFEST = CANONICAL_ENCODER_MANIFEST
 DEFAULT_SEMANTIC_HEADS = TOOL_ROOT / (
-    "artifacts/candidates/difficulty-semantic-heads.owner-approved-500.v2.json"
+    "artifacts/candidates/difficulty-semantic-heads.owner-approved-15000.v1.json"
 )
 DEFAULT_BASE_ARTIFACT_ROOT = (
     REPOSITORY_ROOT / ".tmp/difficulty-lightgbm-e5-base-artifacts"
 )
-DEFAULT_OUTPUT = TOOL_ROOT / "artifacts/lightgbm-four-way-owner-approved-500"
+DEFAULT_OUTPUT = TOOL_ROOT / "artifacts/lightgbm-four-way-owner-approved-15000"
 DEFAULT_BASE_LOCK = DEFAULT_OUTPUT / "e5-base-runtime-lock.v1.json"
 
 
@@ -72,12 +72,8 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
 
 def run_train(args: argparse.Namespace) -> None:
-    dataset_manifest = json.loads(args.dataset_manifest.read_text(encoding="utf-8"))
-    if (
-        dataset_manifest.get("trainingEligible") is not True
-        or dataset_manifest.get("labelCoverageStatus") != "complete"
-    ):
-        raise ValueError("four-way training requires an approved training-eligible dataset")
+    canonical_manifest = require_canonical_dataset(args.dataset, args.dataset_manifest)
+    dataset_manifest = experiment_manifest(canonical_manifest)
     exported = load_training_input(args.dataset, args.dataset_manifest, args.go)
     samples = exported.get("samples")
     if not isinstance(samples, list) or not samples:
@@ -149,31 +145,62 @@ def run_train(args: argparse.Namespace) -> None:
     split_counts = {"train": 0, "validation": 0, "test": 0}
     for split in splits:
         split_counts[SPLIT_ALIASES[split]] += 1
-    profiles = write_e5_base_runtime_profiles(
+    small_projection_path = REPOSITORY_ROOT / small_manifest["projection"][
+        "relativePath"
+    ]
+    profiles = write_runtime_profiles(
         output_directory=args.output_directory,
         results=results,
-        encoder_descriptor=base_lock["encoder"],
+        e5_base_encoder_descriptor=base_lock["encoder"],
+        e5_small_encoder_manifest=small_manifest,
+        e5_small_encoder_manifest_path=args.small_manifest,
+        e5_small_projection_path=small_projection_path,
+        semantic_heads_artifact=semantic_artifact,
+        semantic_heads_artifact_path=args.semantic_heads,
         dataset_provenance=dataset_provenance,
         split_counts=split_counts,
     )
-    runtime_candidates = {
-        result.candidate: result
-        for result in results
-        if result.candidate in {
-            "e5_base_raw_768",
-            "rule_42_plus_e5_base_raw_768",
-        }
-    }
+    runtime_candidates = {result.candidate: result for result in results}
     bundle_entries = []
     for profile in profiles:
         candidate = profile.name.removesuffix(".shadow-profile.v1.json")
         model_path = runtime_candidates[candidate].model_path
+        encoder_mode = (
+            "e5_small"
+            if candidate
+            in {
+                "rule_42_plus_e5_small_pca_64",
+                "rule_42_plus_semantic_heads_12",
+            }
+            else "e5_base"
+        )
+        runtime_root = (
+            args.small_artifact_root
+            if encoder_mode == "e5_small"
+            else args.base_artifact_root
+        )
         for source in (profile, model_path):
-            target = args.base_artifact_root / source.name
+            target = runtime_root / source.name
             shutil.copy2(source, target)
+        required_artifacts = []
+        if encoder_mode == "e5_small":
+            small_sources = [args.small_manifest, small_projection_path]
+            if candidate == "rule_42_plus_semantic_heads_12":
+                small_sources.append(args.semantic_heads)
+            for source in small_sources:
+                target = runtime_root / source.name
+                shutil.copy2(source, target)
+                required_artifacts.append(
+                    {
+                        "relativePath": source.name,
+                        "sizeBytes": source.stat().st_size,
+                        "sha256": sha256_file(source),
+                    }
+                )
         bundle_entries.append(
             {
                 "candidate": candidate,
+                "encoderMode": encoder_mode,
                 "profile": {
                     "relativePath": profile.name,
                     "sizeBytes": profile.stat().st_size,
@@ -184,6 +211,7 @@ def run_train(args: argparse.Namespace) -> None:
                     "sizeBytes": model_path.stat().st_size,
                     "sha256": sha256_file(model_path),
                 },
+                "requiredArtifacts": required_artifacts,
             }
         )
     bundle_lock = {
@@ -194,6 +222,11 @@ def run_train(args: argparse.Namespace) -> None:
             "sizeBytes": args.base_lock.stat().st_size,
             "sha256": sha256_file(args.base_lock),
         },
+        "smallEncoderManifest": {
+            "relativePath": args.small_manifest.name,
+            "sizeBytes": args.small_manifest.stat().st_size,
+            "sha256": sha256_file(args.small_manifest),
+        },
         "profiles": bundle_entries,
     }
     bundle_lock_path = args.output_directory / "runtime-bundles.v1.json"
@@ -203,6 +236,7 @@ def run_train(args: argparse.Namespace) -> None:
         newline="\n",
     )
     shutil.copy2(bundle_lock_path, args.base_artifact_root / bundle_lock_path.name)
+    shutil.copy2(bundle_lock_path, args.small_artifact_root / bundle_lock_path.name)
     print(f"wrote four-way artifacts to {args.output_directory}")
 
 

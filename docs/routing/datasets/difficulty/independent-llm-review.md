@@ -102,3 +102,9 @@ Dataset owner의 추가 요청으로 사람 queue 2,249건에 Codex 7축 advisor
 corepack pnpm run routing:difficulty:generate-gpt-risk-sensitive-review-packet
 corepack pnpm run verify:routing-difficulty-gpt-risk-sensitive-review-packet
 ```
+
+Reviewer E 결과 7,974건은 2026-07-22 수신됐으며 162개 batch, 입력 순서, 7축 schema, 위험 회피 조건을 모두 통과했다. 결과는 Simple 3,915건, Complex 4,059건이다. medium/low confidence 또는 `needs_human_adjudication=true`인 1,771건은 모두 Complex다. 현재 Codex 수정본 대비 Simple→Complex 2,786건, Complex→Simple 4건으로 비대칭 정책의 영향이 크므로 import만 수행하고 dataset label은 자동 변경하지 않는다. 상세 결과는 [`reviews/independent-llm/reviewer-e-gpt/reviewer-e-report.md`](reviews/independent-llm/reviewer-e-gpt/reviewer-e-report.md)에 기록한다.
+
+Dataset owner의 명시적 요청에 따라 Reviewer E 7,974건은 별도 위험 회피형 revision에 적용한다. 전체 15,000건의 현재 라벨은 Simple 6,576건, Complex 8,424건이다. 적용은 사람 승인으로 간주하지 않으며 기존 queue와 E의 사람 요청 합집합 3,565건을 `needs_adjudication`으로 유지한다. 의미 중복 후보 누적 9쌍은 8개 원자적 그룹으로 통합했고 pinned multilingual-E5 재감사에서 후보 0쌍을 확인했다. 사람 adjudication과 잔여 편향 검증이 끝나기 전까지 `training_eligible=false`다.
+
+2026-07-22 dataset owner가 해당 Reviewer E revision 15,000건을 전수 검수하고 현재 라벨을 승인했다. 승인본은 별도 owner-approved revision으로 생성하며 모든 record를 `human_reviewed=true`, `review_status=approved`로 전환한다. 새 파일 hash의 pinned multilingual-E5 감사도 후보 0쌍으로 통과했으므로 owner-approved manifest만 `training_eligible=true`다. 이 승격은 기존 LLM·후보 revision의 과거 상태를 바꾸지 않으며 runtime promotion을 승인하지 않는다. 근거는 [`reviews/human/dataset-owner-full-review-attestation.json`](reviews/human/dataset-owner-full-review-attestation.json)과 [`reviews/human/dataset-owner-training-promotion-report.md`](reviews/human/dataset-owner-training-promotion-report.md)에 기록한다.

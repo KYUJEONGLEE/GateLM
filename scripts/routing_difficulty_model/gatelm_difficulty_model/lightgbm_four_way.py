@@ -14,7 +14,7 @@ from .semantic_features import RULE_VECTOR_V1_DIMENSION, SEMANTIC_HEAD_SPECS_V1
 
 
 EXPERIMENT_SCHEMA = "gatelm.routing-difficulty-lightgbm-four-way.v1"
-EXPERIMENT_VERSION = "difficulty-lightgbm-four-way.owner-approved-500.2026-07-22.v1"
+EXPERIMENT_VERSION = "difficulty-lightgbm-four-way.owner-approved-15000.2026-07-22.v1"
 TRAINING_SEED = 20260721
 CANDIDATE_DIMENSIONS = {
     "rule_42_plus_e5_small_pca_64": 106,
@@ -224,25 +224,151 @@ def train_four_way_candidates(
     return tuple(results)
 
 
-def write_e5_base_runtime_profiles(
+def write_runtime_profiles(
     *,
     output_directory: Path,
     results: Sequence[CandidateResult],
-    encoder_descriptor: Mapping[str, Any],
+    e5_base_encoder_descriptor: Mapping[str, Any],
+    e5_small_encoder_manifest: Mapping[str, Any],
+    e5_small_encoder_manifest_path: Path,
+    e5_small_projection_path: Path,
+    semantic_heads_artifact: Mapping[str, Any],
+    semantic_heads_artifact_path: Path,
     dataset_provenance: Mapping[str, Any],
     split_counts: Mapping[str, int],
 ) -> tuple[Path, ...]:
     profiles: list[Path] = []
     by_candidate = {result.candidate: result for result in results}
     selected_from = list(CANDIDATE_DIMENSIONS)
-    for candidate, rule_dimension in (
-        ("e5_base_raw_768", 0),
-        ("rule_42_plus_e5_base_raw_768", 42),
+    projection = e5_small_encoder_manifest.get("projection")
+    preprocessing = e5_small_encoder_manifest.get("preprocessing")
+    pooling = e5_small_encoder_manifest.get("pooling")
+    if (
+        not isinstance(projection, Mapping)
+        or not isinstance(preprocessing, Mapping)
+        or not isinstance(pooling, Mapping)
     ):
+        raise ValueError("E5-small manifest is missing runtime pipeline material")
+    if projection.get("fileSha256") != _sha256_file(e5_small_projection_path):
+        raise ValueError("E5-small PCA file hash does not match its manifest")
+    if semantic_heads_artifact.get("artifactContentHash") is None:
+        raise ValueError("semantic-head artifact content identity is missing")
+
+    e5_small_encoder_descriptor = {
+        "modelId": e5_small_encoder_manifest["modelId"],
+        "sourceRevision": e5_small_encoder_manifest["sourceRevision"],
+        "bundleVersion": e5_small_encoder_manifest["bundleVersion"],
+        "bundleSha256": e5_small_encoder_manifest["bundleSha256"],
+        "manifest": {
+            "relativePath": e5_small_encoder_manifest_path.name,
+            "sizeBytes": e5_small_encoder_manifest_path.stat().st_size,
+            "sha256": _sha256_file(e5_small_encoder_manifest_path),
+        },
+        "artifactDirectory": e5_small_encoder_manifest["artifactDirectory"],
+        "runtimeArtifacts": e5_small_encoder_manifest["runtimeArtifacts"],
+        "inputPrefix": preprocessing["inputPrefix"],
+        "maximumTokenLength": preprocessing["maximumTokenLength"],
+        "outputDimension": e5_small_encoder_manifest["encoder"]["outputDimension"],
+        "pooling": pooling["rule"],
+        "poolingVersion": pooling["version"],
+    }
+    projection_descriptor = {
+        "kind": projection["kind"],
+        "version": projection["version"],
+        "relativePath": e5_small_projection_path.name,
+        "sizeBytes": e5_small_projection_path.stat().st_size,
+        "sha256": _sha256_file(e5_small_projection_path),
+        "parameterSha256": projection["parameterSha256"],
+        "inputDimension": projection["inputDimension"],
+        "outputDimension": projection["outputDimension"],
+        "fitSplit": projection["fitSplit"],
+        "fitRecordCount": projection["fitRecordCount"],
+        "l2Normalize": True,
+        "l2Epsilon": 1e-12,
+    }
+    semantic_heads_descriptor = {
+        "version": semantic_heads_artifact["version"],
+        "contentHash": f"sha256:{semantic_heads_artifact['artifactContentHash']}",
+        "relativePath": semantic_heads_artifact_path.name,
+        "sizeBytes": semantic_heads_artifact_path.stat().st_size,
+        "sha256": _sha256_file(semantic_heads_artifact_path),
+        "inputDimension": semantic_heads_artifact["inputDimension"],
+        "outputDimension": semantic_heads_artifact[
+            "semanticHeadProbabilityDimension"
+        ],
+        "probabilityRule": semantic_heads_artifact["probabilityRule"],
+        "headOrder": semantic_heads_artifact["headOrder"],
+        "classOrder": [
+            {"name": head["name"], "classes": head["classes"]}
+            for head in semantic_heads_artifact["heads"]
+        ],
+    }
+    pipeline_specs = (
+        (
+            "rule_42_plus_e5_small_pca_64",
+            "difficulty-lightgbm-shadow.rule42-e5-small-pca64.v1",
+            "e5_small",
+            e5_small_encoder_descriptor,
+            42,
+            "pca_64",
+            64,
+            ["rule_vector_v1", "e5_small_pca_64"],
+            projection_descriptor,
+            None,
+        ),
+        (
+            "rule_42_plus_semantic_heads_12",
+            "difficulty-lightgbm-shadow.rule42-semantic-heads12.v1",
+            "e5_small",
+            e5_small_encoder_descriptor,
+            42,
+            "semantic_heads_12",
+            12,
+            ["rule_vector_v1", "semantic_heads_12"],
+            projection_descriptor,
+            semantic_heads_descriptor,
+        ),
+        (
+            "e5_base_raw_768",
+            "difficulty-lightgbm-shadow.e5-base-768.v1",
+            "e5_base",
+            e5_base_encoder_descriptor,
+            0,
+            "raw_768",
+            768,
+            ["raw_embedding_768"],
+            None,
+            None,
+        ),
+        (
+            "rule_42_plus_e5_base_raw_768",
+            "difficulty-lightgbm-shadow.e5-base-768.v1",
+            "e5_base",
+            e5_base_encoder_descriptor,
+            42,
+            "raw_768",
+            768,
+            ["rule_vector_v1", "raw_embedding_768"],
+            None,
+            None,
+        ),
+    )
+    for (
+        candidate,
+        profile_version,
+        encoder_mode,
+        encoder_descriptor,
+        rule_dimension,
+        semantic_mode,
+        semantic_dimension,
+        feature_order,
+        candidate_projection,
+        candidate_semantic_heads,
+    ) in pipeline_specs:
         result = by_candidate[candidate]
         manifest = {
             "schemaVersion": "gatelm.routing-difficulty-lightgbm-shadow-profile.v1",
-            "profileVersion": "difficulty-lightgbm-shadow.e5-base-768.v1",
+            "profileVersion": profile_version,
             "contractVersion": "gatelm.internal.routing-difficulty-lightgbm-shadow.v1",
             "promotionState": "offline_shadow_only",
             "executionShape": {
@@ -250,6 +376,7 @@ def write_e5_base_runtime_profiles(
                 "batchSize": 1,
                 "paddingScope": "within_request_only",
             },
+            "encoderMode": encoder_mode,
             "encoder": dict(encoder_descriptor),
             "featureShape": {
                 "ruleVectorVersion": "difficulty-feature-vector.v1",
@@ -257,10 +384,12 @@ def write_e5_base_runtime_profiles(
                 "tabularFeatureNames": (
                     [] if rule_dimension == 0 else _rule_feature_names()
                 ),
-                "semanticMode": "raw",
-                "semanticDimension": 768,
+                "semanticMode": semantic_mode,
+                "semanticDimension": semantic_dimension,
                 "totalDimension": result.dimension,
-                "projection": None,
+                "featureOrder": feature_order,
+                "projection": candidate_projection,
+                "semanticHeads": candidate_semantic_heads,
             },
             "model": {
                 "version": f"{EXPERIMENT_VERSION}.{candidate}",
