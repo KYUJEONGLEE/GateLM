@@ -146,6 +146,7 @@ type Config struct {
 	RateLimitAlgorithm                     string
 	RateLimitRedisKeyPrefix                string
 	AISafetySidecar                        AISafetySidecarConfig
+	ClickHouseAnalytics                    ClickHouseAnalyticsConfig
 	AsyncLogEnabled                        bool
 	AsyncLogQueueSize                      int
 	AsyncLogWorkerCount                    int
@@ -165,6 +166,17 @@ type Config struct {
 	DifficultyE5Shadow                     DifficultyE5ShadowConfig
 	TenantChatPrivate                      TenantChatPrivateConfig
 	RAGEmbedding                           RAGEmbeddingConfig
+}
+
+type ClickHouseAnalyticsConfig struct {
+	Enabled                    bool
+	EndpointURL                string
+	Database                   string
+	Table                      string
+	Username                   string
+	Password                   string
+	WriteTimeout               time.Duration
+	EmployeeIdentityHMACSecret string
 }
 
 type DifficultyE5RuntimeConfig struct {
@@ -405,6 +417,15 @@ func LoadWithError() (Config, error) {
 	if analyticsPolicyImpactMaxRawTailErr != nil {
 		return Config{}, analyticsPolicyImpactMaxRawTailErr
 	}
+	clickHouseWriteTimeout, clickHouseWriteTimeoutErr := envDurationMillisInRange(
+		"GATEWAY_CLICKHOUSE_WRITE_TIMEOUT_MS",
+		300,
+		50,
+		2000,
+	)
+	if clickHouseWriteTimeoutErr != nil {
+		return Config{}, clickHouseWriteTimeoutErr
+	}
 	databaseURL := envString("DATABASE_URL", "postgresql://gatelm:gatelm@localhost:5432/gatelm?schema=public")
 	exactCacheKeySecret := envString("GATEWAY_EXACT_CACHE_KEY_SECRET", "cache_key_secret_for_p0_demo_only")
 	providerTimeout := envDurationMillis("GATEWAY_PROVIDER_TIMEOUT_MS", 5000)
@@ -528,6 +549,16 @@ func LoadWithError() (Config, error) {
 			Mode:                envString("GATEWAY_AI_SAFETY_SIDECAR_MODE", "enforce"),
 			PersonNameModelOnly: envBool("GATEWAY_AI_SAFETY_PERSON_NAME_MODEL_ONLY", false),
 		},
+		ClickHouseAnalytics: ClickHouseAnalyticsConfig{
+			Enabled:                    envBool("GATEWAY_CLICKHOUSE_ANALYTICS_ENABLED", false),
+			EndpointURL:                strings.TrimSpace(envString("GATEWAY_CLICKHOUSE_URL", "http://localhost:8123")),
+			Database:                   strings.TrimSpace(envString("GATEWAY_CLICKHOUSE_DATABASE", "analytics")),
+			Table:                      strings.TrimSpace(envString("GATEWAY_CLICKHOUSE_TABLE", "llm_invocations")),
+			Username:                   strings.TrimSpace(envString("GATEWAY_CLICKHOUSE_USERNAME", "default")),
+			Password:                   envString("GATEWAY_CLICKHOUSE_PASSWORD", ""),
+			WriteTimeout:               clickHouseWriteTimeout,
+			EmployeeIdentityHMACSecret: envString("GATEWAY_CLICKHOUSE_EMPLOYEE_IDENTITY_HMAC_SECRET", ""),
+		},
 		AsyncLogEnabled:            envBool("GATEWAY_ASYNC_LOG_ENABLED", true),
 		AsyncLogQueueSize:          envInt("GATEWAY_ASYNC_LOG_QUEUE_SIZE", 1024),
 		AsyncLogWorkerCount:        envInt("GATEWAY_ASYNC_LOG_WORKER_COUNT", 2),
@@ -600,6 +631,9 @@ func LoadWithError() (Config, error) {
 	if err := validateAISafetySidecarConfig(cfg.AISafetySidecar); err != nil {
 		return cfg, err
 	}
+	if err := validateClickHouseAnalyticsConfig(cfg); err != nil {
+		return cfg, err
+	}
 	if err := validateDifficultyRemoteConfig(cfg); err != nil {
 		return cfg, err
 	}
@@ -613,6 +647,49 @@ func LoadWithError() (Config, error) {
 		return cfg, err
 	}
 	return cfg, nil
+}
+
+func validateClickHouseAnalyticsConfig(cfg Config) error {
+	clickHouse := cfg.ClickHouseAnalytics
+	if !clickHouse.Enabled {
+		return nil
+	}
+	if !cfg.AsyncLogEnabled {
+		return errors.New("ClickHouse analytics mirror requires GATEWAY_ASYNC_LOG_ENABLED=true")
+	}
+	endpoint, err := url.Parse(strings.TrimSpace(clickHouse.EndpointURL))
+	if err != nil || endpoint.Scheme == "" || endpoint.Host == "" {
+		return errors.New("GATEWAY_CLICKHOUSE_URL must be a valid absolute URL")
+	}
+	if endpoint.Scheme != "http" && endpoint.Scheme != "https" {
+		return errors.New("GATEWAY_CLICKHOUSE_URL must use http or https")
+	}
+	if endpoint.User != nil {
+		return errors.New("GATEWAY_CLICKHOUSE_URL must not contain credentials")
+	}
+	if !simpleIdentifier(clickHouse.Database) || !simpleIdentifier(clickHouse.Table) {
+		return errors.New("ClickHouse database and table must be simple identifiers")
+	}
+	if len(clickHouse.EmployeeIdentityHMACSecret) < 32 {
+		return errors.New("GATEWAY_CLICKHOUSE_EMPLOYEE_IDENTITY_HMAC_SECRET must be at least 32 characters")
+	}
+	return nil
+}
+
+func simpleIdentifier(value string) bool {
+	if value == "" {
+		return false
+	}
+	for index, character := range value {
+		if (character >= 'a' && character <= 'z') ||
+			(character >= 'A' && character <= 'Z') ||
+			character == '_' ||
+			(index > 0 && character >= '0' && character <= '9') {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 func loadRAGEmbeddingConfig() (RAGEmbeddingConfig, error) {

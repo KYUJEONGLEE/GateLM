@@ -67,6 +67,17 @@ var asyncLogEnvKeys = []string{
 	"GATEWAY_ASYNC_LOG_SHUTDOWN_TIMEOUT_MS",
 }
 
+var clickHouseAnalyticsEnvKeys = []string{
+	"GATEWAY_CLICKHOUSE_ANALYTICS_ENABLED",
+	"GATEWAY_CLICKHOUSE_URL",
+	"GATEWAY_CLICKHOUSE_DATABASE",
+	"GATEWAY_CLICKHOUSE_TABLE",
+	"GATEWAY_CLICKHOUSE_USERNAME",
+	"GATEWAY_CLICKHOUSE_PASSWORD",
+	"GATEWAY_CLICKHOUSE_WRITE_TIMEOUT_MS",
+	"GATEWAY_CLICKHOUSE_EMPLOYEE_IDENTITY_HMAC_SECRET",
+}
+
 var databasePerformanceEnvKeys = []string{
 	"DATABASE_URL",
 	"GATEWAY_LOG_DATABASE_URL",
@@ -144,6 +155,13 @@ func resetProviderCatalogCacheEnv(t *testing.T) {
 func resetAsyncLogEnv(t *testing.T) {
 	t.Helper()
 	for _, key := range asyncLogEnvKeys {
+		t.Setenv(key, "")
+	}
+}
+
+func resetClickHouseAnalyticsEnv(t *testing.T) {
+	t.Helper()
+	for _, key := range clickHouseAnalyticsEnvKeys {
 		t.Setenv(key, "")
 	}
 }
@@ -403,6 +421,77 @@ func TestAsyncLogBatchConfigLoadsEnvOverrides(t *testing.T) {
 	}
 	if cfg.AsyncLogBatchSize != 250 || cfg.AsyncLogBatchFlushInterval != 25*time.Millisecond {
 		t.Fatalf("unexpected async log batch config: size=%d flush=%s", cfg.AsyncLogBatchSize, cfg.AsyncLogBatchFlushInterval)
+	}
+}
+
+func TestClickHouseAnalyticsConfigDefaultsDisabled(t *testing.T) {
+	resetSemanticCacheEnv(t)
+	resetAsyncLogEnv(t)
+	resetClickHouseAnalyticsEnv(t)
+
+	cfg, err := LoadWithError()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if cfg.ClickHouseAnalytics.Enabled {
+		t.Fatal("ClickHouse analytics mirror must require explicit opt-in")
+	}
+	if cfg.ClickHouseAnalytics.WriteTimeout != 300*time.Millisecond {
+		t.Fatalf("unexpected ClickHouse write timeout: %s", cfg.ClickHouseAnalytics.WriteTimeout)
+	}
+}
+
+func TestClickHouseAnalyticsConfigLoadsSafeEnabledConfig(t *testing.T) {
+	resetSemanticCacheEnv(t)
+	resetAsyncLogEnv(t)
+	resetClickHouseAnalyticsEnv(t)
+	t.Setenv("GATEWAY_ASYNC_LOG_ENABLED", "true")
+	t.Setenv("GATEWAY_CLICKHOUSE_ANALYTICS_ENABLED", "true")
+	t.Setenv("GATEWAY_CLICKHOUSE_URL", "http://10.78.2.50:8123")
+	t.Setenv("GATEWAY_CLICKHOUSE_DATABASE", "gatelm_analytics")
+	t.Setenv("GATEWAY_CLICKHOUSE_TABLE", "llm_invocations")
+	t.Setenv("GATEWAY_CLICKHOUSE_USERNAME", "analytics_writer")
+	t.Setenv("GATEWAY_CLICKHOUSE_PASSWORD", "safe-test-password")
+	t.Setenv("GATEWAY_CLICKHOUSE_WRITE_TIMEOUT_MS", "450")
+	t.Setenv("GATEWAY_CLICKHOUSE_EMPLOYEE_IDENTITY_HMAC_SECRET", "0123456789abcdef0123456789abcdef")
+
+	cfg, err := LoadWithError()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if !cfg.ClickHouseAnalytics.Enabled || cfg.ClickHouseAnalytics.EndpointURL != "http://10.78.2.50:8123" {
+		t.Fatalf("unexpected ClickHouse config: %+v", cfg.ClickHouseAnalytics)
+	}
+	if cfg.ClickHouseAnalytics.WriteTimeout != 450*time.Millisecond {
+		t.Fatalf("unexpected ClickHouse write timeout: %s", cfg.ClickHouseAnalytics.WriteTimeout)
+	}
+}
+
+func TestClickHouseAnalyticsConfigRejectsUnsafeEnabledConfig(t *testing.T) {
+	for _, testCase := range []struct {
+		name  string
+		key   string
+		value string
+		want  string
+	}{
+		{name: "async disabled", key: "GATEWAY_ASYNC_LOG_ENABLED", value: "false", want: "requires GATEWAY_ASYNC_LOG_ENABLED=true"},
+		{name: "credentials in URL", key: "GATEWAY_CLICKHOUSE_URL", value: "http://user:secret@localhost:8123", want: "must not contain credentials"},
+		{name: "short identity secret", key: "GATEWAY_CLICKHOUSE_EMPLOYEE_IDENTITY_HMAC_SECRET", value: "short", want: "at least 32 characters"},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			resetSemanticCacheEnv(t)
+			resetAsyncLogEnv(t)
+			resetClickHouseAnalyticsEnv(t)
+			t.Setenv("GATEWAY_ASYNC_LOG_ENABLED", "true")
+			t.Setenv("GATEWAY_CLICKHOUSE_ANALYTICS_ENABLED", "true")
+			t.Setenv("GATEWAY_CLICKHOUSE_URL", "http://localhost:8123")
+			t.Setenv("GATEWAY_CLICKHOUSE_EMPLOYEE_IDENTITY_HMAC_SECRET", "0123456789abcdef0123456789abcdef")
+			t.Setenv(testCase.key, testCase.value)
+			_, err := LoadWithError()
+			if err == nil || !strings.Contains(err.Error(), testCase.want) {
+				t.Fatalf("expected error containing %q, got %v", testCase.want, err)
+			}
+		})
 	}
 }
 
