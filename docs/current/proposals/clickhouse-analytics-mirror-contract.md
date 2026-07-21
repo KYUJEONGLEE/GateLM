@@ -1,0 +1,120 @@
+# ClickHouse Analytics Mirror Contract Proposal
+
+| Field | Value |
+|---|---|
+| Status | Phase 1 mirror and Phase 2 employee usage reader implementation companion |
+| Applies to | Gateway terminal log mirror, ClickHouse analytics storage, and employee usage reads |
+| Canonical source during mirror phase | PostgreSQL `p0_llm_invocation_logs` |
+| Initial read cutover | Explicitly gated employee Project/Application usage only |
+
+## Problem
+
+Gateway terminal log writes, Dashboard/Rollup source reads, and operational data
+share PostgreSQL. Large log volumes can therefore make analytics work compete
+with the operational database.
+
+## Phase 1 boundary
+
+Gateway keeps the existing PostgreSQL terminal log writer. When explicitly
+enabled, the existing asynchronous log worker invokes a fan-out persistence
+writer:
+
+```text
+Gateway request completion
+  -> existing async log queue
+     -> PostgreSQL primary writer
+     -> ClickHouse best-effort mirror writer
+```
+
+ClickHouse is not a Gateway readiness dependency. A mirror timeout or failure
+must not replace the PostgreSQL result and must not fail the user request.
+Mirror writes have a short bounded timeout and no automatic retry in this
+phase. Success, timeout, and error are exposed only through bounded metrics and
+technical logs.
+
+This direct mirror is an interim implementation. The durable target remains an
+event queue and consumer with retry, dead-letter handling, and consumer-side
+idempotency.
+
+## Stored fields
+
+`analytics.llm_invocations` stores only these aggregation fields:
+
+- `request_id`, `tenant_id`, `project_id`, `application_id`
+- `employee_identity_hash`
+- `provider`, `model`, `status`, `http_status`
+- `prompt_tokens`, `completion_tokens`, `total_tokens`, `cost_micro_usd`
+- `latency_ms`, `cache_status`, `routing_category`, `routing_difficulty`
+- `created_at`, `ingested_at`, `ingest_version`
+
+`employee_identity_hash` is HMAC-SHA256 over the normalized resolved employee
+ID when available, otherwise the normalized `end_user_id`. The HMAC secret is
+environment-specific and must be at least 32 characters. The source identity
+must never be stored in ClickHouse.
+
+## Forbidden data
+
+The mirror payload must not contain raw prompt, raw response, captured prompt
+or response, redacted preview, API Key, App Token, Provider credential,
+authorization header, provider raw error, source employee identity, email, or
+other raw PII.
+
+## Duplicate boundary
+
+The existing asynchronous PostgreSQL writer can fall back from a failed batch
+to individual writes. A mirror may therefore receive the same `request_id`
+more than once. The table uses `ReplacingMergeTree(ingest_version)` ordered by
+`tenant_id, request_id`. Reconciliation and pre-cutover reads must use `FINAL`
+or an equivalent latest-version query.
+
+## Metrics
+
+- `gatelm_clickhouse_log_writes_total{operation="terminal_mirror",status}`
+- `gatelm_clickhouse_log_write_duration_seconds{operation="terminal_mirror",status}`
+
+Allowed status values are `success`, `timeout`, and `error`. Tenant, project,
+employee, and request identifiers are forbidden metric labels.
+
+## Read cutover gate
+
+PostgreSQL remains canonical until the same tenant and UTC interval match for:
+
+- distinct request count and duplicate count
+- terminal status counts
+- total prompt, completion, and total tokens
+- total cost
+- provider/model request counts
+- employee identity usage
+- UTC hourly request counts
+
+Any mirror error, timeout, unexplained duplicate, or aggregate mismatch blocks
+Dashboard/Analytics read cutover.
+
+## Phase 2 employee usage read boundary
+
+`GET /admin/v1/tenants/:tenantId/employees/usage` keeps its existing request,
+response, cursor, and provenance contract. When
+`CLICKHOUSE_ANALYTICS_READ_ENABLED=true`:
+
+- Project/Application request, token, and cost aggregates are read from
+  `analytics.llm_invocations FINAL`.
+- employee master data and identity candidates remain in PostgreSQL;
+  source identities are HMAC-SHA256 hashed in Control Plane memory before they
+  are matched to ClickHouse hashes.
+- Tenant Chat confirmed usage remains on its existing PostgreSQL raw plus
+  employee rollup path because it is not emitted by the Gateway terminal log
+  mirror.
+- Control Plane authenticates as a separate `analytics_reader` principal with
+  `SELECT` on `analytics.*`; it must not reuse the Gateway writer credential or
+  hold `INSERT`, DDL, or user-management privileges.
+- the enabled path must not query PostgreSQL `p0_llm_invocation_logs`, including
+  coverage checks, unattributed usage, cursor pages, and employee cost-policy
+  reads.
+- a ClickHouse timeout, invalid response, or non-2xx response returns the
+  bounded `EMPLOYEE_USAGE_ANALYTICS_UNAVAILABLE` 503 response. It must not
+  silently fall back to PostgreSQL raw invocation logs and recreate the
+  original operational database incident.
+
+The feature remains disabled by default. Read enablement is permitted only
+after interval reconciliation passes and the mirror has no unexplained error,
+timeout, or duplicate gap.

@@ -310,6 +310,56 @@ if [[ "${role}" == "gateway" || "${role}" == "ai" ]]; then
   unset routing_difficulty_token
 fi
 
+if [[ "${role}" == "gateway" ]]; then
+  # shellcheck source=/dev/null
+  source "${orchestration_dir}/scripts/production-distributed-lib.sh"
+  production_load_env
+  if [[ "${GATEWAY_CLICKHOUSE_ANALYTICS_ENABLED:-false}" == "true" ]]; then
+    clickhouse_password="$(aws ssm get-parameter \
+      --name "${GATELM_CLICKHOUSE_PASSWORD_PARAMETER_NAME:-/gatelm/production/clickhouse/password}" \
+      --with-decryption \
+      --query Parameter.Value \
+      --output text)"
+    [[ ${#clickhouse_password} -ge 16 ]] || \
+      deploy_fail "ClickHouse password SecureString is missing or too short."
+    clickhouse_identity_hmac_secret="$(aws ssm get-parameter \
+      --name "${GATELM_CLICKHOUSE_EMPLOYEE_IDENTITY_HMAC_SECRET_PARAMETER_NAME:-/gatelm/production/clickhouse/employee-identity-hmac-secret}" \
+      --with-decryption \
+      --query Parameter.Value \
+      --output text)"
+    [[ ${#clickhouse_identity_hmac_secret} -ge 32 ]] || \
+      deploy_fail "ClickHouse employee identity HMAC SecureString is missing or too short."
+    upsert_env_value GATEWAY_CLICKHOUSE_PASSWORD "${clickhouse_password}"
+    upsert_env_value GATEWAY_CLICKHOUSE_EMPLOYEE_IDENTITY_HMAC_SECRET "${clickhouse_identity_hmac_secret}"
+    unset clickhouse_password clickhouse_identity_hmac_secret
+  fi
+fi
+
+if [[ "${role}" == "data" ]]; then
+  # shellcheck source=/dev/null
+  source "${orchestration_dir}/scripts/production-distributed-lib.sh"
+  production_load_env
+  if [[ "${CLICKHOUSE_ANALYTICS_READ_ENABLED:-false}" == "true" ]]; then
+    clickhouse_password="$(aws ssm get-parameter \
+      --name "${GATELM_CLICKHOUSE_READER_PASSWORD_PARAMETER_NAME:-/gatelm/production/clickhouse/reader-password}" \
+      --with-decryption \
+      --query Parameter.Value \
+      --output text)"
+    [[ ${#clickhouse_password} -ge 16 ]] || \
+      deploy_fail "ClickHouse password SecureString is missing or too short."
+    clickhouse_identity_hmac_secret="$(aws ssm get-parameter \
+      --name "${GATELM_CLICKHOUSE_EMPLOYEE_IDENTITY_HMAC_SECRET_PARAMETER_NAME:-/gatelm/production/clickhouse/employee-identity-hmac-secret}" \
+      --with-decryption \
+      --query Parameter.Value \
+      --output text)"
+    [[ ${#clickhouse_identity_hmac_secret} -ge 32 ]] || \
+      deploy_fail "ClickHouse employee identity HMAC SecureString is missing or too short."
+    upsert_env_value CLICKHOUSE_PASSWORD "${clickhouse_password}"
+    upsert_env_value CLICKHOUSE_EMPLOYEE_IDENTITY_HMAC_SECRET "${clickhouse_identity_hmac_secret}"
+    unset clickhouse_password clickhouse_identity_hmac_secret
+  fi
+fi
+
 if [[ "${role}" == "ai" ]]; then
   deploy_log "Preparing the pinned AI Service E5 runtime bundle."
   bash "${repo_dir}/deploy/aws-triage/scripts/prepare-gateway-e5-runtime-bundle.sh" "${repo_dir}"

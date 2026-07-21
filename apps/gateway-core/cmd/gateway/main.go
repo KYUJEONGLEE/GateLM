@@ -22,6 +22,8 @@ import (
 	postgresemployeepolicy "gatelm/apps/gateway-core/internal/adapters/employeepolicy/postgres"
 	redisemployeepolicy "gatelm/apps/gateway-core/internal/adapters/employeepolicy/redis"
 	asyncinvocationlog "gatelm/apps/gateway-core/internal/adapters/invocationlog/asyncwriter"
+	clickhouseinvocationlog "gatelm/apps/gateway-core/internal/adapters/invocationlog/clickhouse"
+	fanoutinvocationlog "gatelm/apps/gateway-core/internal/adapters/invocationlog/fanout"
 	postgresinvocationlog "gatelm/apps/gateway-core/internal/adapters/invocationlog/postgres"
 	cachedpricing "gatelm/apps/gateway-core/internal/adapters/pricing/cached"
 	postgrespricing "gatelm/apps/gateway-core/internal/adapters/pricing/postgres"
@@ -247,10 +249,30 @@ func main() {
 		ApplicationID: cfg.DemoApplicationID,
 	})
 	dailyTokenUsageStore := redisemployeepolicy.NewDailyTokenUsageStore(redisClient)
-	var terminalLogWriter invocationlog.TerminalLogWriter = postgresTerminalLogWriter
+	var terminalPersistenceWriter invocationlog.TerminalLogWriter = postgresTerminalLogWriter
+	if cfg.ClickHouseAnalytics.Enabled {
+		clickHouseTerminalLogWriter, clickHouseWriterErr := clickhouseinvocationlog.NewTerminalLogWriter(clickhouseinvocationlog.Config{
+			EndpointURL:                cfg.ClickHouseAnalytics.EndpointURL,
+			Database:                   cfg.ClickHouseAnalytics.Database,
+			Table:                      cfg.ClickHouseAnalytics.Table,
+			Username:                   cfg.ClickHouseAnalytics.Username,
+			Password:                   cfg.ClickHouseAnalytics.Password,
+			EmployeeIdentityHMACSecret: cfg.ClickHouseAnalytics.EmployeeIdentityHMACSecret,
+		})
+		if clickHouseWriterErr != nil {
+			log.Fatalf("gateway-core ClickHouse analytics writer configuration failed: %v", clickHouseWriterErr)
+		}
+		terminalPersistenceWriter = fanoutinvocationlog.NewTerminalLogWriter(fanoutinvocationlog.TerminalLogWriterConfig{
+			Primary:         postgresTerminalLogWriter,
+			Mirror:          clickHouseTerminalLogWriter,
+			MirrorTimeout:   cfg.ClickHouseAnalytics.WriteTimeout,
+			MetricsRegistry: metricsRegistry,
+		})
+	}
+	var terminalLogWriter invocationlog.TerminalLogWriter = terminalPersistenceWriter
 	var asyncTerminalLogWriter *asyncinvocationlog.TerminalLogWriter
 	if cfg.AsyncLogEnabled {
-		asyncTerminalLogWriter = asyncinvocationlog.NewTerminalLogWriter(postgresTerminalLogWriter, asyncinvocationlog.TerminalLogWriterConfig{
+		asyncTerminalLogWriter = asyncinvocationlog.NewTerminalLogWriter(terminalPersistenceWriter, asyncinvocationlog.TerminalLogWriterConfig{
 			QueueSize:       cfg.AsyncLogQueueSize,
 			WorkerCount:     cfg.AsyncLogWorkerCount,
 			BatchSize:       cfg.AsyncLogBatchSize,

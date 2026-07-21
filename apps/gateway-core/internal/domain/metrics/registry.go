@@ -28,6 +28,8 @@ const (
 	AsyncLogDroppedTotal                   = "gatelm_async_log_dropped_total"
 	AsyncLogPersistTotal                   = "gatelm_async_log_persist_total"
 	AsyncLogPersistDurationSeconds         = "gatelm_async_log_persist_duration_seconds"
+	ClickHouseLogWritesTotal               = "gatelm_clickhouse_log_writes_total"
+	ClickHouseLogWriteDurationSeconds      = "gatelm_clickhouse_log_write_duration_seconds"
 	StreamsActive                          = "gatelm_streams_active"
 	StreamRelayTotal                       = "gatelm_stream_relay_total"
 	StreamDurationSeconds                  = "gatelm_stream_duration_seconds"
@@ -98,6 +100,8 @@ var metricSpecs = map[string]metricSpec{
 	AsyncLogDroppedTotal:                   {"counter", "Total async invocation logs dropped before persistence."},
 	AsyncLogPersistTotal:                   {"counter", "Total async invocation log records by persistence outcome."},
 	AsyncLogPersistDurationSeconds:         {"histogram", "Async invocation log delegate write duration in seconds."},
+	ClickHouseLogWritesTotal:               {"counter", "Total ClickHouse invocation log mirror records by bounded outcome."},
+	ClickHouseLogWriteDurationSeconds:      {"histogram", "ClickHouse invocation log mirror write duration in seconds."},
 	StreamsActive:                          {"gauge", "Current active Gateway streaming relays."},
 	StreamRelayTotal:                       {"counter", "Total Gateway streaming relay attempts by outcome."},
 	StreamDurationSeconds:                  {"histogram", "Gateway streaming relay duration in seconds."},
