@@ -59,6 +59,23 @@ test("API management uses the shared primary action scale", async () => {
   );
 });
 
+test("Provider cards keep a compact readable layout on mobile", async () => {
+  const styles = await readFile(stylesSourceUrl, "utf8");
+
+  expect(styles).toMatch(
+    /@media \(max-width: 1100px\) \{[\s\S]*?\.provider-card-row \{[\s\S]*?grid-template-rows: auto auto;[\s\S]*?\.provider-card-identity \{[\s\S]*?grid-column: 1;[\s\S]*?grid-row: 1;/
+  );
+  expect(styles).toMatch(
+    /@media \(max-width: 760px\) \{[\s\S]*?\.provider-card-row \{[\s\S]*?grid-template-areas:[\s\S]*?"identity identity"[\s\S]*?"status status"[\s\S]*?"meta actions";/
+  );
+  expect(styles).toMatch(
+    /\.provider-card-status \{[\s\S]*?grid-area: status;[\s\S]*?grid-template-columns: 8px auto;[\s\S]*?width: max-content;/
+  );
+  expect(styles).toMatch(
+    /\.provider-discovery-actions \{[\s\S]*?grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/
+  );
+});
+
 test("primary actions share one visual token contract", async () => {
   const [styles, buttonSource] = await Promise.all([
     readFile(stylesSourceUrl, "utf8"),
@@ -69,9 +86,9 @@ test("primary actions share one visual token contract", async () => {
   expect(styles).toContain("--primary-action-padding-inline: 24px;");
   expect(styles).toContain("--primary-action-radius: 999px;");
   expect(styles).toContain("--primary-action-icon-size: 30px;");
-  expect(styles).toContain("--primary-action-background: #0f7f63;");
-  expect(styles).toContain("--primary-action-background-hover: #0c765b;");
-  expect(styles).toContain("--primary-action-shadow: 0 4px 10px rgba(15, 127, 99, 0.3);");
+  expect(styles).toContain("--primary-action-background: #2563eb;");
+  expect(styles).toContain("--primary-action-background-hover: #1d4ed8;");
+  expect(styles).toContain("--primary-action-shadow: 0 4px 10px rgba(37, 99, 235, 0.28);");
   expect(styles).toMatch(
     /\.primary-button,\s*\.secondary-button \{[\s\S]*?height: var\(--primary-action-height\);[\s\S]*?padding: 0 var\(--primary-action-padding-inline\);[\s\S]*?font-size: var\(--primary-action-font-size\);/
   );

@@ -280,9 +280,11 @@ export function RequestLogTable({
             <section className="request-log-summary-strip" aria-label="Request log summary">
               {summaryItems.map((item) => (
                 <article className="request-log-summary-item" data-tone={item.tone} key={item.label}>
-                  <span className="request-log-summary-icon">{item.icon}</span>
-                  <div>
-                    <span>{item.label}</span>
+                  <div className="request-log-summary-copy">
+                    <div className="request-log-summary-heading">
+                      <span className="request-log-summary-icon">{item.icon}</span>
+                      <span>{item.label}</span>
+                    </div>
                     <span className="request-log-summary-value">
                       <strong>{item.value}</strong>
                       {item.detail ? <em>{item.detail}</em> : null}
