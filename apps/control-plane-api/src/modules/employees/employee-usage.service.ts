@@ -8,6 +8,11 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '@/infrastructure/database/prisma/prisma.service';
 
 import {
+  ClickHouseEmployeeUsageReader,
+  type ClickHouseEmployeeUsageResult,
+  type EmployeeUsageAggregate,
+} from './clickhouse-employee-usage.reader';
+import {
   EmployeeUsageMetric,
   EmployeeUsageMetricDto,
   EmployeeUsageOrder,
@@ -68,6 +73,18 @@ type EmployeeUsageCoverageRow = {
   hasRawUsage: boolean;
 };
 
+type TenantChatAnalyticsRow = {
+  employeeId: string | null;
+  requestCount: bigint;
+  inputTokens: bigint;
+  outputTokens: bigint;
+  totalTokens: bigint;
+  costMicroUsd: bigint;
+  sourceMaxAt: Date | null;
+  hasRawUsage: boolean;
+  hasRollupUsage: boolean;
+};
+
 export type EmployeeCostTotalPeriod = {
   from: Date;
   to: Date;
@@ -75,7 +92,10 @@ export type EmployeeCostTotalPeriod = {
 
 @Injectable()
 export class EmployeeUsageService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly clickHouseReader?: ClickHouseEmployeeUsageReader,
+  ) {}
 
   async listEmployeeUsage(
     tenantId: string,
@@ -90,6 +110,19 @@ export class EmployeeUsageService {
     const cursor = query.cursor
       ? this.decodeCursor(query.cursor, metric, order, source)
       : null;
+
+    if (this.clickHouseReader?.isEnabled()) {
+      return this.listEmployeeUsageFromClickHouse({
+        tenantId,
+        from: period.from,
+        to: period.to,
+        metric,
+        order,
+        source,
+        limit,
+        cursor,
+      });
+    }
 
     const [coverageRows, rows, unattributedRows] = await Promise.all([
       this.queryCoverage(tenantId, period.from, period.to),
@@ -168,6 +201,26 @@ export class EmployeeUsageService {
       return validatedPeriods.map(() => new Map<string, number>());
     }
 
+    if (this.clickHouseReader?.isEnabled()) {
+      const selected = new Set(employeeIds);
+      const rowsByPeriod = await Promise.all(
+        validatedPeriods.map((period) =>
+          this.queryTenantChatAnalytics(tenantId, period.from, period.to),
+        ),
+      );
+      return rowsByPeriod.map(
+        (rows) =>
+          new Map(
+            rows
+              .filter(
+                (row): row is TenantChatAnalyticsRow & { employeeId: string } =>
+                  row.employeeId !== null && selected.has(row.employeeId),
+              )
+              .map((row) => [row.employeeId, Number(row.costMicroUsd)]),
+          ),
+      );
+    }
+
     const rowsByPeriod = await Promise.all(
       validatedPeriods.map((period) =>
         this.queryRows(
@@ -192,6 +245,171 @@ export class EmployeeUsageService {
           ]),
         ),
     );
+  }
+
+  private async listEmployeeUsageFromClickHouse(input: {
+    tenantId: string;
+    from: Date;
+    to: Date;
+    metric: EmployeeUsageMetric;
+    order: EmployeeUsageOrder;
+    source?: EmployeeUsageSource;
+    limit: number;
+    cursor: EmployeeUsageCursor | null;
+  }): Promise<EmployeeUsageResponseDto> {
+    const employees = await this.prisma.employee.findMany({
+      where: { tenantId: input.tenantId, deletedAt: null },
+      select: {
+        id: true,
+        userId: true,
+        email: true,
+        name: true,
+        department: true,
+        status: true,
+      },
+    });
+    const [project, tenantChatRows] = await Promise.all([
+      input.source === 'tenant_chat'
+        ? Promise.resolve(emptyClickHouseResult())
+        : this.clickHouseReader!.readProjectUsage({
+            tenantId: input.tenantId,
+            from: input.from,
+            to: input.to,
+            identities: employees.map((employee) => ({
+              employeeId: employee.id,
+              userId: employee.userId,
+              email: employee.email,
+            })),
+          }),
+      input.source === 'project_application'
+        ? Promise.resolve([] as TenantChatAnalyticsRow[])
+        : this.queryTenantChatAnalytics(input.tenantId, input.from, input.to),
+    ]);
+
+    const tenantChatByEmployee = new Map<string, EmployeeUsageAggregate>();
+    let tenantChatUnattributed = emptyAggregate();
+    let tenantChatLastSourceAt: Date | null = null;
+    let tenantChatHasRaw = false;
+    let tenantChatHasRollup = false;
+    for (const row of tenantChatRows) {
+      const aggregate = aggregateFromTenantChat(row);
+      if (row.employeeId) {
+        tenantChatByEmployee.set(
+          row.employeeId,
+          addAggregate(
+            tenantChatByEmployee.get(row.employeeId) ?? emptyAggregate(),
+            aggregate,
+          ),
+        );
+      } else {
+        tenantChatUnattributed = addAggregate(
+          tenantChatUnattributed,
+          aggregate,
+        );
+      }
+      tenantChatHasRaw ||= row.hasRawUsage;
+      tenantChatHasRollup ||= row.hasRollupUsage;
+      tenantChatLastSourceAt = maxDate(
+        tenantChatLastSourceAt,
+        row.sourceMaxAt,
+      );
+    }
+
+    const ranked = employees
+      .map((employee) => {
+        const projectUsage =
+          project.byEmployeeId.get(employee.id) ?? emptyAggregate();
+        const tenantChatUsage =
+          tenantChatByEmployee.get(employee.id) ?? emptyAggregate();
+        const selected = selectAggregate(
+          projectUsage,
+          tenantChatUsage,
+          input.source,
+        );
+        return {
+          employeeId: employee.id,
+          name: employee.name,
+          email: employee.email,
+          department: employee.department,
+          status: employee.status,
+          rank: 0n,
+          sortValue: aggregateSortValue(selected, input.metric),
+          projectRequestCount: projectUsage.requestCount,
+          projectInputTokens: projectUsage.inputTokens,
+          projectOutputTokens: projectUsage.outputTokens,
+          projectTotalTokens: projectUsage.totalTokens,
+          projectCostMicroUsd: projectUsage.costMicroUsd,
+          tenantChatRequestCount: tenantChatUsage.requestCount,
+          tenantChatInputTokens: tenantChatUsage.inputTokens,
+          tenantChatOutputTokens: tenantChatUsage.outputTokens,
+          tenantChatTotalTokens: tenantChatUsage.totalTokens,
+          tenantChatCostMicroUsd: tenantChatUsage.costMicroUsd,
+        } satisfies EmployeeUsageDatabaseRow;
+      })
+      .sort((left, right) => compareUsageRows(left, right, input.order))
+      .map((row, index) => ({ ...row, rank: BigInt(index + 1) }));
+
+    const afterCursor = input.cursor
+      ? ranked.filter((row) => isAfterCursor(row, input.cursor!, input.order))
+      : ranked;
+    const pageWithLookahead = afterCursor.slice(0, input.limit + 1);
+    const hasMore = pageWithLookahead.length > input.limit;
+    const page = pageWithLookahead.slice(0, input.limit);
+    const last = page.at(-1);
+    const projectMetric = aggregateToMetric(project.unattributed);
+    const tenantChatMetric = aggregateToMetric(tenantChatUnattributed);
+    const lastSourceAt =
+      input.source === 'tenant_chat'
+        ? tenantChatLastSourceAt
+        : input.source === 'project_application'
+          ? project.lastSourceAt
+          : maxDate(project.lastSourceAt, tenantChatLastSourceAt);
+
+    return {
+      data: page.map((row) => toResponseRow(row, input.source)),
+      pagination: {
+        hasMore,
+        limit: input.limit,
+        nextCursor:
+          hasMore && last
+            ? this.encodeCursor({
+                employeeId: last.employeeId,
+                metric: input.metric,
+                order: input.order,
+                source: input.source,
+                value: last.sortValue.toString(),
+                version: 1,
+              })
+            : null,
+      },
+      period: {
+        from: input.from.toISOString(),
+        to: input.to.toISOString(),
+        timezone: 'UTC',
+      },
+      unattributed: {
+        sources: {
+          projectApplication: projectMetric,
+          tenantChat: tenantChatMetric,
+        },
+        total:
+          input.source === 'tenant_chat'
+            ? tenantChatMetric
+            : input.source === 'project_application'
+              ? projectMetric
+              : addMetrics(projectMetric, tenantChatMetric),
+      },
+      provenance: {
+        generatedAt: new Date().toISOString(),
+        lastSourceAt: lastSourceAt?.toISOString() ?? null,
+        source: clickHouseProvenance({
+          source: input.source,
+          projectHasUsage: hasUsage(project),
+          tenantChatHasRaw,
+          tenantChatHasRollup,
+        }),
+      },
+    };
   }
 
   private validatePeriod(fromValue: string, toValue: string) {
@@ -263,6 +481,131 @@ export class EmployeeUsageService {
           (SELECT count(*)::bigint FROM tenant_chat_covered_hours)
         ) AS "coveredBucketCount",
         EXISTS (SELECT 1 FROM raw_usage) AS "hasRawUsage"
+    `);
+  }
+
+  private async queryTenantChatAnalytics(
+    tenantId: string,
+    from: Date,
+    to: Date,
+  ): Promise<TenantChatAnalyticsRow[]> {
+    return this.prisma.$queryRaw<TenantChatAnalyticsRow[]>(Prisma.sql`
+      WITH tenant_chat_covered_hours AS (
+        ${employeeUsageCoveredHours(tenantId, from, to, 'tenant_chat')}
+      ), raw_usage AS (
+        SELECT
+          employee.id AS employee_id,
+          count(*)::bigint AS request_count,
+          coalesce(sum(logs.confirmed_input_tokens), 0)::bigint AS input_tokens,
+          coalesce(sum(logs.confirmed_output_tokens), 0)::bigint AS output_tokens,
+          coalesce(sum(logs.confirmed_total_tokens), 0)::bigint AS total_tokens,
+          coalesce(sum(logs.confirmed_cost_micro_usd), 0)::bigint AS cost_micro_usd,
+          max(logs.updated_at) AS source_max_at,
+          true AS has_raw_usage,
+          false AS has_rollup_usage
+        FROM tenant_chat_invocation_logs logs
+        LEFT JOIN employees employee
+          ON employee.id = logs.employee_id
+         AND employee."tenantId" = logs.tenant_id
+         AND employee."deletedAt" IS NULL
+        WHERE logs.tenant_id = ${tenantId}::uuid
+          AND logs.surface = 'tenant_chat'
+          AND logs.execution_scope_kind = 'tenant_chat'
+          AND logs.completed_at >= ${from}
+          AND logs.completed_at < ${to}
+          AND NOT EXISTS (
+            SELECT 1 FROM tenant_chat_covered_hours covered
+            WHERE covered.bucket_start = date_bin(
+              interval '1 hour', logs.completed_at,
+              timestamptz '1970-01-01 00:00:00+00'
+            )
+          )
+        GROUP BY employee.id
+      ), rollup_usage AS (
+        SELECT
+          employee.id AS employee_id,
+          coalesce(sum(rollup.request_count), 0)::bigint AS request_count,
+          coalesce(sum(rollup.input_tokens), 0)::bigint AS input_tokens,
+          coalesce(sum(rollup.output_tokens), 0)::bigint AS output_tokens,
+          coalesce(sum(rollup.total_tokens), 0)::bigint AS total_tokens,
+          coalesce(sum(rollup.cost_micro_usd), 0)::bigint AS cost_micro_usd,
+          max(rollup.source_max_at) AS source_max_at,
+          false AS has_raw_usage,
+          true AS has_rollup_usage
+        FROM employee_usage_rollups rollup
+        JOIN tenant_chat_covered_hours covered
+          ON covered.bucket_start = rollup.bucket_start
+        JOIN employees employee
+          ON employee.id = rollup.employee_id
+         AND employee."tenantId" = rollup.tenant_id
+         AND employee."deletedAt" IS NULL
+        WHERE rollup.tenant_id = ${tenantId}::uuid
+          AND rollup.surface = 'tenant_chat'
+          AND rollup.grain = 'hour'
+        GROUP BY employee.id
+      ), rollup_total AS (
+        SELECT
+          coalesce(sum(total.request_count), 0)::bigint AS request_count,
+          coalesce(sum(total.prompt_tokens), 0)::bigint AS input_tokens,
+          coalesce(sum(total.completion_tokens), 0)::bigint AS output_tokens,
+          coalesce(sum(total.total_tokens), 0)::bigint AS total_tokens,
+          coalesce(sum(total.cost_micro_usd), 0)::bigint AS cost_micro_usd,
+          max(total.source_max_at) AS source_max_at
+        FROM dashboard_rollup_totals total
+        JOIN tenant_chat_covered_hours covered
+          ON covered.bucket_start = total.bucket_start
+        WHERE total.tenant_id = ${tenantId}::uuid
+          AND total.surface = 'tenant_chat'
+          AND total.grain = 'hour'
+      ), rollup_attributed AS (
+        SELECT
+          coalesce(sum(rollup.request_count), 0)::bigint AS request_count,
+          coalesce(sum(rollup.input_tokens), 0)::bigint AS input_tokens,
+          coalesce(sum(rollup.output_tokens), 0)::bigint AS output_tokens,
+          coalesce(sum(rollup.total_tokens), 0)::bigint AS total_tokens,
+          coalesce(sum(rollup.cost_micro_usd), 0)::bigint AS cost_micro_usd
+        FROM employee_usage_rollups rollup
+        JOIN tenant_chat_covered_hours covered
+          ON covered.bucket_start = rollup.bucket_start
+        JOIN employees employee
+          ON employee.id = rollup.employee_id
+         AND employee."tenantId" = rollup.tenant_id
+         AND employee."deletedAt" IS NULL
+        WHERE rollup.tenant_id = ${tenantId}::uuid
+          AND rollup.surface = 'tenant_chat'
+          AND rollup.grain = 'hour'
+      ), rollup_unattributed AS (
+        SELECT
+          NULL::uuid AS employee_id,
+          greatest(total.request_count - attributed.request_count, 0)::bigint AS request_count,
+          greatest(total.input_tokens - attributed.input_tokens, 0)::bigint AS input_tokens,
+          greatest(total.output_tokens - attributed.output_tokens, 0)::bigint AS output_tokens,
+          greatest(total.total_tokens - attributed.total_tokens, 0)::bigint AS total_tokens,
+          greatest(total.cost_micro_usd - attributed.cost_micro_usd, 0)::bigint AS cost_micro_usd,
+          total.source_max_at,
+          false AS has_raw_usage,
+          (total.request_count > 0) AS has_rollup_usage
+        FROM rollup_total total
+        CROSS JOIN rollup_attributed attributed
+      ), combined AS (
+        SELECT * FROM raw_usage
+        UNION ALL
+        SELECT * FROM rollup_usage
+        UNION ALL
+        SELECT * FROM rollup_unattributed
+      )
+      SELECT
+        employee_id::text AS "employeeId",
+        coalesce(sum(request_count), 0)::bigint AS "requestCount",
+        coalesce(sum(input_tokens), 0)::bigint AS "inputTokens",
+        coalesce(sum(output_tokens), 0)::bigint AS "outputTokens",
+        coalesce(sum(total_tokens), 0)::bigint AS "totalTokens",
+        coalesce(sum(cost_micro_usd), 0)::bigint AS "costMicroUsd",
+        max(source_max_at) AS "sourceMaxAt",
+        bool_or(has_raw_usage) AS "hasRawUsage",
+        bool_or(has_rollup_usage) AS "hasRollupUsage"
+      FROM combined
+      GROUP BY employee_id
     `);
   }
 
@@ -746,6 +1089,130 @@ function addMetrics(
     requestCount: left.requestCount + right.requestCount,
     totalTokens: left.totalTokens + right.totalTokens,
   };
+}
+
+function emptyAggregate(): EmployeeUsageAggregate {
+  return {
+    requestCount: 0n,
+    inputTokens: 0n,
+    outputTokens: 0n,
+    totalTokens: 0n,
+    costMicroUsd: 0n,
+  };
+}
+
+function emptyClickHouseResult(): ClickHouseEmployeeUsageResult {
+  return {
+    byEmployeeId: new Map(),
+    unattributed: emptyAggregate(),
+    lastSourceAt: null,
+  };
+}
+
+function aggregateFromTenantChat(
+  row: TenantChatAnalyticsRow,
+): EmployeeUsageAggregate {
+  return {
+    requestCount: row.requestCount,
+    inputTokens: row.inputTokens,
+    outputTokens: row.outputTokens,
+    totalTokens: row.totalTokens,
+    costMicroUsd: row.costMicroUsd,
+  };
+}
+
+function addAggregate(
+  left: EmployeeUsageAggregate,
+  right: EmployeeUsageAggregate,
+): EmployeeUsageAggregate {
+  return {
+    requestCount: left.requestCount + right.requestCount,
+    inputTokens: left.inputTokens + right.inputTokens,
+    outputTokens: left.outputTokens + right.outputTokens,
+    totalTokens: left.totalTokens + right.totalTokens,
+    costMicroUsd: left.costMicroUsd + right.costMicroUsd,
+  };
+}
+
+function selectAggregate(
+  project: EmployeeUsageAggregate,
+  tenantChat: EmployeeUsageAggregate,
+  source?: EmployeeUsageSource,
+): EmployeeUsageAggregate {
+  if (source === 'project_application') return project;
+  if (source === 'tenant_chat') return tenantChat;
+  return addAggregate(project, tenantChat);
+}
+
+function aggregateSortValue(
+  aggregate: EmployeeUsageAggregate,
+  metric: EmployeeUsageMetric,
+): bigint {
+  if (metric === 'cost') return aggregate.costMicroUsd;
+  if (metric === 'requests') return aggregate.requestCount;
+  return aggregate.totalTokens;
+}
+
+function compareUsageRows(
+  left: EmployeeUsageDatabaseRow,
+  right: EmployeeUsageDatabaseRow,
+  order: EmployeeUsageOrder,
+): number {
+  if (left.sortValue !== right.sortValue) {
+    if (order === 'asc') return left.sortValue < right.sortValue ? -1 : 1;
+    return left.sortValue > right.sortValue ? -1 : 1;
+  }
+  return left.employeeId.localeCompare(right.employeeId);
+}
+
+function isAfterCursor(
+  row: EmployeeUsageDatabaseRow,
+  cursor: EmployeeUsageCursor,
+  order: EmployeeUsageOrder,
+): boolean {
+  const cursorValue = BigInt(cursor.value);
+  if (row.sortValue === cursorValue) {
+    return row.employeeId > cursor.employeeId;
+  }
+  return order === 'asc'
+    ? row.sortValue > cursorValue
+    : row.sortValue < cursorValue;
+}
+
+function aggregateToMetric(
+  aggregate: EmployeeUsageAggregate,
+): EmployeeUsageMetricDto {
+  return {
+    requestCount: Number(aggregate.requestCount),
+    inputTokens: Number(aggregate.inputTokens),
+    outputTokens: Number(aggregate.outputTokens),
+    totalTokens: Number(aggregate.totalTokens),
+    costMicroUsd: Number(aggregate.costMicroUsd),
+  };
+}
+
+function hasUsage(result: ClickHouseEmployeeUsageResult): boolean {
+  if (result.unattributed.requestCount > 0n) return true;
+  for (const aggregate of result.byEmployeeId.values()) {
+    if (aggregate.requestCount > 0n) return true;
+  }
+  return false;
+}
+
+function clickHouseProvenance(input: {
+  source?: EmployeeUsageSource;
+  projectHasUsage: boolean;
+  tenantChatHasRaw: boolean;
+  tenantChatHasRollup: boolean;
+}): 'raw' | 'rollup' | 'hybrid' {
+  if (input.source === 'project_application') return 'raw';
+  if (input.source === 'tenant_chat') {
+    if (input.tenantChatHasRollup && input.tenantChatHasRaw) return 'hybrid';
+    return input.tenantChatHasRollup ? 'rollup' : 'raw';
+  }
+  const hasRaw = input.projectHasUsage || input.tenantChatHasRaw;
+  if (hasRaw && input.tenantChatHasRollup) return 'hybrid';
+  return input.tenantChatHasRollup ? 'rollup' : 'raw';
 }
 
 function emptyUnattributedRow(): UnattributedDatabaseRow {

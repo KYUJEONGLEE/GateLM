@@ -22,6 +22,9 @@ import (
 	postgresemployeepolicy "gatelm/apps/gateway-core/internal/adapters/employeepolicy/postgres"
 	redisemployeepolicy "gatelm/apps/gateway-core/internal/adapters/employeepolicy/redis"
 	asyncinvocationlog "gatelm/apps/gateway-core/internal/adapters/invocationlog/asyncwriter"
+	clickhouseinvocationlog "gatelm/apps/gateway-core/internal/adapters/invocationlog/clickhouse"
+	fanoutinvocationlog "gatelm/apps/gateway-core/internal/adapters/invocationlog/fanout"
+	hybridinvocationlog "gatelm/apps/gateway-core/internal/adapters/invocationlog/hybrid"
 	postgresinvocationlog "gatelm/apps/gateway-core/internal/adapters/invocationlog/postgres"
 	cachedpricing "gatelm/apps/gateway-core/internal/adapters/pricing/cached"
 	postgrespricing "gatelm/apps/gateway-core/internal/adapters/pricing/postgres"
@@ -247,10 +250,30 @@ func main() {
 		ApplicationID: cfg.DemoApplicationID,
 	})
 	dailyTokenUsageStore := redisemployeepolicy.NewDailyTokenUsageStore(redisClient)
-	var terminalLogWriter invocationlog.TerminalLogWriter = postgresTerminalLogWriter
+	var terminalPersistenceWriter invocationlog.TerminalLogWriter = postgresTerminalLogWriter
+	if cfg.ClickHouseAnalytics.Enabled {
+		clickHouseTerminalLogWriter, clickHouseWriterErr := clickhouseinvocationlog.NewTerminalLogWriter(clickhouseinvocationlog.Config{
+			EndpointURL:                cfg.ClickHouseAnalytics.EndpointURL,
+			Database:                   cfg.ClickHouseAnalytics.Database,
+			Table:                      cfg.ClickHouseAnalytics.Table,
+			Username:                   cfg.ClickHouseAnalytics.Username,
+			Password:                   cfg.ClickHouseAnalytics.Password,
+			EmployeeIdentityHMACSecret: cfg.ClickHouseAnalytics.EmployeeIdentityHMACSecret,
+		})
+		if clickHouseWriterErr != nil {
+			log.Fatalf("gateway-core ClickHouse analytics writer configuration failed: %v", clickHouseWriterErr)
+		}
+		terminalPersistenceWriter = fanoutinvocationlog.NewTerminalLogWriter(fanoutinvocationlog.TerminalLogWriterConfig{
+			Primary:         postgresTerminalLogWriter,
+			Mirror:          clickHouseTerminalLogWriter,
+			MirrorTimeout:   cfg.ClickHouseAnalytics.WriteTimeout,
+			MetricsRegistry: metricsRegistry,
+		})
+	}
+	var terminalLogWriter invocationlog.TerminalLogWriter = terminalPersistenceWriter
 	var asyncTerminalLogWriter *asyncinvocationlog.TerminalLogWriter
 	if cfg.AsyncLogEnabled {
-		asyncTerminalLogWriter = asyncinvocationlog.NewTerminalLogWriter(postgresTerminalLogWriter, asyncinvocationlog.TerminalLogWriterConfig{
+		asyncTerminalLogWriter = asyncinvocationlog.NewTerminalLogWriter(terminalPersistenceWriter, asyncinvocationlog.TerminalLogWriterConfig{
 			QueueSize:       cfg.AsyncLogQueueSize,
 			WorkerCount:     cfg.AsyncLogWorkerCount,
 			BatchSize:       cfg.AsyncLogBatchSize,
@@ -264,13 +287,33 @@ func main() {
 		terminalLogWriter,
 		dailyTokenUsageStore,
 	)
-	invocationLogReader := postgresinvocationlog.NewQueryReaderWithOptions(
+	postgresInvocationLogReader := postgresinvocationlog.NewQueryReaderWithOptions(
 		invocationLogQueryer{pool: postgresPool},
 		postgresinvocationlog.QueryReaderOptions{
 			AnalyticsPolicyImpactReadMode:   cfg.AnalyticsPolicyImpactReadMode,
 			AnalyticsPolicyImpactMaxRawTail: cfg.AnalyticsPolicyImpactMaxRawTail,
 		},
 	)
+	var invocationLogReader invocationlog.Reader = postgresInvocationLogReader
+	if cfg.ClickHouseAnalytics.PerformanceReadEnabled {
+		clickHousePerformanceReader, clickHouseReaderErr := clickhouseinvocationlog.NewAnalyticsPerformanceReader(clickhouseinvocationlog.QueryConfig{
+			EndpointURL:     cfg.ClickHouseAnalytics.EndpointURL,
+			Database:        cfg.ClickHouseAnalytics.Database,
+			Table:           cfg.ClickHouseAnalytics.Table,
+			Username:        cfg.ClickHouseAnalytics.ReadUsername,
+			Password:        cfg.ClickHouseAnalytics.ReadPassword,
+			Timeout:         cfg.ClickHouseAnalytics.ReadTimeout,
+			MetricsRegistry: metricsRegistry,
+		})
+		if clickHouseReaderErr != nil {
+			log.Fatalf("gateway-core ClickHouse analytics reader configuration failed: %v", clickHouseReaderErr)
+		}
+		hybridReader, hybridReaderErr := hybridinvocationlog.NewAnalyticsReader(postgresInvocationLogReader, clickHousePerformanceReader)
+		if hybridReaderErr != nil {
+			log.Fatalf("gateway-core hybrid analytics reader configuration failed: %v", hybridReaderErr)
+		}
+		invocationLogReader = hybridReader
+	}
 	pricingCatalog := cachedpricing.NewReader(postgrespricing.NewReader(postgresPool), cachedpricing.Config{
 		Enabled:    cfg.PricingCache.Enabled,
 		TTL:        cfg.PricingCache.TTL,

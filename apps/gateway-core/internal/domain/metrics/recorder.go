@@ -48,6 +48,21 @@ type LogWrite struct {
 	DurationSeconds float64
 }
 
+type ClickHouseAnalyticsRead struct {
+	Endpoint        string
+	Status          string
+	DurationSeconds float64
+}
+
+func (r *Registry) ClickHouseAnalyticsRead(read ClickHouseAnalyticsRead) {
+	labels := []Label{
+		{Name: "endpoint", Value: read.Endpoint},
+		{Name: "status", Value: read.Status},
+	}
+	r.AddCounter(ClickHouseAnalyticsReadsTotal, labels, 1)
+	r.ObserveHistogram(ClickHouseAnalyticsReadDurationSeconds, labels, read.DurationSeconds)
+}
+
 type StreamRelay struct {
 	Provider        string
 	Model           string
@@ -222,6 +237,30 @@ type AsyncLogEvent struct {
 	Operation       string
 	Status          string
 	DurationSeconds float64
+}
+
+type ClickHouseMirrorWrite struct {
+	Operation       string
+	Status          string
+	DurationSeconds float64
+	RecordCount     int
+}
+
+func (r *Registry) ClickHouseMirrorWrite(write ClickHouseMirrorWrite) {
+	if write.RecordCount <= 0 {
+		return
+	}
+	status := "error"
+	switch strings.TrimSpace(write.Status) {
+	case "success", "timeout", "error":
+		status = strings.TrimSpace(write.Status)
+	}
+	labels := []Label{
+		{Name: "operation", Value: "terminal_mirror"},
+		{Name: "status", Value: status},
+	}
+	r.AddCounter(ClickHouseLogWritesTotal, labels, float64(write.RecordCount))
+	r.ObserveHistogram(ClickHouseLogWriteDurationSeconds, labels, write.DurationSeconds)
 }
 
 func (r *Registry) AsyncLogEnqueue(event AsyncLogEvent) {

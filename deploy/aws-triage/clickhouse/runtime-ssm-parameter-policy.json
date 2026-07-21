@@ -1,0 +1,17 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ReadClickHouseRuntimeSecrets",
+      "Effect": "Allow",
+      "Action": [
+        "ssm:GetParameter"
+      ],
+      "Resource": [
+        "arn:aws:ssm:ap-northeast-2:431772290654:parameter/gatelm/production/clickhouse/password",
+        "arn:aws:ssm:ap-northeast-2:431772290654:parameter/gatelm/production/clickhouse/reader-password",
+        "arn:aws:ssm:ap-northeast-2:431772290654:parameter/gatelm/production/clickhouse/employee-identity-hmac-secret"
+      ]
+    }
+  ]
+}

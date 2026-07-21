@@ -716,6 +716,10 @@ func (h AnalyticsPerformanceHandler) ServeHTTP(w http.ResponseWriter, r *http.Re
 			return
 		}
 		logInvocationLogInternalError(r, "get_analytics_performance", filter.TenantID, filter.ProjectID, err)
+		if errors.Is(err, invocationlog.ErrAnalyticsDataUnavailable) {
+			writeGatewayError(w, http.StatusServiceUnavailable, "", "ANALYTICS_DATA_UNAVAILABLE", "Analytics performance data is unavailable.")
+			return
+		}
 		writeGatewayError(w, http.StatusInternalServerError, "", "internal_error", "Analytics performance could not be loaded.")
 		return
 	}
