@@ -69,12 +69,16 @@ var asyncLogEnvKeys = []string{
 
 var clickHouseAnalyticsEnvKeys = []string{
 	"GATEWAY_CLICKHOUSE_ANALYTICS_ENABLED",
+	"GATEWAY_CLICKHOUSE_ANALYTICS_PERFORMANCE_READ_ENABLED",
 	"GATEWAY_CLICKHOUSE_URL",
 	"GATEWAY_CLICKHOUSE_DATABASE",
 	"GATEWAY_CLICKHOUSE_TABLE",
 	"GATEWAY_CLICKHOUSE_USERNAME",
 	"GATEWAY_CLICKHOUSE_PASSWORD",
 	"GATEWAY_CLICKHOUSE_WRITE_TIMEOUT_MS",
+	"GATEWAY_CLICKHOUSE_ANALYTICS_READ_USERNAME",
+	"GATEWAY_CLICKHOUSE_ANALYTICS_READ_PASSWORD",
+	"GATEWAY_CLICKHOUSE_ANALYTICS_READ_TIMEOUT_MS",
 	"GATEWAY_CLICKHOUSE_EMPLOYEE_IDENTITY_HMAC_SECRET",
 }
 
@@ -436,8 +440,49 @@ func TestClickHouseAnalyticsConfigDefaultsDisabled(t *testing.T) {
 	if cfg.ClickHouseAnalytics.Enabled {
 		t.Fatal("ClickHouse analytics mirror must require explicit opt-in")
 	}
+	if cfg.ClickHouseAnalytics.PerformanceReadEnabled {
+		t.Fatal("ClickHouse performance reader must require explicit opt-in")
+	}
 	if cfg.ClickHouseAnalytics.WriteTimeout != 300*time.Millisecond {
 		t.Fatalf("unexpected ClickHouse write timeout: %s", cfg.ClickHouseAnalytics.WriteTimeout)
+	}
+	if cfg.ClickHouseAnalytics.ReadTimeout != 1500*time.Millisecond {
+		t.Fatalf("unexpected ClickHouse read timeout: %s", cfg.ClickHouseAnalytics.ReadTimeout)
+	}
+}
+
+func TestClickHouseAnalyticsConfigLoadsPerformanceReaderIndependently(t *testing.T) {
+	resetSemanticCacheEnv(t)
+	resetAsyncLogEnv(t)
+	resetClickHouseAnalyticsEnv(t)
+	t.Setenv("GATEWAY_CLICKHOUSE_ANALYTICS_PERFORMANCE_READ_ENABLED", "true")
+	t.Setenv("GATEWAY_CLICKHOUSE_URL", "http://10.78.2.60:8123")
+	t.Setenv("GATEWAY_CLICKHOUSE_ANALYTICS_READ_USERNAME", "analytics_reader")
+	t.Setenv("GATEWAY_CLICKHOUSE_ANALYTICS_READ_PASSWORD", "reader-password-123")
+	t.Setenv("GATEWAY_CLICKHOUSE_ANALYTICS_READ_TIMEOUT_MS", "2400")
+
+	cfg, err := LoadWithError()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if cfg.ClickHouseAnalytics.Enabled || !cfg.ClickHouseAnalytics.PerformanceReadEnabled {
+		t.Fatalf("reader must not implicitly enable the writer: %+v", cfg.ClickHouseAnalytics)
+	}
+	if cfg.ClickHouseAnalytics.ReadUsername != "analytics_reader" || cfg.ClickHouseAnalytics.ReadTimeout != 2400*time.Millisecond {
+		t.Fatalf("unexpected reader config: %+v", cfg.ClickHouseAnalytics)
+	}
+}
+
+func TestClickHouseAnalyticsConfigRejectsPerformanceReaderWithoutBoundedCredential(t *testing.T) {
+	resetSemanticCacheEnv(t)
+	resetAsyncLogEnv(t)
+	resetClickHouseAnalyticsEnv(t)
+	t.Setenv("GATEWAY_CLICKHOUSE_ANALYTICS_PERFORMANCE_READ_ENABLED", "true")
+	t.Setenv("GATEWAY_CLICKHOUSE_ANALYTICS_READ_PASSWORD", "short")
+
+	_, err := LoadWithError()
+	if err == nil || !strings.Contains(err.Error(), "must be at least 16 characters") {
+		t.Fatalf("expected bounded reader credential rejection, got %v", err)
 	}
 }
 

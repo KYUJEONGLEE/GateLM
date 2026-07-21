@@ -15,8 +15,9 @@ import (
 )
 
 var (
-	ErrInvalidLogQuery = errors.New("invalid invocation log query")
-	ErrLogNotFound     = errors.New("invocation log not found")
+	ErrInvalidLogQuery          = errors.New("invalid invocation log query")
+	ErrLogNotFound              = errors.New("invocation log not found")
+	ErrAnalyticsDataUnavailable = errors.New("analytics data is unavailable")
 )
 
 type Reader interface {
@@ -74,8 +75,12 @@ type AnalyticsPerformanceFilter struct {
 	Provider          string
 	Model             string
 	IncludeTenantChat bool
-	From              time.Time
-	To                time.Time
+	// Surface is an internal reader selector. HTTP handlers intentionally do not
+	// populate it; hybrid readers use it to keep the PostgreSQL Tenant Chat
+	// branch separate from the ClickHouse Project/Application branch.
+	Surface string
+	From    time.Time
+	To      time.Time
 }
 
 type LlmInvocationLog struct {
@@ -766,11 +771,15 @@ func NormalizeAnalyticsPerformanceFilter(filter AnalyticsPerformanceFilter) (Ana
 	filter.ProjectID = strings.TrimSpace(filter.ProjectID)
 	filter.Provider = strings.TrimSpace(filter.Provider)
 	filter.Model = strings.TrimSpace(filter.Model)
+	filter.Surface = strings.TrimSpace(filter.Surface)
 	if filter.TenantID == "" {
 		return AnalyticsPerformanceFilter{}, fmt.Errorf("%w: tenant id is required", ErrInvalidLogQuery)
 	}
 	if err := validateTimeRange(filter.From, filter.To); err != nil {
 		return AnalyticsPerformanceFilter{}, err
+	}
+	if filter.Surface != "" && filter.Surface != AnalyticsSurfaceProjectApplication && filter.Surface != AnalyticsSurfaceTenantChat {
+		return AnalyticsPerformanceFilter{}, fmt.Errorf("%w: analytics surface is invalid", ErrInvalidLogQuery)
 	}
 	return filter, nil
 }

@@ -1300,7 +1300,9 @@ func buildAnalyticsPerformanceFilteredCTE(filter invocationlog.AnalyticsPerforma
 		tenantChatWhere = append(tenantChatWhere, "effective_model_key = "+placeholder)
 	}
 
-	branches := []string{fmt.Sprintf(`
+	branches := []string{}
+	if analyticsPerformanceIncludesProjectApplication(filter) {
+		branches = append(branches, fmt.Sprintf(`
   select
 	'%s'::text as surface,
     request_id,
@@ -1316,7 +1318,8 @@ func buildAnalyticsPerformanceFilteredCTE(filter invocationlog.AnalyticsPerforma
 	(%s in ('success', 'failed') and latency_ms is not null) as latency_eligible,
     created_at
   from p0_llm_invocation_logs
-	where %s`, invocationlog.AnalyticsSurfaceProjectApplication, terminalStatusSQL, terminalStatusSQL, terminalStatusSQL, strings.Join(projectApplicationWhere, " and "))}
+	where %s`, invocationlog.AnalyticsSurfaceProjectApplication, terminalStatusSQL, terminalStatusSQL, terminalStatusSQL, strings.Join(projectApplicationWhere, " and ")))
+	}
 
 	if includeTenantChat {
 		branches = append(branches, fmt.Sprintf(`
@@ -1362,7 +1365,10 @@ func fillAnalyticsLatencyDistributionBuckets(filter invocationlog.AnalyticsPerfo
 		bucketByStart[surfaceBucketKey{surface: bucket.Surface, start: start}] = bucket
 	}
 
-	surfaces := []string{invocationlog.AnalyticsSurfaceProjectApplication}
+	surfaces := []string{}
+	if analyticsPerformanceIncludesProjectApplication(filter) {
+		surfaces = append(surfaces, invocationlog.AnalyticsSurfaceProjectApplication)
+	}
 	if analyticsPerformanceIncludesTenantChat(filter) {
 		surfaces = append(surfaces, invocationlog.AnalyticsSurfaceTenantChat)
 	}
@@ -1391,7 +1397,10 @@ func fillAnalyticsPerformanceSurfaceSummaries(filter invocationlog.AnalyticsPerf
 		bySurface[item.Surface] = item
 	}
 
-	surfaces := []string{invocationlog.AnalyticsSurfaceProjectApplication}
+	surfaces := []string{}
+	if analyticsPerformanceIncludesProjectApplication(filter) {
+		surfaces = append(surfaces, invocationlog.AnalyticsSurfaceProjectApplication)
+	}
 	if analyticsPerformanceIncludesTenantChat(filter) {
 		surfaces = append(surfaces, invocationlog.AnalyticsSurfaceTenantChat)
 	}
@@ -1451,13 +1460,26 @@ func analyticsThroughput(totalRequests int64, filter invocationlog.AnalyticsPerf
 }
 
 func analyticsPerformanceDataSource(filter invocationlog.AnalyticsPerformanceFilter) string {
+	if filter.Surface == invocationlog.AnalyticsSurfaceTenantChat {
+		return "postgresql_tenant_chat_raw"
+	}
 	if !analyticsPerformanceIncludesTenantChat(filter) {
 		return "postgresql_request_log"
 	}
 	return "postgresql_unified_raw"
 }
 
+func analyticsPerformanceIncludesProjectApplication(filter invocationlog.AnalyticsPerformanceFilter) bool {
+	return filter.Surface != invocationlog.AnalyticsSurfaceTenantChat
+}
+
 func analyticsPerformanceIncludesTenantChat(filter invocationlog.AnalyticsPerformanceFilter) bool {
+	if filter.Surface == invocationlog.AnalyticsSurfaceProjectApplication {
+		return false
+	}
+	if filter.Surface == invocationlog.AnalyticsSurfaceTenantChat {
+		return true
+	}
 	return strings.TrimSpace(filter.ProjectID) == "" || filter.IncludeTenantChat
 }
 

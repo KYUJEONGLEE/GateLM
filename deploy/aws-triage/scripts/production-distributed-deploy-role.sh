@@ -333,6 +333,17 @@ if [[ "${role}" == "gateway" ]]; then
     upsert_env_value GATEWAY_CLICKHOUSE_EMPLOYEE_IDENTITY_HMAC_SECRET "${clickhouse_identity_hmac_secret}"
     unset clickhouse_password clickhouse_identity_hmac_secret
   fi
+  if [[ "${GATEWAY_CLICKHOUSE_ANALYTICS_PERFORMANCE_READ_ENABLED:-false}" == "true" ]]; then
+    clickhouse_reader_password="$(aws ssm get-parameter \
+      --name "${GATELM_CLICKHOUSE_READER_PASSWORD_PARAMETER_NAME:-/gatelm/production/clickhouse/reader-password}" \
+      --with-decryption \
+      --query Parameter.Value \
+      --output text)"
+    [[ ${#clickhouse_reader_password} -ge 16 ]] || \
+      deploy_fail "ClickHouse reader password SecureString is missing or too short."
+    upsert_env_value GATEWAY_CLICKHOUSE_ANALYTICS_READ_PASSWORD "${clickhouse_reader_password}"
+    unset clickhouse_reader_password
+  fi
 fi
 
 if [[ "${role}" == "data" ]]; then

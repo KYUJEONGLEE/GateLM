@@ -170,12 +170,16 @@ type Config struct {
 
 type ClickHouseAnalyticsConfig struct {
 	Enabled                    bool
+	PerformanceReadEnabled     bool
 	EndpointURL                string
 	Database                   string
 	Table                      string
 	Username                   string
 	Password                   string
+	ReadUsername               string
+	ReadPassword               string
 	WriteTimeout               time.Duration
+	ReadTimeout                time.Duration
 	EmployeeIdentityHMACSecret string
 }
 
@@ -426,6 +430,15 @@ func LoadWithError() (Config, error) {
 	if clickHouseWriteTimeoutErr != nil {
 		return Config{}, clickHouseWriteTimeoutErr
 	}
+	clickHouseReadTimeout, clickHouseReadTimeoutErr := envDurationMillisInRange(
+		"GATEWAY_CLICKHOUSE_ANALYTICS_READ_TIMEOUT_MS",
+		1500,
+		100,
+		10000,
+	)
+	if clickHouseReadTimeoutErr != nil {
+		return Config{}, clickHouseReadTimeoutErr
+	}
 	databaseURL := envString("DATABASE_URL", "postgresql://gatelm:gatelm@localhost:5432/gatelm?schema=public")
 	exactCacheKeySecret := envString("GATEWAY_EXACT_CACHE_KEY_SECRET", "cache_key_secret_for_p0_demo_only")
 	providerTimeout := envDurationMillis("GATEWAY_PROVIDER_TIMEOUT_MS", 5000)
@@ -551,12 +564,16 @@ func LoadWithError() (Config, error) {
 		},
 		ClickHouseAnalytics: ClickHouseAnalyticsConfig{
 			Enabled:                    envBool("GATEWAY_CLICKHOUSE_ANALYTICS_ENABLED", false),
+			PerformanceReadEnabled:     envBool("GATEWAY_CLICKHOUSE_ANALYTICS_PERFORMANCE_READ_ENABLED", false),
 			EndpointURL:                strings.TrimSpace(envString("GATEWAY_CLICKHOUSE_URL", "http://localhost:8123")),
 			Database:                   strings.TrimSpace(envString("GATEWAY_CLICKHOUSE_DATABASE", "analytics")),
 			Table:                      strings.TrimSpace(envString("GATEWAY_CLICKHOUSE_TABLE", "llm_invocations")),
 			Username:                   strings.TrimSpace(envString("GATEWAY_CLICKHOUSE_USERNAME", "default")),
 			Password:                   envString("GATEWAY_CLICKHOUSE_PASSWORD", ""),
+			ReadUsername:               strings.TrimSpace(envString("GATEWAY_CLICKHOUSE_ANALYTICS_READ_USERNAME", "analytics_reader")),
+			ReadPassword:               envString("GATEWAY_CLICKHOUSE_ANALYTICS_READ_PASSWORD", ""),
 			WriteTimeout:               clickHouseWriteTimeout,
+			ReadTimeout:                clickHouseReadTimeout,
 			EmployeeIdentityHMACSecret: envString("GATEWAY_CLICKHOUSE_EMPLOYEE_IDENTITY_HMAC_SECRET", ""),
 		},
 		AsyncLogEnabled:            envBool("GATEWAY_ASYNC_LOG_ENABLED", true),
@@ -651,10 +668,10 @@ func LoadWithError() (Config, error) {
 
 func validateClickHouseAnalyticsConfig(cfg Config) error {
 	clickHouse := cfg.ClickHouseAnalytics
-	if !clickHouse.Enabled {
+	if !clickHouse.Enabled && !clickHouse.PerformanceReadEnabled {
 		return nil
 	}
-	if !cfg.AsyncLogEnabled {
+	if clickHouse.Enabled && !cfg.AsyncLogEnabled {
 		return errors.New("ClickHouse analytics mirror requires GATEWAY_ASYNC_LOG_ENABLED=true")
 	}
 	endpoint, err := url.Parse(strings.TrimSpace(clickHouse.EndpointURL))
@@ -670,8 +687,14 @@ func validateClickHouseAnalyticsConfig(cfg Config) error {
 	if !simpleIdentifier(clickHouse.Database) || !simpleIdentifier(clickHouse.Table) {
 		return errors.New("ClickHouse database and table must be simple identifiers")
 	}
-	if len(clickHouse.EmployeeIdentityHMACSecret) < 32 {
+	if clickHouse.Enabled && len(clickHouse.EmployeeIdentityHMACSecret) < 32 {
 		return errors.New("GATEWAY_CLICKHOUSE_EMPLOYEE_IDENTITY_HMAC_SECRET must be at least 32 characters")
+	}
+	if clickHouse.PerformanceReadEnabled && strings.TrimSpace(clickHouse.ReadUsername) == "" {
+		return errors.New("GATEWAY_CLICKHOUSE_ANALYTICS_READ_USERNAME is required when performance reads are enabled")
+	}
+	if clickHouse.PerformanceReadEnabled && len(clickHouse.ReadPassword) < 16 {
+		return errors.New("GATEWAY_CLICKHOUSE_ANALYTICS_READ_PASSWORD must be at least 16 characters when performance reads are enabled")
 	}
 	return nil
 }
