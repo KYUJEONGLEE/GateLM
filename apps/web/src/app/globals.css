@@ -25531,9 +25531,9 @@ html:not([data-theme="dark"]) .console-shell {
   --popover: #ffffff;
   --muted: #eceff2;
   --input: #cfd4da;
-  --border: #c5cbd2;
-  --border-subtle: #d7dbe0;
-  --border-strong: #b4bcc5;
+  --border: #aeb7c1;
+  --border-subtle: #c5cbd2;
+  --border-strong: #9faab5;
   --neutral-soft: #f0f2f4;
   --neutral-border: #d3d8de;
   --shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.04);
@@ -25586,23 +25586,6 @@ html:not([data-theme="dark"])
   .dashboard-kpi-icon {
   background: color-mix(in srgb, var(--brand-blue) 9%, var(--card));
   color: var(--brand-blue-strong);
-}
-
-html .dashboard-overview-workspace .dashboard-kpi-card[data-tone="accent"] {
-  background: linear-gradient(135deg, #2c5f9f 0%, #1e3a5f 100%);
-}
-
-.dashboard-overview-workspace
-  .dashboard-kpi-card[data-tone="accent"]
-  :is(.dashboard-kpi-label, strong) {
-  color: #ffffff;
-}
-
-.dashboard-overview-workspace
-  .dashboard-kpi-card[data-tone="accent"]
-  .dashboard-kpi-icon {
-  background: rgba(255, 255, 255, 0.14);
-  color: #ffffff;
 }
 
 /* Management pages use bounded section bands instead of loose rows on canvas. */
