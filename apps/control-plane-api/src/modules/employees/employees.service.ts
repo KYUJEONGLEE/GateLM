@@ -22,6 +22,7 @@ import { PrismaService } from '@/infrastructure/database/prisma/prisma.service';
 import { createOpaqueToken, hashSecret, normalizeEmail } from '../auth/auth.crypto';
 import { EMAIL_SENDER } from '../auth/auth.tokens';
 import { EmailSender } from '../auth/email-sender';
+import { ClickHouseEmployeeUsageReader } from './clickhouse-employee-usage.reader';
 import {
   CreateEmployeeDto,
   EmployeeCsvImportResponseDto,
@@ -146,6 +147,7 @@ export class EmployeesService {
     private readonly config: ConfigService,
     @Inject(EMAIL_SENDER)
     private readonly emailSender: EmailSender,
+    private readonly clickHouseReader?: ClickHouseEmployeeUsageReader,
   ) {}
 
   async listEmployees(
@@ -781,14 +783,16 @@ export class EmployeesService {
     projectId: string,
   ): Promise<ProjectEmployeesResponseDto> {
     const project = await this.getProjectOrThrow(projectId);
-    const [assignments, usageRows] = await Promise.all([
-      this.prisma.projectEmployeeAssignment.findMany({
-        where: { projectId },
-        include: { employee: true },
-        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-      }),
-      this.listProjectEmployeeUsage(project.tenantId, project.id),
-    ]);
+    const assignments = await this.prisma.projectEmployeeAssignment.findMany({
+      where: { projectId },
+      include: { employee: true },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    });
+    const usageRows = await this.listProjectEmployeeUsage(
+      project.tenantId,
+      project.id,
+      assignments,
+    );
     const usageByEmployeeId = new Map(
       usageRows.map((row) => [row.employeeId, row]),
     );
@@ -825,7 +829,7 @@ export class EmployeesService {
     employeeId: string,
     dto: UpsertProjectEmployeeAssignmentDto,
   ): Promise<ProjectEmployeeAssignmentResponseDto> {
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       const lockedProjects = await tx.$queryRaw<Array<{ id: string }>>`
         SELECT "id"
         FROM "projects"
@@ -912,35 +916,18 @@ export class EmployeesService {
             include: { employee: true },
           });
 
-      const usageRows = await tx.$queryRaw<ProjectEmployeeUsageRow[]>`
-        SELECT
-          ${employee.id}::text AS "employeeId",
-          COALESCE(SUM(log.cost_micro_usd), 0)::bigint AS "usedMicroUsd",
-        COALESCE(SUM(log.total_tokens) FILTER (
-            WHERE log.created_at >= date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
-              AND log.created_at < (date_trunc('day', now() AT TIME ZONE 'UTC') + interval '1 day') AT TIME ZONE 'UTC'
-          ), 0)::bigint AS "dailyUsedTokens"
-        FROM employees employee
-        LEFT JOIN p0_llm_invocation_logs log
-          ON log.tenant_id = ${project.tenantId}::uuid
-         AND log.project_id = ${project.id}::uuid
-         AND log.created_at >= date_trunc('month', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
-         AND log.created_at < (date_trunc('month', now() AT TIME ZONE 'UTC') + interval '1 month') AT TIME ZONE 'UTC'
-         AND (
-           log.end_user_id = employee.id::text
-           OR log.end_user_id = employee."userId"::text
-           OR log.end_user_id = lower(employee.email)
-         )
-        WHERE employee.id = ${employee.id}::uuid
-        GROUP BY employee.id
-      `;
-
-      return this.toProjectEmployeeAssignmentResponse(
-        assignment,
-        usageRows[0]?.usedMicroUsd ?? 0n,
-        usageRows[0]?.dailyUsedTokens ?? 0n,
-      );
+      return { assignment, project };
     });
+    const usageRows = await this.listProjectEmployeeUsage(
+      result.project.tenantId,
+      result.project.id,
+      [result.assignment],
+    );
+    return this.toProjectEmployeeAssignmentResponse(
+      result.assignment,
+      usageRows[0]?.usedMicroUsd ?? 0n,
+      usageRows[0]?.dailyUsedTokens ?? 0n,
+    );
   }
 
   async disableProjectEmployeeAssignment(
@@ -1420,7 +1407,41 @@ export class EmployeesService {
   private async listProjectEmployeeUsage(
     tenantId: string,
     projectId: string,
+    assignments: ProjectEmployeeWithEmployee[],
   ): Promise<ProjectEmployeeUsageRow[]> {
+    if (this.clickHouseReader?.isEnabled()) {
+      const now = new Date();
+      const monthFrom = new Date(
+        Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1),
+      );
+      const monthTo = new Date(
+        Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1),
+      );
+      const dayFrom = new Date(
+        Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+      );
+      const dayTo = new Date(dayFrom.getTime() + 24 * 60 * 60 * 1_000);
+      const result = await this.clickHouseReader.readProjectPolicyUsage({
+        tenantId,
+        projectId,
+        monthFrom,
+        monthTo,
+        dayFrom,
+        dayTo,
+        identities: assignments.map((assignment) => ({
+          employeeId: assignment.employee.id,
+          userId: assignment.employee.userId,
+          email: assignment.employee.email,
+        })),
+      });
+      return assignments.map((assignment) => ({
+        employeeId: assignment.employee.id,
+        dailyUsedTokens:
+          result.byEmployeeId.get(assignment.employee.id)?.dailyUsedTokens ?? 0n,
+        usedMicroUsd:
+          result.byEmployeeId.get(assignment.employee.id)?.usedMicroUsd ?? 0n,
+      }));
+    }
     return this.prisma.$queryRaw<ProjectEmployeeUsageRow[]>`
       SELECT
         employee.id::text AS "employeeId",

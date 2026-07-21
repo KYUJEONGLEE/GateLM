@@ -2,8 +2,8 @@
 
 | Field | Value |
 |---|---|
-| Status | Phase 1 mirror, Phase 2 employee usage, Phase 3 Performance reader, and Phase 4 Project/Application log read cutover implementation companion |
-| Applies to | Gateway terminal log mirror, ClickHouse analytics storage, employee usage reads, and Project/Application log-based reads |
+| Status | Phase 1 mirror through Phase 5 complete Project/Application analytics read cutover implementation companion |
+| Applies to | Gateway terminal log mirror, ClickHouse analytics storage, employee usage and security reads, project employee policy usage reads, and Project/Application log-based reads |
 | Canonical source during mirror phase | PostgreSQL `p0_llm_invocation_logs` |
 | Initial read cutover | Explicitly gated employee usage and all Gateway Project/Application log-based reads |
 
@@ -192,3 +192,34 @@ analytics-unavailable response. It must never silently execute the equivalent
 bulk query against PostgreSQL `p0_llm_invocation_logs`. Operators must apply
 `003_expand_project_log_reads.sql` and replay/reconcile the selected interval
 before enabling the expanded reader for an existing deployment.
+
+## Phase 5 remaining Control Plane read boundary
+
+When `CLICKHOUSE_ANALYTICS_READ_ENABLED=true`, the remaining Control Plane
+Project/Application analytics consumers use `analytics.llm_invocations FINAL`:
+
+- employee security request, masking, and blocking aggregates;
+- project employee monthly cost and current UTC-day token display values;
+- employee usage ranking and unattributed totals from Phase 2.
+
+Employee master data and project assignments remain in PostgreSQL. Control
+Plane hashes identity candidates in memory and sends neither email nor another
+source identity to ClickHouse. Tenant Chat security and usage continue to read
+their dedicated PostgreSQL tables because Tenant Chat events are not part of
+the Gateway mirror.
+
+After both Control Plane and Gateway ClickHouse reads are enabled,
+`DASHBOARD_ROLLUP_PROJECT_APPLICATION_ENABLED=false` stops Project/Application
+discovery, reconciliation, and dirty-bucket rebuilding in the PostgreSQL
+Dashboard Rollup worker. Existing Project/Application rollup rows remain
+available for rollback, while the worker continues to maintain Tenant Chat
+rollups. ClickHouse failures return bounded 503 responses and must not reactivate
+a raw PostgreSQL invocation-log query. The explicit worker flag defaults to
+`true` so enabling only the employee reader cannot silently stop a Gateway that
+still depends on PostgreSQL rollups.
+
+This cutover does not make ClickHouse a quota or budget correctness source.
+Provider admission, rate limiting, reservations, settlements, and cost ledgers
+continue to use their transactional PostgreSQL or Redis stores. PostgreSQL also
+retains canonical terminal-log writes and tenant/project/request point detail
+lookups required for audit fields that are deliberately absent from ClickHouse.
