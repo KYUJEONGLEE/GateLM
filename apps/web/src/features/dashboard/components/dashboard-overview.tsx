@@ -265,8 +265,8 @@ const dashboardText: Record<
     kpi: {
       averageLatency: "평균 지연 시간",
       monthCost: "이번 달 총 비용",
-      totalCost: "총 비용",
-      totalRequests: "총 요청"
+      totalCost: "기간 총 비용",
+      totalRequests: "요청 수"
     },
     overviewWorkspace: "대시보드 개요 영역",
     refreshDashboard: "대시보드 새로고침",

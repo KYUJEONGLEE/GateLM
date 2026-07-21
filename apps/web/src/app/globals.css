@@ -13401,21 +13401,37 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
 
 @media (max-width: 1100px) {
   .provider-card-row {
-    grid-template-columns: minmax(0, 1fr) minmax(140px, auto);
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: auto auto;
   }
 
-  .provider-card-status,
+  .provider-card-identity {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .provider-card-status {
+    grid-column: 2;
+    grid-row: 1;
+    grid-template-columns: 8px auto;
+    justify-self: end;
+    width: max-content;
+    gap: 8px;
+  }
+
   .provider-card-meta {
     grid-column: 1;
+    grid-row: 2;
+    display: flex;
+    align-items: center;
+    gap: 8px;
   }
 
   .provider-card-actions {
-    grid-column: 1 / -1;
-    grid-row: auto;
-    align-self: auto;
-    justify-content: flex-end;
-    flex-direction: row;
-    align-items: center;
+    grid-column: 2;
+    grid-row: 2;
+    justify-self: end;
+    align-self: center;
   }
 
   .provider-card-actions button:not(.provider-expand-button) {
@@ -14344,21 +14360,55 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
   }
 
   .provider-card-row {
-    grid-template-columns: 1fr;
-    gap: 12px;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "identity identity"
+      "status status"
+      "meta actions";
+    gap: 12px 10px;
     padding: 16px;
   }
 
-  .provider-card-status,
-  .provider-card-meta,
-  .provider-card-actions {
-    grid-column: auto;
-    grid-row: auto;
+  .provider-card-identity {
+    grid-area: identity;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .provider-card-identity > div {
+    flex: 1 1 auto;
+    width: 0;
+  }
+
+  .provider-card-title-row {
+    align-items: flex-start;
+  }
+
+  .provider-name-input {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .provider-card-status {
+    grid-area: status;
+    grid-template-columns: 8px auto;
+    justify-self: start;
+    width: max-content;
+    gap: 8px;
+  }
+
+  .provider-card-meta {
+    grid-area: meta;
+    display: flex;
+    align-items: center;
+    align-self: center;
+    gap: 8px;
   }
 
   .provider-card-actions {
-    display: flex;
-    justify-content: flex-start;
+    grid-area: actions;
+    justify-self: end;
+    align-self: center;
   }
 
   .provider-card-actions .provider-expand-button {
@@ -14368,6 +14418,30 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
 
   .provider-card-models {
     padding: 0 16px 16px;
+  }
+
+  .provider-card-model-toolbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .provider-card-model-toolbar > div {
+    flex-wrap: wrap;
+  }
+
+  .provider-discovery-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .provider-discovery-actions .button {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .provider-delete-action {
+    margin-right: 0;
   }
 
   .api-key-issue-form > .policy-field {

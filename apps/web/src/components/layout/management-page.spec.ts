@@ -59,6 +59,23 @@ test("API management uses the shared primary action scale", async () => {
   );
 });
 
+test("Provider cards keep a compact readable layout on mobile", async () => {
+  const styles = await readFile(stylesSourceUrl, "utf8");
+
+  expect(styles).toMatch(
+    /@media \(max-width: 1100px\) \{[\s\S]*?\.provider-card-row \{[\s\S]*?grid-template-rows: auto auto;[\s\S]*?\.provider-card-identity \{[\s\S]*?grid-column: 1;[\s\S]*?grid-row: 1;/
+  );
+  expect(styles).toMatch(
+    /@media \(max-width: 760px\) \{[\s\S]*?\.provider-card-row \{[\s\S]*?grid-template-areas:[\s\S]*?"identity identity"[\s\S]*?"status status"[\s\S]*?"meta actions";/
+  );
+  expect(styles).toMatch(
+    /\.provider-card-status \{[\s\S]*?grid-area: status;[\s\S]*?grid-template-columns: 8px auto;[\s\S]*?width: max-content;/
+  );
+  expect(styles).toMatch(
+    /\.provider-discovery-actions \{[\s\S]*?grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/
+  );
+});
+
 test("primary actions share one visual token contract", async () => {
   const [styles, buttonSource] = await Promise.all([
     readFile(stylesSourceUrl, "utf8"),
