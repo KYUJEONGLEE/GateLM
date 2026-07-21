@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 104 84" width="104" height="84">
   <mask id="notch"><rect width="104" height="84" fill="white"/><rect x="58" y="32" width="26" height="20" fill="black"/></mask>
   <circle cx="40" cy="42" r="33.5" fill="none" stroke="#FFFFFF" stroke-width="13" mask="url(#notch)"/>
-  <path d="M46 36 H104 V48 H46 A6 6 0 0 1 46 36 Z" fill="#10B981"/>
+  <path d="M46 36 H104 V48 H46 A6 6 0 0 1 46 36 Z" fill="#93C5FD"/>
 </svg>

@@ -38,16 +38,16 @@
 :root {
   color-scheme: light;
   --text-muted: #5b6472;
-  --brand-blue: #10a37f;
-  --brand-blue-strong: #0f8f70;
+  --brand-blue: #2563eb;
+  --brand-blue-strong: #1d4ed8;
   --muted: #eef2f6;
   --surface: #ffffff;
-  --surface-subtle: #f4f6f8;
-  --border: #e2e8f0;
-  --border-subtle: #eef1f5;
-  --border-strong: #cbd5e1;
+  --surface-subtle: #e9eff6;
+  --border: #c7d3e2;
+  --border-subtle: #d8e2ed;
+  --border-strong: #b8c7d9;
   --accent: #edf2f7;
-  --accent-strong: #10a37f;
+  --accent-strong: #2563eb;
   --success: #15803d;
   --success-soft: #dcfce7;
   --success-border: #bbf7d0;
@@ -80,21 +80,21 @@
   --neutral-soft: #f4f6f8;
   --neutral-border: #e2e8f0;
   --neutral-text: #5b6472;
-  --shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.04);
-  --shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04);
+  --shadow-xs: 0 1px 3px rgba(15, 23, 42, 0.09);
+  --shadow-sm: 0 2px 5px rgba(15, 23, 42, 0.09), 0 1px 2px rgba(15, 23, 42, 0.06);
   --shadow-md: 0 4px 12px rgba(15, 23, 42, 0.08), 0 2px 4px rgba(15, 23, 42, 0.04);
   --shadow-lg: 0 12px 32px rgba(15, 23, 42, 0.12), 0 4px 8px rgba(15, 23, 42, 0.04);
   --shadow: var(--shadow-sm);
-  --background: #fafbfc;
+  --background: #e7edf5;
   --foreground: #0f172a;
   --card: #ffffff;
   --card-foreground: #0f172a;
   --popover: #ffffff;
   --popover-foreground: #0f172a;
-  --primary: #10a37f;
+  --primary: #2563eb;
   --primary-foreground: #ffffff;
-  --primary-action-background: #0f7f63;
-  --primary-action-background-hover: #0c765b;
+  --primary-action-background: #2563eb;
+  --primary-action-background-hover: #1d4ed8;
   --primary-action-border: transparent;
   --primary-action-foreground: #ffffff;
   --primary-action-height: 46px;
@@ -104,9 +104,9 @@
   --primary-action-icon-size: 30px;
   --primary-action-icon-padding: 7px;
   --primary-action-icon-background: rgba(255, 255, 255, 0.22);
-  --primary-action-shadow: 0 4px 10px rgba(15, 127, 99, 0.3);
-  --primary-action-shadow-hover: 0 6px 14px rgba(15, 127, 99, 0.4);
-  --primary-action-shadow-active: 0 2px 6px rgba(15, 127, 99, 0.3);
+  --primary-action-shadow: 0 4px 10px rgba(37, 99, 235, 0.28);
+  --primary-action-shadow-hover: 0 6px 14px rgba(37, 99, 235, 0.38);
+  --primary-action-shadow-active: 0 2px 6px rgba(37, 99, 235, 0.28);
   --compact-action-height: 34px;
   --compact-action-padding-inline: 12px;
   --compact-action-radius: 8px;
@@ -118,8 +118,8 @@
   --accent-foreground: #1f2937;
   --destructive: oklch(0.577 0.245 27.325);
   --input: #e2e8f0;
-  --ring: #10a37f;
-  --chart-1: #10a37f;
+  --ring: #2563eb;
+  --chart-1: #2563eb;
   --chart-2: #ff2d8d;
   --chart-3: #8ab4ff;
   --chart-4: #ffd166;
@@ -151,21 +151,21 @@
   --line-height-snug: 1.4;
   --line-height-normal: 1.6;
   --radius: 0.625rem;
-  --sidebar: #ffffff;
-  --sidebar-foreground: #1f2937;
-  --sidebar-primary: #10a37f;
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #eef4fa;
-  --sidebar-accent-foreground: #111827;
-  --sidebar-border: #dce4ee;
-  --sidebar-ring: #10a37f;
+  --sidebar: #1e3a5f;
+  --sidebar-foreground: #f1f5f9;
+  --sidebar-primary: #dbeafe;
+  --sidebar-primary-foreground: #1e3a5f;
+  --sidebar-accent: #294b74;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: #365879;
+  --sidebar-ring: #93c5fd;
 }
 
 html[data-theme="dark"] {
   color-scheme: dark;
   --text-muted: #9aa4b2;
-  --brand-blue: #10a37f;
-  --brand-blue-strong: #13c59a;
+  --brand-blue: #60a5fa;
+  --brand-blue-strong: #93c5fd;
   --muted: #21262d;
   --surface: #161b22;
   --surface-subtle: #1c2128;
@@ -173,7 +173,7 @@ html[data-theme="dark"] {
   --border-subtle: #21262d;
   --border-strong: #3f4750;
   --accent: #21262d;
-  --accent-strong: #10a37f;
+  --accent-strong: #60a5fa;
   --success: #30d158;
   --success-soft: rgba(48, 209, 88, 0.12);
   --success-border: rgba(48, 209, 88, 0.28);
@@ -217,27 +217,27 @@ html[data-theme="dark"] {
   --card-foreground: #e6edf3;
   --popover: #161b22;
   --popover-foreground: #e6edf3;
-  --primary: #10a37f;
-  --primary-foreground: #06110e;
+  --primary: #60a5fa;
+  --primary-foreground: #0f172a;
   --secondary: #21262d;
   --secondary-foreground: #e6edf3;
   --muted-foreground: #9aa4b2;
   --accent-foreground: #e6edf3;
   --input: #30363d;
-  --ring: #10a37f;
-  --chart-1: #10a37f;
+  --ring: #60a5fa;
+  --chart-1: #60a5fa;
   --chart-2: #ff2d8d;
   --chart-3: #8ab4ff;
   --chart-4: #ffd166;
   --chart-5: #b7a4ff;
   --sidebar: #0d1117;
   --sidebar-foreground: #e6edf3;
-  --sidebar-primary: #10a37f;
-  --sidebar-primary-foreground: #06110e;
+  --sidebar-primary: #60a5fa;
+  --sidebar-primary-foreground: #0f172a;
   --sidebar-accent: #1c2128;
   --sidebar-accent-foreground: #e6edf3;
   --sidebar-border: #21262d;
-  --sidebar-ring: #10a37f;
+  --sidebar-ring: #60a5fa;
 }
 
 * {
@@ -478,6 +478,14 @@ select {
   display: none;
 }
 
+html:not([data-theme="dark"]) .console-sidebar .gatelm-logo-image-light {
+  display: none;
+}
+
+html:not([data-theme="dark"]) .console-sidebar .gatelm-logo-image-dark {
+  display: block;
+}
+
 html[data-theme="dark"] .gatelm-logo-image-light {
   display: none;
 }
@@ -508,6 +516,17 @@ html[data-theme="dark"] .gatelm-logo[data-surface="light"] .gatelm-logo-image-da
 
 .gatelm-logo-wordmark span:last-child {
   color: #10b981;
+}
+
+html:not([data-theme="dark"]) .console-sidebar .gatelm-logo-wordmark {
+  color: #ffffff;
+}
+
+html:not([data-theme="dark"])
+  .console-sidebar
+  .gatelm-logo-wordmark
+  span:last-child {
+  color: #bfdbfe;
 }
 
 html[data-theme="dark"] .gatelm-logo-wordmark {
@@ -736,6 +755,11 @@ html[data-theme="dark"] .gatelm-logo[data-surface="light"] .gatelm-logo-wordmark
   color: var(--text-muted);
 }
 
+html:not([data-theme="dark"]) .console-sidebar .console-nav-link > svg,
+html:not([data-theme="dark"]) .console-sidebar .console-subnav-link {
+  color: rgba(255, 255, 255, 0.78);
+}
+
 .console-nav-link > span:first-of-type {
   flex: 1 1 auto;
   min-width: 0;
@@ -779,11 +803,11 @@ html[data-theme="dark"] .gatelm-logo[data-surface="light"] .gatelm-logo-wordmark
   background: var(--sidebar-accent);
   color: var(--sidebar-accent-foreground);
   font-weight: var(--font-weight-semibold);
-  box-shadow: inset 2px 0 0 0 var(--primary);
+  box-shadow: inset 2px 0 0 0 var(--sidebar-ring);
 }
 
 .console-nav-link[data-active="true"] > svg {
-  color: var(--primary);
+  color: var(--sidebar-primary);
 }
 
 .console-nav-badge {
@@ -854,10 +878,21 @@ html[data-theme="dark"] .gatelm-logo[data-surface="light"] .gatelm-logo-wordmark
   color: var(--foreground);
 }
 
+html:not([data-theme="dark"]) .console-sidebar .console-subnav-link:hover {
+  background: var(--sidebar-accent);
+  color: var(--sidebar-accent-foreground);
+}
+
 .console-subnav-link[data-active="true"] {
   background: var(--sidebar-accent);
   color: var(--sidebar-accent-foreground);
   font-weight: var(--font-weight-semibold);
+}
+
+html:not([data-theme="dark"])
+  .console-sidebar
+  .console-subnav-link[data-active="true"] {
+  color: var(--sidebar-accent-foreground);
 }
 
 .console-subnav-link[data-disabled="true"] {
@@ -2477,7 +2512,7 @@ html[data-theme="dark"] .dashboard-cost-over-time-metrics > div[data-kind="avera
   display: block;
   width: var(--project-spend-width);
   height: 100%;
-  background: linear-gradient(90deg, #10a37f, #14b8a6);
+  background: linear-gradient(90deg, var(--brand-blue), #60a5fa);
   border-radius: inherit;
 }
 
@@ -15993,8 +16028,8 @@ html[data-theme="dark"] .landing-brand .gatelm-logo-wordmark {
 }
 
 .landing-top-actions .language-switcher button[data-active="true"] {
-  background: #10a37f;
-  border-color: #10a37f;
+  background: var(--brand-blue);
+  border-color: var(--brand-blue);
   color: #ffffff;
 }
 
@@ -16005,8 +16040,8 @@ html[data-theme="dark"] .landing-brand .gatelm-logo-wordmark {
 }
 
 .landing-topbar .landing-auth-button-primary {
-  background: #10a37f;
-  border-color: #10a37f;
+  background: var(--brand-blue);
+  border-color: var(--brand-blue);
   color: #ffffff;
 }
 
@@ -16216,7 +16251,7 @@ html[data-theme="dark"] .landing-brand .gatelm-logo-wordmark {
 }
 
 .landing-pillar > span {
-  color: #10a37f;
+  color: var(--brand-blue);
   font-family: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
   font-size: 13px;
   font-weight: 700;
