@@ -14,6 +14,7 @@ grep -Fq 'GATEWAY_AUTH_CACHE_TTL_MS: ${GATELM_PERF_AUTH_CACHE_TTL_MS:-5000}' "${
 [[ "$(perf_unquote_env_value 's3://synthetic-bucket/model.tar.gz')" == 's3://synthetic-bucket/model.tar.gz' ]]
 [[ "$(perf_unquote_env_value '"s3://synthetic-bucket/model.tar.gz"')" == 's3://synthetic-bucket/model.tar.gz' ]]
 [[ "$(perf_unquote_env_value "'s3://synthetic-bucket/model.tar.gz'")" == 's3://synthetic-bucket/model.tar.gz' ]]
+[[ "$(perf_trim $'s3://synthetic-bucket/model.tar.gz\r')" == 's3://synthetic-bucket/model.tar.gz' ]]
 
 for ip in 10.0.0.1 10.255.255.254 172.16.0.1 172.31.255.254 192.168.1.10; do
   perf_is_private_ipv4 "${ip}" || {
