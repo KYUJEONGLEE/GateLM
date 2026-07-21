@@ -17,6 +17,41 @@ type performanceStub struct {
 	calls  int
 }
 
+type fullReaderStub struct {
+	performanceStub
+	listCalls, detailCalls, dashboardCalls, costCalls, policyCalls, reliabilityCalls, optionCalls int
+	listErr                                                                                       error
+}
+
+func (s *fullReaderStub) ListProjectLogs(_ context.Context, _ invocationlog.ProjectLogsFilter) ([]invocationlog.RequestLogListItem, error) {
+	s.listCalls++
+	return []invocationlog.RequestLogListItem{{RequestID: "project-reader"}}, s.listErr
+}
+func (s *fullReaderStub) GetRequestDetail(_ context.Context, _ invocationlog.RequestDetailFilter) (invocationlog.RequestDetail, error) {
+	s.detailCalls++
+	return invocationlog.RequestDetail{RequestID: "postgres-detail"}, nil
+}
+func (s *fullReaderStub) GetDashboardOverview(_ context.Context, _ invocationlog.DashboardOverviewFilter) (invocationlog.DashboardOverviewFields, error) {
+	s.dashboardCalls++
+	return invocationlog.DashboardOverviewFields{}, nil
+}
+func (s *fullReaderStub) GetCostReport(_ context.Context, _ invocationlog.CostReportFilter) (invocationlog.CostReportFields, error) {
+	s.costCalls++
+	return invocationlog.CostReportFields{}, nil
+}
+func (s *fullReaderStub) GetAnalyticsPolicyImpact(_ context.Context, _ invocationlog.AnalyticsPolicyImpactFilter) (invocationlog.AnalyticsPolicyImpactFields, error) {
+	s.policyCalls++
+	return invocationlog.AnalyticsPolicyImpactFields{}, nil
+}
+func (s *fullReaderStub) GetAnalyticsReliability(_ context.Context, _ invocationlog.AnalyticsReliabilityFilter) (invocationlog.AnalyticsReliabilityFields, error) {
+	s.reliabilityCalls++
+	return invocationlog.AnalyticsReliabilityFields{Freshness: invocationlog.AnalyticsReliabilityFreshness{Complete: true}}, nil
+}
+func (s *fullReaderStub) ListProjectLogFilterOptions(_ context.Context, _ invocationlog.ProjectLogsFilter) (invocationlog.RequestLogFilterOptions, error) {
+	s.optionCalls++
+	return invocationlog.RequestLogFilterOptions{}, nil
+}
+
 func (s *performanceStub) GetAnalyticsPerformance(_ context.Context, filter invocationlog.AnalyticsPerformanceFilter) (invocationlog.AnalyticsPerformanceFields, error) {
 	s.calls++
 	s.filter = filter
@@ -78,6 +113,51 @@ func TestAnalyticsReaderProjectScopeDoesNotQueryTenantChat(t *testing.T) {
 	}
 	if tenant.calls != 0 || project.calls != 1 {
 		t.Fatalf("unexpected calls: project=%d tenant=%d", project.calls, tenant.calls)
+	}
+}
+
+func TestAnalyticsReaderRoutesEveryProjectBulkReadToClickHouseAndKeepsDetailOnPostgres(t *testing.T) {
+	from := time.Now().UTC().Add(-time.Hour)
+	primary := &fullReaderStub{}
+	project := &fullReaderStub{}
+	reader, err := NewAnalyticsReader(primary, project)
+	if err != nil {
+		t.Fatalf("new hybrid reader: %v", err)
+	}
+	projectID := "00000000-0000-4000-8000-000000000200"
+	tenantID := "00000000-0000-4000-8000-000000000100"
+	_, _ = reader.ListProjectLogs(context.Background(), invocationlog.ProjectLogsFilter{TenantID: tenantID, ProjectID: projectID, From: from, To: from.Add(time.Hour)})
+	_, _ = reader.GetDashboardOverview(context.Background(), invocationlog.DashboardOverviewFilter{TenantID: tenantID, ProjectID: projectID, From: from, To: from.Add(time.Hour)})
+	_, _ = reader.GetCostReport(context.Background(), invocationlog.CostReportFilter{TenantID: tenantID, ProjectID: projectID, From: from, To: from.Add(time.Hour)})
+	_, _ = reader.GetAnalyticsPolicyImpact(context.Background(), invocationlog.AnalyticsPolicyImpactFilter{TenantID: tenantID, ProjectID: projectID, From: from, To: from.Add(time.Hour)})
+	_, _ = reader.GetAnalyticsReliability(context.Background(), invocationlog.AnalyticsReliabilityFilter{TenantID: tenantID, ProjectID: projectID, From: from, To: from.Add(time.Hour)})
+	_, _ = reader.ListProjectLogFilterOptions(context.Background(), invocationlog.ProjectLogsFilter{TenantID: tenantID, ProjectID: projectID, From: from, To: from.Add(time.Hour)})
+	detail, _ := reader.GetRequestDetail(context.Background(), invocationlog.RequestDetailFilter{TenantID: tenantID, ProjectID: projectID, RequestID: "request"})
+	if project.listCalls != 1 || project.dashboardCalls != 1 || project.costCalls != 1 || project.policyCalls != 1 || project.reliabilityCalls != 1 || project.optionCalls != 1 {
+		t.Fatalf("project bulk reads did not all route to ClickHouse stub: %+v", project)
+	}
+	if primary.listCalls != 0 || primary.dashboardCalls != 0 || primary.costCalls != 0 || primary.policyCalls != 0 || primary.reliabilityCalls != 0 || primary.optionCalls != 0 {
+		t.Fatalf("project bulk read reached PostgreSQL primary: %+v", primary)
+	}
+	if primary.detailCalls != 1 || detail.RequestID != "postgres-detail" {
+		t.Fatalf("request detail must remain a PostgreSQL point lookup: calls=%d detail=%+v", primary.detailCalls, detail)
+	}
+}
+
+func TestAnalyticsReaderDoesNotFallbackProjectLogsToPostgres(t *testing.T) {
+	from := time.Now().UTC().Add(-time.Hour)
+	primary := &fullReaderStub{}
+	project := &fullReaderStub{listErr: errors.New("clickhouse unavailable")}
+	reader, err := NewAnalyticsReader(primary, project)
+	if err != nil {
+		t.Fatalf("new hybrid reader: %v", err)
+	}
+	_, err = reader.ListProjectLogs(context.Background(), invocationlog.ProjectLogsFilter{TenantID: "00000000-0000-4000-8000-000000000100", ProjectID: "00000000-0000-4000-8000-000000000200", From: from, To: from.Add(time.Hour)})
+	if err == nil {
+		t.Fatal("expected ClickHouse read error")
+	}
+	if primary.listCalls != 0 {
+		t.Fatalf("PostgreSQL fallback must stay disabled, got %d calls", primary.listCalls)
 	}
 }
 

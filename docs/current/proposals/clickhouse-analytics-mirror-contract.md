@@ -2,10 +2,10 @@
 
 | Field | Value |
 |---|---|
-| Status | Phase 1 mirror, Phase 2 employee usage, and Phase 3 Performance reader implementation companion |
-| Applies to | Gateway terminal log mirror, ClickHouse analytics storage, employee usage reads, and Analytics Performance reads |
+| Status | Phase 1 mirror, Phase 2 employee usage, Phase 3 Performance reader, and Phase 4 Project/Application log read cutover implementation companion |
+| Applies to | Gateway terminal log mirror, ClickHouse analytics storage, employee usage reads, and Project/Application log-based reads |
 | Canonical source during mirror phase | PostgreSQL `p0_llm_invocation_logs` |
-| Initial read cutover | Explicitly gated employee usage and Analytics Performance Project/Application reads |
+| Initial read cutover | Explicitly gated employee usage and all Gateway Project/Application log-based reads |
 
 ## Problem
 
@@ -42,10 +42,13 @@ idempotency.
 
 - `request_id`, `tenant_id`, `project_id`, `application_id`
 - `employee_identity_hash`
-- `provider`, `model`, `status`, `http_status`
+- `provider`, `model`, `provider_id`, `model_id`, `requested_model`, `model_ref`,
+  `routing_reason`, `status`, `http_status`
 - `prompt_tokens`, `completion_tokens`, `total_tokens`, `cost_micro_usd`,
   nullable `saved_cost_micro_usd`
-- `latency_ms`, `cache_status`, `routing_category`, `routing_difficulty`
+- `latency_ms`, nullable `provider_latency_ms`, `gateway_internal_latency_ms`,
+  nullable `ttft_ms`, `stream`, `cache_status`, `cache_type`,
+  `routing_category`, `routing_difficulty`
 - `terminal_status`, `fallback_outcome`, `safety_outcome`, `budget_outcome`
 - `masking_action`, `provider_called`
 - `budget_scope_type`, `budget_scope_id`, `budget_scope_resolved_by`
@@ -77,6 +80,9 @@ or an equivalent latest-version query.
 - `gatelm_clickhouse_log_write_duration_seconds{operation="terminal_mirror",status}`
 - `gatelm_clickhouse_analytics_reads_total{endpoint="performance",status}`
 - `gatelm_clickhouse_analytics_read_duration_seconds{endpoint="performance",status}`
+
+The bounded `endpoint` values for Phase 4 are `logs`, `log_filter_options`,
+`dashboard`, `cost`, `performance`, `policy_impact`, and `reliability`.
 
 Allowed status values are `success`, `timeout`, and `error`. Tenant, project,
 employee, and request identifiers are forbidden metric labels.
@@ -155,3 +161,34 @@ default. Before enabling it for an existing interval, operators must apply
 ClickHouse aggregates. The replay writes a higher `ingest_version`, so
 `ReplacingMergeTree ... FINAL` selects the expanded row without deleting the
 rollback source in PostgreSQL.
+
+## Phase 4 Project/Application log read boundary
+
+The existing `GATEWAY_CLICKHOUSE_ANALYTICS_PERFORMANCE_READ_ENABLED` gate is
+retained for rollback compatibility, but its enabled behavior now covers every
+bulk Project/Application log read exposed by Gateway:
+
+- request log list and filter options
+- dashboard overview
+- cost report
+- analytics performance
+- analytics policy impact
+- analytics reliability
+
+PostgreSQL remains the canonical terminal-log write store. The only Gateway
+request-log read intentionally left on PostgreSQL is the tenant/project scoped
+`request_id` point detail lookup because ClickHouse deliberately does not store
+prompt/response capture, detailed error, or other audit-only fields required by
+that response.
+
+Tenant Chat is not emitted by the Gateway terminal-log mirror. Tenant-level
+Performance and Reliability views therefore continue to read only the Tenant
+Chat branch from PostgreSQL and merge already-aggregated results with the
+ClickHouse Project/Application branch. A project-scoped request must not query
+the Tenant Chat source.
+
+When the gate is enabled, a ClickHouse error or timeout must return the bounded
+analytics-unavailable response. It must never silently execute the equivalent
+bulk query against PostgreSQL `p0_llm_invocation_logs`. Operators must apply
+`003_expand_project_log_reads.sql` and replay/reconcile the selected interval
+before enabling the expanded reader for an existing deployment.

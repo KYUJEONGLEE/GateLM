@@ -16,8 +16,11 @@ type AnalyticsPolicyImpactFilter struct {
 	TenantID  string
 	ProjectID string
 	Period    string
-	From      time.Time
-	To        time.Time
+	// Surface is an internal reader selector used by the hybrid ClickHouse
+	// reader. HTTP handlers intentionally leave it empty.
+	Surface string
+	From    time.Time
+	To      time.Time
 }
 
 type AnalyticsPolicyImpactTotals struct {
@@ -106,6 +109,7 @@ type AnalyticsPolicyImpactFields struct {
 func NormalizeAnalyticsPolicyImpactFilter(filter AnalyticsPolicyImpactFilter) (AnalyticsPolicyImpactFilter, error) {
 	filter.TenantID = strings.TrimSpace(filter.TenantID)
 	filter.ProjectID = strings.TrimSpace(filter.ProjectID)
+	filter.Surface = strings.TrimSpace(filter.Surface)
 	filter.Period = strings.ToLower(strings.TrimSpace(filter.Period))
 	if filter.Period == "" {
 		filter.Period = "hour"
@@ -115,6 +119,12 @@ func NormalizeAnalyticsPolicyImpactFilter(filter AnalyticsPolicyImpactFilter) (A
 	}
 	if filter.TenantID == "" {
 		return AnalyticsPolicyImpactFilter{}, fmt.Errorf("%w: tenant id is required", ErrInvalidLogQuery)
+	}
+	if filter.Surface != "" && filter.Surface != AnalyticsSurfaceProjectApplication && filter.Surface != AnalyticsSurfaceTenantChat {
+		return AnalyticsPolicyImpactFilter{}, fmt.Errorf("%w: analytics surface is invalid", ErrInvalidLogQuery)
+	}
+	if filter.ProjectID != "" && filter.Surface == AnalyticsSurfaceTenantChat {
+		return AnalyticsPolicyImpactFilter{}, fmt.Errorf("%w: tenant_chat cannot be combined with project id", ErrInvalidLogQuery)
 	}
 	if err := validateTimeRange(filter.From, filter.To); err != nil {
 		return AnalyticsPolicyImpactFilter{}, err

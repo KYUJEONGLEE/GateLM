@@ -585,6 +585,10 @@ func (h ProjectLogsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			writeGatewayError(w, http.StatusBadRequest, "", "invalid_log_query", err.Error())
 			return
 		}
+		if errors.Is(err, invocationlog.ErrAnalyticsDataUnavailable) {
+			writeGatewayError(w, http.StatusServiceUnavailable, "", "ANALYTICS_DATA_UNAVAILABLE", "Request log data is unavailable.")
+			return
+		}
 		logInvocationLogInternalError(r, "list_project_logs", filter.TenantID, filter.ProjectID, err)
 		writeGatewayError(w, http.StatusInternalServerError, "", "internal_error", "Request logs could not be loaded.")
 		return
@@ -594,6 +598,10 @@ func (h ProjectLogsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if errors.Is(err, invocationlog.ErrInvalidLogQuery) {
 			writeGatewayError(w, http.StatusBadRequest, "", "invalid_log_query", err.Error())
+			return
+		}
+		if errors.Is(err, invocationlog.ErrAnalyticsDataUnavailable) {
+			writeGatewayError(w, http.StatusServiceUnavailable, "", "ANALYTICS_DATA_UNAVAILABLE", "Request log filter data is unavailable.")
 			return
 		}
 		logInvocationLogInternalError(r, "list_project_log_filter_options", filter.TenantID, filter.ProjectID, err)
@@ -665,6 +673,10 @@ func (h DashboardOverviewHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 	if err != nil {
 		if errors.Is(err, invocationlog.ErrInvalidLogQuery) {
 			writeGatewayError(w, http.StatusBadRequest, "", "invalid_log_query", err.Error())
+			return
+		}
+		if errors.Is(err, invocationlog.ErrAnalyticsDataUnavailable) {
+			writeGatewayError(w, http.StatusServiceUnavailable, "", "ANALYTICS_DATA_UNAVAILABLE", "Dashboard data is unavailable.")
 			return
 		}
 		logInvocationLogInternalError(r, "get_dashboard_overview", filter.TenantID, filter.ProjectID, err)

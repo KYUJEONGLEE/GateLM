@@ -296,7 +296,7 @@ func main() {
 	)
 	var invocationLogReader invocationlog.Reader = postgresInvocationLogReader
 	if cfg.ClickHouseAnalytics.PerformanceReadEnabled {
-		clickHousePerformanceReader, clickHouseReaderErr := clickhouseinvocationlog.NewAnalyticsPerformanceReader(clickhouseinvocationlog.QueryConfig{
+		clickHouseProjectReader, clickHouseReaderErr := clickhouseinvocationlog.NewProjectReader(clickhouseinvocationlog.QueryConfig{
 			EndpointURL:     cfg.ClickHouseAnalytics.EndpointURL,
 			Database:        cfg.ClickHouseAnalytics.Database,
 			Table:           cfg.ClickHouseAnalytics.Table,
@@ -308,7 +308,7 @@ func main() {
 		if clickHouseReaderErr != nil {
 			log.Fatalf("gateway-core ClickHouse analytics reader configuration failed: %v", clickHouseReaderErr)
 		}
-		hybridReader, hybridReaderErr := hybridinvocationlog.NewAnalyticsReader(postgresInvocationLogReader, clickHousePerformanceReader)
+		hybridReader, hybridReaderErr := hybridinvocationlog.NewAnalyticsReader(postgresInvocationLogReader, clickHouseProjectReader)
 		if hybridReaderErr != nil {
 			log.Fatalf("gateway-core hybrid analytics reader configuration failed: %v", hybridReaderErr)
 		}

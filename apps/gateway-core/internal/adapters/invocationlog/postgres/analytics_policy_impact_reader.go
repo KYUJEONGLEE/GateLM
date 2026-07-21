@@ -22,7 +22,7 @@ func (r *QueryReader) GetAnalyticsPolicyImpact(
 	if err != nil {
 		return invocationlog.AnalyticsPolicyImpactFields{}, err
 	}
-	if r.analyticsPolicyImpactReadMode == "rollup" {
+	if r.analyticsPolicyImpactReadMode == "rollup" && normalized.Surface == "" {
 		config := policyImpactBucketConfig(normalized)
 		if config.Interval == 0 || config.Interval >= time.Minute {
 			return r.getAnalyticsPolicyImpactFromRollup(ctx, normalized)
@@ -304,8 +304,11 @@ func buildAnalyticsPolicyImpactFilteredCTE(filter invocationlog.AnalyticsPolicyI
 		projectWhere = append(projectWhere, "1 = 0")
 		tenantChatWhere = append(tenantChatWhere, "1 = 0")
 	}
-	includeTenantChat := filter.ProjectID == ""
-	if !includeTenantChat {
+	includeProject := filter.Surface != invocationlog.AnalyticsSurfaceTenantChat
+	includeTenantChat := filter.ProjectID == "" && filter.Surface != invocationlog.AnalyticsSurfaceProjectApplication
+	if !includeProject {
+		projectWhere = append(projectWhere, "1 = 0")
+	} else if filter.ProjectID != "" {
 		addUUIDWhere(&projectWhere, &args, "logs.project_id", filter.ProjectID)
 	}
 

@@ -173,6 +173,10 @@ func (h CostReportHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			writeGatewayError(w, http.StatusBadRequest, "", "invalid_log_query", err.Error())
 			return
 		}
+		if errors.Is(err, invocationlog.ErrAnalyticsDataUnavailable) {
+			writeGatewayError(w, http.StatusServiceUnavailable, "", "ANALYTICS_DATA_UNAVAILABLE", "Cost report data is unavailable.")
+			return
+		}
 		logInvocationLogInternalError(r, "get_cost_report", filter.TenantID, filter.ProjectID, err)
 		writeGatewayError(w, http.StatusInternalServerError, "", "internal_error", "Cost report could not be loaded.")
 		return
