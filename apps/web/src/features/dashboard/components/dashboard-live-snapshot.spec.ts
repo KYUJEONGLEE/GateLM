@@ -74,6 +74,8 @@ test("overview keeps four live KPI cards with month-to-date cost in the final po
   expect(totalRequestsIndex).toBeGreaterThan(totalCostIndex);
   expect(averageLatencyIndex).toBeGreaterThan(totalRequestsIndex);
   expect(monthCostIndex).toBeGreaterThan(averageLatencyIndex);
+  expect(source).toContain('totalCost: "기간 총 비용"');
+  expect(source).toContain('totalRequests: "요청 수"');
   expect(source).toContain('monthCost: "이번 달 총 비용"');
   expect(source).not.toContain('monthCost: "이번 달 누적 비용"');
   expect(source).toContain("value: formatMicroUsd(overview.totalCostMicroUsd)");

@@ -21,13 +21,15 @@ PREPARE_PII_PATH="${DEPLOY_DIR}/scripts/prepare-production-pii-model.sh"
 DB_EXPORT_PATH="${DEPLOY_DIR}/scripts/production-distributed-db-export.sh"
 DB_RESTORE_PATH="${DEPLOY_DIR}/scripts/production-distributed-db-restore.sh"
 TWO_GATEWAY_CD_TEST_PATH="${DEPLOY_DIR}/scripts/tests/production-distributed-two-gateway-cd-test.sh"
+CLICKHOUSE_BACKFILL_PATH="${DEPLOY_DIR}/scripts/clickhouse-backfill-general-analytics.sh"
+CLICKHOUSE_BACKFILL_TEST_PATH="${DEPLOY_DIR}/scripts/tests/clickhouse-backfill-general-analytics-test.sh"
 
 for path in \
   "${COMPOSE_PATH}" "${PII_COMPOSE_PATH}" "${PII_MANIFEST_PATH}" "${ENV_PATH}" "${TEMPLATE_PATH}" "${CD_TEMPLATE_PATH}" "${LIB_PATH}" \
   "${PREFLIGHT_PATH}" "${UP_PATH}" "${SMOKE_PATH}" "${DEPLOY_ROLE_PATH}" "${SEND_DEPLOY_PATH}" \
   "${BOOTSTRAP_GATEWAY_PATH}" \
   "${PREPARE_PII_PATH}" "${DB_EXPORT_PATH}" "${DB_RESTORE_PATH}" \
-  "${TWO_GATEWAY_CD_TEST_PATH}" \
+  "${TWO_GATEWAY_CD_TEST_PATH}" "${CLICKHOUSE_BACKFILL_PATH}" "${CLICKHOUSE_BACKFILL_TEST_PATH}" \
   "${DEPLOY_DIR}/Caddyfile.production-distributed.rehearsal" \
   "${DEPLOY_DIR}/Caddyfile.production-distributed.production"; do
   [[ -f "${path}" ]] || { echo "Missing production distributed artifact: ${path}" >&2; exit 1; }
@@ -175,8 +177,10 @@ grep -Fq 'GATELM_PRODUCTION_DISTRIBUTED_DUMP_SHA256=' "${DB_RESTORE_PATH}"
 bash -n \
   "${LIB_PATH}" "${PREFLIGHT_PATH}" "${UP_PATH}" "${SMOKE_PATH}" \
   "${DEPLOY_ROLE_PATH}" "${SEND_DEPLOY_PATH}" "${BOOTSTRAP_GATEWAY_PATH}" \
-  "${PREPARE_PII_PATH}" "${DB_EXPORT_PATH}" "${DB_RESTORE_PATH}"
+  "${PREPARE_PII_PATH}" "${DB_EXPORT_PATH}" "${DB_RESTORE_PATH}" \
+  "${CLICKHOUSE_BACKFILL_PATH}" "${CLICKHOUSE_BACKFILL_TEST_PATH}"
 
 bash "${TWO_GATEWAY_CD_TEST_PATH}"
+bash "${CLICKHOUSE_BACKFILL_TEST_PATH}"
 
 echo 'Production distributed static validation passed.'

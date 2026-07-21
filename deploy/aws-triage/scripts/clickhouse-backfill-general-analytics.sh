@@ -35,11 +35,15 @@ if [[ -n "${BACKFILL_TENANT_ID:-}" ]]; then
 fi
 
 export PGOPTIONS="${PGOPTIONS:-} -c gatelm.employee_identity_hmac_secret=${CLICKHOUSE_EMPLOYEE_IDENTITY_HMAC_SECRET}"
-psql "${DATABASE_URL}" -X -v ON_ERROR_STOP=1 \
+psql_database_url="$(printf '%s' "${DATABASE_URL}" | sed -E \
+  -e 's/([?&])schema=[^&]*&/\1/' \
+  -e 's/([?&])schema=[^&]*$//')"
+psql "${psql_database_url}" -X -v ON_ERROR_STOP=1 \
   -v from_utc="${BACKFILL_FROM}" \
   -v to_utc="${BACKFILL_TO}" \
   -v tenant_id="${BACKFILL_TENANT_ID:-00000000-0000-0000-0000-000000000000}" \
-  -c "COPY (
+  > "${payload_file}" <<SQL
+COPY (
 WITH source AS (
   SELECT
     logs.*,
@@ -91,7 +95,8 @@ SELECT json_build_object(
 )::text
 FROM source
 ORDER BY created_at, request_id
-) TO STDOUT" > "${payload_file}"
+) TO STDOUT;
+SQL
 
 row_count="$(wc -l < "${payload_file}" | tr -d ' ')"
 if [[ "${row_count}" == "0" ]]; then

@@ -105,7 +105,11 @@
   display: grid;
   min-width: 0;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 14px;
+  gap: 1px;
+  overflow: hidden;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--border);
 }
 
 .analytics-v5-metric {
@@ -115,15 +119,14 @@
   align-content: center;
   gap: 12px;
   padding: 24px 26px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface);
-  box-shadow: 0 1px 2px color-mix(in srgb, var(--foreground) 4%, transparent);
+  border: 0;
+  border-radius: 0;
+  background: var(--card);
+  box-shadow: none;
 }
 
 .analytics-v5-metric-primary {
-  border-color: color-mix(in srgb, var(--analytics-v5-green-bright) 34%, var(--border));
-  background: color-mix(in srgb, var(--analytics-v5-green-bright) 9%, var(--surface));
+  background: color-mix(in srgb, var(--primary) 4%, var(--card));
 }
 
 .analytics-v5-metric > span {
@@ -211,9 +214,9 @@
   min-height: 348px;
   padding: 22px 24px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 10px;
   background: var(--surface);
-  box-shadow: 0 1px 2px color-mix(in srgb, var(--foreground) 4%, transparent);
+  box-shadow: var(--shadow-xs);
 }
 
 .analytics-v5-surface > header h3 {

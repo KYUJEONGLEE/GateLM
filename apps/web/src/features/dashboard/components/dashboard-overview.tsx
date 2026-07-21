@@ -265,8 +265,8 @@ const dashboardText: Record<
     kpi: {
       averageLatency: "평균 지연 시간",
       monthCost: "이번 달 총 비용",
-      totalCost: "총 비용",
-      totalRequests: "총 요청"
+      totalCost: "기간 총 비용",
+      totalRequests: "요청 수"
     },
     overviewWorkspace: "대시보드 개요 영역",
     refreshDashboard: "대시보드 새로고침",
@@ -347,7 +347,7 @@ export function DashboardOverviewView({
     {
       icon: <WalletCards aria-hidden="true" size={22} strokeWidth={2.2} />,
       label: text.kpi.monthCost,
-      tone: "orange",
+      tone: "accent",
       value: snapshot
         ? formatMicroUsd(snapshot.monthToDateCostMicroUsd)
         : monthToDateSpendValue ?? formatMicroUsd(monthToDate.totalCostMicroUsd)
@@ -473,9 +473,11 @@ export function DashboardOverviewView({
           <div className="dashboard-kpi-grid" aria-label={text.keyMetrics}>
             {kpiCards.map((card) => (
               <article className="dashboard-kpi-card" data-tone={card.tone} key={card.label}>
-                <span className="dashboard-kpi-icon">{card.icon}</span>
                 <div className="dashboard-kpi-copy">
-                  <span className="dashboard-kpi-label">{card.label}</span>
+                  <div className="dashboard-kpi-heading">
+                    <span className="dashboard-kpi-icon">{card.icon}</span>
+                    <span className="dashboard-kpi-label">{card.label}</span>
+                  </div>
                   <strong>{card.value}</strong>
                 </div>
               </article>
