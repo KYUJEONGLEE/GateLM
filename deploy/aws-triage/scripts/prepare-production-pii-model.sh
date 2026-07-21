@@ -58,7 +58,7 @@ tar --extract --gzip --file "${archive}" --directory "${extract_dir}" --no-same-
   sha256sum --check "${manifest}" >/dev/null
 )
 find "${extract_dir}" -type f -exec chmod 0444 {} +
-chmod 0555 "${extract_dir}"
 mv -- "${extract_dir}" "${model_dir}"
+chmod 0555 "${model_dir}"
 production_assert_pii_model_artifact
 production_log "Installed and verified the PII model artifact."
