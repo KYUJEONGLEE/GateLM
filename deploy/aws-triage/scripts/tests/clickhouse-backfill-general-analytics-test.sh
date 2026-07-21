@@ -49,6 +49,9 @@ if grep -Fxq -- '-c' "${TEST_DIR}/psql-args"; then
 fi
 grep -Fq "created_at >= :'from_utc'::timestamptz" "${TEST_DIR}/psql-stdin"
 grep -Fq "tenant_id = :'tenant_id'::uuid" "${TEST_DIR}/psql-stdin"
+grep -Fq "'requested_model', coalesce(requested_model, '')" "${TEST_DIR}/psql-stdin"
+grep -Fq "'gateway_internal_latency_ms'" "${TEST_DIR}/psql-stdin"
+grep -Fq "'cache_type', coalesce(cache_type, 'none')" "${TEST_DIR}/psql-stdin"
 grep -Fq ') TO STDOUT;' "${TEST_DIR}/psql-stdin"
 grep -Fq -- '--data-binary' "${TEST_DIR}/curl-args"
 grep -Fq 'Backfilled 1 bounded analytics rows.' <<<"${output}"

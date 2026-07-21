@@ -77,6 +77,12 @@ func TestTerminalLogWriterWritesSafeJSONEachRowBatch(t *testing.T) {
 	if first.RequestID != "request_clickhouse_1" || first.Provider != "mock" || first.Model != "mock-balanced" {
 		t.Fatalf("unexpected first row: %+v", first)
 	}
+	if first.RequestedModel != "auto" || first.ModelRef != "balanced" || first.RoutingReason != "difficulty_route" || first.CacheType != invocationlog.CacheTypeExact {
+		t.Fatalf("missing project log read fields: %+v", first)
+	}
+	if first.ProviderLatencyMs == nil || *first.ProviderLatencyMs != 80 || first.GatewayInternalLatencyMs != 20 || first.TTFTMs == nil || *first.TTFTMs != 15 || first.Stream != 1 {
+		t.Fatalf("unexpected latency/stream fields: %+v", first)
+	}
 	if first.EmployeeIdentityHash != expectedHMAC(testIdentitySecret, "employee-id-001") {
 		t.Fatalf("employee identity must prefer the resolved employee id HMAC, got %q", first.EmployeeIdentityHash)
 	}
@@ -163,6 +169,8 @@ func TestNewTerminalLogWriterRejectsUnsafeConfiguration(t *testing.T) {
 
 func testTerminalLog(requestID string, endUserID string) invocationlog.TerminalLog {
 	createdAt := time.Date(2026, 7, 21, 1, 2, 3, 456000000, time.UTC)
+	providerLatency := int64(80)
+	ttft := int64(15)
 	return invocationlog.TerminalLog{
 		RequestID:         requestID,
 		TenantID:          "00000000-0000-4000-8000-000000000100",
@@ -171,6 +179,9 @@ func testTerminalLog(requestID string, endUserID string) invocationlog.TerminalL
 		EndUserID:         endUserID,
 		Provider:          "mock",
 		Model:             "mock-balanced",
+		RequestedModel:    "auto",
+		ModelRef:          "balanced",
+		RoutingReason:     "difficulty_route",
 		Status:            invocationlog.StatusSuccess,
 		HTTPStatus:        200,
 		PromptTokens:      10,
@@ -179,7 +190,11 @@ func testTerminalLog(requestID string, endUserID string) invocationlog.TerminalL
 		CostMicroUSD:      42,
 		SavedCostMicroUSD: 7,
 		LatencyMs:         100,
+		ProviderLatencyMs: &providerLatency,
+		TTFTMs:            &ttft,
+		Stream:            true,
 		CacheStatus:       "miss",
+		CacheType:         invocationlog.CacheTypeExact,
 		PromptCategory:    "general",
 		PromptDifficulty:  "simple",
 		ProviderCalled:    true,

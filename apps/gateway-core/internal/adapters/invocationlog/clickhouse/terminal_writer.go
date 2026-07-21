@@ -42,36 +42,46 @@ type TerminalLogWriter struct {
 }
 
 type analyticsRow struct {
-	RequestID             string `json:"request_id"`
-	TenantID              string `json:"tenant_id"`
-	ProjectID             string `json:"project_id"`
-	ApplicationID         string `json:"application_id"`
-	EmployeeIdentityHash  string `json:"employee_identity_hash"`
-	Provider              string `json:"provider"`
-	Model                 string `json:"model"`
-	Status                string `json:"status"`
-	HTTPStatus            uint16 `json:"http_status"`
-	PromptTokens          uint32 `json:"prompt_tokens"`
-	CompletionTokens      uint32 `json:"completion_tokens"`
-	TotalTokens           uint32 `json:"total_tokens"`
-	CostMicroUSD          int64  `json:"cost_micro_usd"`
-	SavedCostMicroUSD     *int64 `json:"saved_cost_micro_usd"`
-	LatencyMs             uint64 `json:"latency_ms"`
-	CacheStatus           string `json:"cache_status"`
-	RoutingCategory       string `json:"routing_category"`
-	RoutingDifficulty     string `json:"routing_difficulty"`
-	TerminalStatus        string `json:"terminal_status"`
-	FallbackOutcome       string `json:"fallback_outcome"`
-	SafetyOutcome         string `json:"safety_outcome"`
-	BudgetOutcome         string `json:"budget_outcome"`
-	MaskingAction         string `json:"masking_action"`
-	ProviderCalled        uint8  `json:"provider_called"`
-	BudgetScopeType       string `json:"budget_scope_type"`
-	BudgetScopeID         string `json:"budget_scope_id"`
-	BudgetScopeResolvedBy string `json:"budget_scope_resolved_by"`
-	CreatedAt             string `json:"created_at"`
-	IngestedAt            string `json:"ingested_at"`
-	IngestVersion         uint64 `json:"ingest_version"`
+	RequestID                string  `json:"request_id"`
+	TenantID                 string  `json:"tenant_id"`
+	ProjectID                string  `json:"project_id"`
+	ApplicationID            string  `json:"application_id"`
+	EmployeeIdentityHash     string  `json:"employee_identity_hash"`
+	Provider                 string  `json:"provider"`
+	Model                    string  `json:"model"`
+	ProviderID               string  `json:"provider_id"`
+	ModelID                  string  `json:"model_id"`
+	RequestedModel           string  `json:"requested_model"`
+	ModelRef                 string  `json:"model_ref"`
+	RoutingReason            string  `json:"routing_reason"`
+	Status                   string  `json:"status"`
+	HTTPStatus               uint16  `json:"http_status"`
+	PromptTokens             uint32  `json:"prompt_tokens"`
+	CompletionTokens         uint32  `json:"completion_tokens"`
+	TotalTokens              uint32  `json:"total_tokens"`
+	CostMicroUSD             int64   `json:"cost_micro_usd"`
+	SavedCostMicroUSD        *int64  `json:"saved_cost_micro_usd"`
+	LatencyMs                uint64  `json:"latency_ms"`
+	ProviderLatencyMs        *uint64 `json:"provider_latency_ms"`
+	GatewayInternalLatencyMs uint64  `json:"gateway_internal_latency_ms"`
+	TTFTMs                   *uint64 `json:"ttft_ms"`
+	Stream                   uint8   `json:"stream"`
+	CacheStatus              string  `json:"cache_status"`
+	CacheType                string  `json:"cache_type"`
+	RoutingCategory          string  `json:"routing_category"`
+	RoutingDifficulty        string  `json:"routing_difficulty"`
+	TerminalStatus           string  `json:"terminal_status"`
+	FallbackOutcome          string  `json:"fallback_outcome"`
+	SafetyOutcome            string  `json:"safety_outcome"`
+	BudgetOutcome            string  `json:"budget_outcome"`
+	MaskingAction            string  `json:"masking_action"`
+	ProviderCalled           uint8   `json:"provider_called"`
+	BudgetScopeType          string  `json:"budget_scope_type"`
+	BudgetScopeID            string  `json:"budget_scope_id"`
+	BudgetScopeResolvedBy    string  `json:"budget_scope_resolved_by"`
+	CreatedAt                string  `json:"created_at"`
+	IngestedAt               string  `json:"ingested_at"`
+	IngestVersion            uint64  `json:"ingest_version"`
 }
 
 func NewTerminalLogWriter(cfg Config) (*TerminalLogWriter, error) {
@@ -173,37 +183,68 @@ func (w *TerminalLogWriter) row(entry invocationlog.TerminalLog, ingestedAt time
 	terminalStatus := invocationlog.BuildGatewayStageOutcomes(entry).TerminalStatus
 	budgetScope := budget.NormalizeScope(entry.BudgetScope, entry.ApplicationID)
 	return analyticsRow{
-		RequestID:             strings.TrimSpace(entry.RequestID),
-		TenantID:              strings.TrimSpace(entry.TenantID),
-		ProjectID:             strings.TrimSpace(entry.ProjectID),
-		ApplicationID:         strings.TrimSpace(entry.ApplicationID),
-		EmployeeIdentityHash:  hmacIdentity(w.identityKey, employeeIdentity),
-		Provider:              strings.TrimSpace(entry.Provider),
-		Model:                 strings.TrimSpace(entry.Model),
-		Status:                strings.TrimSpace(entry.Status),
-		HTTPStatus:            boundedUint16(entry.HTTPStatus),
-		PromptTokens:          boundedUint32(entry.PromptTokens),
-		CompletionTokens:      boundedUint32(entry.CompletionTokens),
-		TotalTokens:           boundedUint32(entry.TotalTokens),
-		CostMicroUSD:          maxInt64(entry.CostMicroUSD, 0),
-		SavedCostMicroUSD:     nullableNonNegativeInt64(entry.SavedCostMicroUSD),
-		LatencyMs:             boundedUint64(entry.LatencyMs),
-		CacheStatus:           strings.TrimSpace(entry.CacheStatus),
-		RoutingCategory:       strings.TrimSpace(entry.PromptCategory),
-		RoutingDifficulty:     strings.TrimSpace(entry.PromptDifficulty),
-		TerminalStatus:        strings.TrimSpace(terminalStatus),
-		FallbackOutcome:       strings.TrimSpace(domainOutcomes.Fallback.Outcome),
-		SafetyOutcome:         strings.TrimSpace(domainOutcomes.Safety.Outcome),
-		BudgetOutcome:         strings.TrimSpace(domainOutcomes.Budget.Outcome),
-		MaskingAction:         firstNonEmpty(strings.TrimSpace(entry.MaskingAction), strings.TrimSpace(domainOutcomes.Safety.MaskingAction), "none"),
-		ProviderCalled:        boolUint8(entry.ProviderCalled),
-		BudgetScopeType:       budgetScope.Type,
-		BudgetScopeID:         budgetScope.ID,
-		BudgetScopeResolvedBy: budgetScope.ResolvedBy,
-		CreatedAt:             formatDateTime64(createdAt),
-		IngestedAt:            formatDateTime64(ingestedAt),
-		IngestVersion:         uint64(ingestedAt.UnixNano()),
+		RequestID:                strings.TrimSpace(entry.RequestID),
+		TenantID:                 strings.TrimSpace(entry.TenantID),
+		ProjectID:                strings.TrimSpace(entry.ProjectID),
+		ApplicationID:            strings.TrimSpace(entry.ApplicationID),
+		EmployeeIdentityHash:     hmacIdentity(w.identityKey, employeeIdentity),
+		Provider:                 strings.TrimSpace(entry.Provider),
+		Model:                    strings.TrimSpace(entry.Model),
+		ProviderID:               strings.TrimSpace(entry.ProviderID),
+		ModelID:                  strings.TrimSpace(entry.ModelID),
+		RequestedModel:           strings.TrimSpace(entry.RequestedModel),
+		ModelRef:                 strings.TrimSpace(entry.ModelRef),
+		RoutingReason:            strings.TrimSpace(entry.RoutingReason),
+		Status:                   strings.TrimSpace(entry.Status),
+		HTTPStatus:               boundedUint16(entry.HTTPStatus),
+		PromptTokens:             boundedUint32(entry.PromptTokens),
+		CompletionTokens:         boundedUint32(entry.CompletionTokens),
+		TotalTokens:              boundedUint32(entry.TotalTokens),
+		CostMicroUSD:             maxInt64(entry.CostMicroUSD, 0),
+		SavedCostMicroUSD:        nullableNonNegativeInt64(entry.SavedCostMicroUSD),
+		LatencyMs:                boundedUint64(entry.LatencyMs),
+		ProviderLatencyMs:        nullableNonNegativeUint64(entry.ProviderLatencyMs),
+		GatewayInternalLatencyMs: gatewayInternalLatency(entry.LatencyMs, entry.ProviderLatencyMs),
+		TTFTMs:                   nullableNonNegativeUint64(entry.TTFTMs),
+		Stream:                   boolUint8(entry.Stream),
+		CacheStatus:              strings.TrimSpace(entry.CacheStatus),
+		CacheType:                strings.TrimSpace(entry.CacheType),
+		RoutingCategory:          strings.TrimSpace(entry.PromptCategory),
+		RoutingDifficulty:        strings.TrimSpace(entry.PromptDifficulty),
+		TerminalStatus:           strings.TrimSpace(terminalStatus),
+		FallbackOutcome:          strings.TrimSpace(domainOutcomes.Fallback.Outcome),
+		SafetyOutcome:            strings.TrimSpace(domainOutcomes.Safety.Outcome),
+		BudgetOutcome:            strings.TrimSpace(domainOutcomes.Budget.Outcome),
+		MaskingAction:            firstNonEmpty(strings.TrimSpace(entry.MaskingAction), strings.TrimSpace(domainOutcomes.Safety.MaskingAction), "none"),
+		ProviderCalled:           boolUint8(entry.ProviderCalled),
+		BudgetScopeType:          budgetScope.Type,
+		BudgetScopeID:            budgetScope.ID,
+		BudgetScopeResolvedBy:    budgetScope.ResolvedBy,
+		CreatedAt:                formatDateTime64(createdAt),
+		IngestedAt:               formatDateTime64(ingestedAt),
+		IngestVersion:            uint64(ingestedAt.UnixNano()),
 	}
+}
+
+func nullableNonNegativeUint64(value *int64) *uint64 {
+	if value == nil || *value < 0 {
+		return nil
+	}
+	bounded := uint64(*value)
+	return &bounded
+}
+
+func gatewayInternalLatency(total int64, provider *int64) uint64 {
+	if total <= 0 {
+		return 0
+	}
+	if provider == nil || *provider <= 0 {
+		return uint64(total)
+	}
+	if *provider >= total {
+		return 0
+	}
+	return uint64(total - *provider)
 }
 
 func nullableNonNegativeInt64(value int64) *int64 {
