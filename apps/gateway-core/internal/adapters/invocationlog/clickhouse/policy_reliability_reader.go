@@ -152,7 +152,7 @@ type reliabilityTotalRow struct {
 }
 type reliabilityIncidentRow struct {
 	RequestID  string `json:"request_id"`
-	ProjectID  string `json:"project_id"`
+	ProjectID  string `json:"project_id_text"`
 	Provider   string `json:"provider"`
 	Model      string `json:"model"`
 	Status     string `json:"status"`
@@ -172,7 +172,7 @@ func (r *ProjectReader) queryReliability(ctx context.Context, filter invocationl
 	if len(totals) != 1 {
 		return invocationlog.AnalyticsReliabilityFields{}, unavailableError(fmt.Errorf("unexpected reliability totals row count %d", len(totals)))
 	}
-	incidents, err := queryJSONEachRow[reliabilityIncidentRow](ctx, r.client, `SELECT request_id,toString(project_id) project_id,provider,model,terminal_status status,fallback_outcome fallback,http_status,toUnixTimestamp64Milli(created_at) occurred_ms `+base+` AND terminal_status!='success' ORDER BY created_at DESC,request_id DESC LIMIT {limit:UInt32} FORMAT JSONEachRow`, params)
+	incidents, err := queryJSONEachRow[reliabilityIncidentRow](ctx, r.client, `SELECT request_id,toString(project_id) project_id_text,provider,model,terminal_status status,fallback_outcome fallback,http_status,toUnixTimestamp64Milli(created_at) occurred_ms `+base+` AND terminal_status!='success' ORDER BY created_at DESC,request_id DESC LIMIT {limit:UInt32} FORMAT JSONEachRow`, params)
 	if err != nil {
 		return invocationlog.AnalyticsReliabilityFields{}, err
 	}
