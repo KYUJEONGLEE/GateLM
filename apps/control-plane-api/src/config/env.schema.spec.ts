@@ -17,6 +17,7 @@ describe('validateEnv', () => {
     expect(env.DASHBOARD_ROLLUP_ENABLED).toBe('false');
     expect(env.DASHBOARD_ROLLUP_BUILD_MODE).toBe('legacy');
     expect(env.DASHBOARD_ROLLUP_INTERVAL_MS).toBe(1000);
+    expect(env.DASHBOARD_ROLLUP_PROJECT_APPLICATION_ENABLED).toBe('true');
     expect(env.DASHBOARD_ROLLUP_DISCOVERY_BATCH_SIZE).toBe(500);
     expect(env.DASHBOARD_ROLLUP_BUCKET_BATCH_SIZE).toBe(8);
     expect(env.DASHBOARD_ROLLUP_DISCOVERY_LAG_MS).toBe(60000);
@@ -66,6 +67,7 @@ describe('validateEnv', () => {
       DASHBOARD_ROLLUP_ENABLED: 'true',
       DASHBOARD_ROLLUP_BUILD_MODE: 'shadow',
       DASHBOARD_ROLLUP_INTERVAL_MS: '500',
+      DASHBOARD_ROLLUP_PROJECT_APPLICATION_ENABLED: 'false',
       DASHBOARD_ROLLUP_DISCOVERY_BATCH_SIZE: '750',
       DASHBOARD_ROLLUP_BUCKET_BATCH_SIZE: '12',
       DASHBOARD_ROLLUP_DISCOVERY_LAG_MS: '30000',
@@ -77,6 +79,7 @@ describe('validateEnv', () => {
     expect(env.DASHBOARD_ROLLUP_ENABLED).toBe('true');
     expect(env.DASHBOARD_ROLLUP_BUILD_MODE).toBe('shadow');
     expect(env.DASHBOARD_ROLLUP_INTERVAL_MS).toBe(500);
+    expect(env.DASHBOARD_ROLLUP_PROJECT_APPLICATION_ENABLED).toBe('false');
     expect(env.DASHBOARD_ROLLUP_DISCOVERY_BATCH_SIZE).toBe(750);
     expect(env.DASHBOARD_ROLLUP_BUCKET_BATCH_SIZE).toBe(12);
     expect(env.DASHBOARD_ROLLUP_DISCOVERY_LAG_MS).toBe(30000);

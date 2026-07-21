@@ -5,6 +5,7 @@ import 'reflect-metadata';
 import { PrismaService } from '@/infrastructure/database/prisma/prisma.service';
 import { InMemoryEmailSender } from '@/modules/auth/email-sender';
 
+import type { ClickHouseEmployeeUsageReader } from './clickhouse-employee-usage.reader';
 import {
   ProjectEmployeePolicyDto,
   UpsertProjectEmployeeAssignmentDto,
@@ -24,6 +25,14 @@ type EmployeePolicyReader = {
     usedMicroUsd: bigint,
     warningThresholdPercent: number,
   ): 'exceeded' | 'not_configured' | 'warning' | 'within_limit';
+};
+
+type ProjectUsageReader = {
+  listProjectEmployeeUsage(
+    tenantId: string,
+    projectId: string,
+    assignments: Array<{ employee: { id: string; userId: string | null; email: string } }>,
+  ): Promise<Array<{ employeeId: string; usedMicroUsd: bigint; dailyUsedTokens: bigint }>>;
 };
 
 describe('EmployeesService employee rate limit policy', () => {
@@ -149,6 +158,51 @@ describe('EmployeesService employee rate limit policy', () => {
       ).toBe(expected);
     },
   );
+
+  it('reads project employee policy usage from ClickHouse when enabled', async () => {
+    const queryRaw = jest.fn();
+    const reader = {
+      isEnabled: jest.fn().mockReturnValue(true),
+      readProjectPolicyUsage: jest.fn().mockResolvedValue({
+        byEmployeeId: new Map([
+          [
+            '00000000-0000-4000-8000-000000000002',
+            { usedMicroUsd: 42n, dailyUsedTokens: 900n },
+          ],
+        ]),
+      }),
+    } as unknown as ClickHouseEmployeeUsageReader;
+    const sourceReader = new EmployeesService(
+      { $queryRaw: queryRaw } as unknown as PrismaService,
+      {} as ConfigService,
+      new InMemoryEmailSender(),
+      reader,
+    ) as unknown as ProjectUsageReader;
+
+    const rows = await sourceReader.listProjectEmployeeUsage(
+      '00000000-0000-4000-8000-000000000001',
+      '00000000-0000-4000-8000-000000000010',
+      [
+        {
+          employee: {
+            id: '00000000-0000-4000-8000-000000000002',
+            userId: null,
+            email: 'employee@example.invalid',
+          },
+        },
+      ],
+    );
+
+    expect(rows).toEqual([
+      {
+        employeeId: '00000000-0000-4000-8000-000000000002',
+        usedMicroUsd: 42n,
+        dailyUsedTokens: 900n,
+      },
+    ]);
+    expect(reader.readProjectPolicyUsage).toHaveBeenCalledTimes(1);
+    expect(queryRaw).not.toHaveBeenCalled();
+  });
 });
 
 describe('EmployeesService employee invitation deletion', () => {

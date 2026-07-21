@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 
 import { PrismaService } from '@/infrastructure/database/prisma/prisma.service';
 
+import { ClickHouseEmployeeUsageReader } from './clickhouse-employee-usage.reader';
 import type {
   EmployeeSecurityMetricDto,
   EmployeeSecurityResponseDto,
@@ -26,9 +27,18 @@ type EmployeeSecurityDatabaseRow = {
   tenantChatBlockedRequestCount: bigint;
 };
 
+type TenantChatSecurityRow = {
+  employeeId: string;
+  requestCount: bigint;
+  blockedRequestCount: bigint;
+};
+
 @Injectable()
 export class EmployeeSecurityService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly clickHouseReader?: ClickHouseEmployeeUsageReader,
+  ) {}
 
   async listEmployeeSecurity(
     tenantId: string,
@@ -36,6 +46,14 @@ export class EmployeeSecurityService {
   ): Promise<EmployeeSecurityResponseDto> {
     await this.assertTenantExists(tenantId);
     const period = this.validatePeriod(query.from, query.to);
+    if (this.clickHouseReader?.isEnabled()) {
+      return this.listFromClickHouse(
+        tenantId,
+        period.from,
+        period.to,
+        query.limit ?? 100,
+      );
+    }
     const rows = await this.queryRows(
       tenantId,
       period.from,
@@ -52,6 +70,106 @@ export class EmployeeSecurityService {
         to: period.to.toISOString(),
       },
     };
+  }
+
+  private async listFromClickHouse(
+    tenantId: string,
+    from: Date,
+    to: Date,
+    limit: number,
+  ): Promise<EmployeeSecurityResponseDto> {
+    const employees = await this.prisma.employee.findMany({
+      where: { tenantId, deletedAt: null },
+      select: {
+        id: true,
+        userId: true,
+        email: true,
+        name: true,
+        status: true,
+      },
+    });
+    const [project, tenantChatRows] = await Promise.all([
+      this.clickHouseReader!.readProjectSecurity({
+        tenantId,
+        from,
+        to,
+        identities: employees.map((employee) => ({
+          employeeId: employee.id,
+          userId: employee.userId,
+          email: employee.email,
+        })),
+      }),
+      this.queryTenantChatRows(tenantId, from, to),
+    ]);
+    const tenantChatByEmployee = new Map(
+      tenantChatRows.map((row) => [row.employeeId, row]),
+    );
+    const ranked = employees
+      .map((employee) => {
+        const projectAggregate = project.byEmployeeId.get(employee.id);
+        const tenantChatAggregate = tenantChatByEmployee.get(employee.id);
+        const projectApplication = toMetric(
+          projectAggregate?.requestCount ?? 0n,
+          projectAggregate?.maskedRequestCount ?? 0n,
+          projectAggregate?.blockedRequestCount ?? 0n,
+        );
+        const tenantChat = toMetric(
+          tenantChatAggregate?.requestCount ?? 0n,
+          0n,
+          tenantChatAggregate?.blockedRequestCount ?? 0n,
+        );
+        return {
+          employee,
+          projectApplication,
+          tenantChat,
+          total: addMetrics(projectApplication, tenantChat),
+        };
+      })
+      .sort(
+        (left, right) =>
+          right.total.protectedRequestCount - left.total.protectedRequestCount ||
+          left.employee.id.localeCompare(right.employee.id),
+      )
+      .slice(0, limit);
+
+    return {
+      data: ranked.map((row, index) => ({
+        email: row.employee.email,
+        employeeId: row.employee.id,
+        name: row.employee.name,
+        rank: index + 1,
+        sources: {
+          projectApplication: row.projectApplication,
+          tenantChat: row.tenantChat,
+        },
+        status: normalizeEmployeeStatus(row.employee.status),
+        total: row.total,
+      })),
+      generatedAt: new Date().toISOString(),
+      period: { from: from.toISOString(), timezone: 'UTC', to: to.toISOString() },
+    };
+  }
+
+  private queryTenantChatRows(
+    tenantId: string,
+    from: Date,
+    to: Date,
+  ): Promise<TenantChatSecurityRow[]> {
+    return this.prisma.$queryRaw<TenantChatSecurityRow[]>(Prisma.sql`
+      SELECT logs.employee_id::text AS "employeeId",
+        count(*)::bigint AS "requestCount",
+        count(*) FILTER (
+          WHERE logs.terminal_outcome = 'safety_blocked'
+        )::bigint AS "blockedRequestCount"
+      FROM tenant_chat_invocation_logs logs
+      WHERE logs.tenant_id = ${tenantId}::uuid
+        AND logs.surface = 'tenant_chat'
+        AND logs.execution_scope_kind = 'tenant_chat'
+        AND logs.employee_id IS NOT NULL
+        AND logs.completed_at >= ${from}
+        AND logs.completed_at < ${to}
+      GROUP BY logs.employee_id
+    `);
   }
 
   private validatePeriod(fromValue: string, toValue: string) {

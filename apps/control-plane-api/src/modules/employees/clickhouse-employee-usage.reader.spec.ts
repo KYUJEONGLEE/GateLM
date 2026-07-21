@@ -92,6 +92,82 @@ describe('ClickHouseEmployeeUsageReader', () => {
     expect(result.unattributed.requestCount).toBe(1n);
   });
 
+  it('reads employee security aggregates without sending raw identities', async () => {
+    const fetchMock = jest.spyOn(global, 'fetch').mockResolvedValue(
+      new Response(
+        [
+          JSON.stringify({
+            employee_identity_hash: hash(employeeId),
+            request_count: '9',
+            masked_request_count: '3',
+            blocked_request_count: '2',
+          }),
+          JSON.stringify({
+            employee_identity_hash: hash('employee@example.invalid'),
+            request_count: '1',
+            masked_request_count: '1',
+            blocked_request_count: '0',
+          }),
+        ].join('\n'),
+        { status: 200 },
+      ),
+    );
+
+    const result = await createReader().readProjectSecurity({
+      tenantId: '00000000-0000-4000-8000-000000000100',
+      from: new Date('2026-07-20T00:00:00.000Z'),
+      to: new Date('2026-07-21T00:00:00.000Z'),
+      identities: [
+        { employeeId, userId: null, email: 'employee@example.invalid' },
+      ],
+    });
+
+    expect(result.byEmployeeId.get(employeeId)).toEqual({
+      requestCount: 10n,
+      maskedRequestCount: 4n,
+      blockedRequestCount: 2n,
+    });
+    const [, init] = fetchMock.mock.calls[0]!;
+    expect(String(init?.body)).toContain("countIf(masking_action = 'redacted')");
+    expect(String(init?.body)).toContain('positionCaseInsensitive');
+    expect(String(init?.body)).not.toContain('employee@example.invalid');
+  });
+
+  it('reads project policy usage for the UTC month and day', async () => {
+    const fetchMock = jest.spyOn(global, 'fetch').mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          employee_identity_hash: hash(employeeId),
+          used_micro_usd: '31',
+          daily_used_tokens: '120',
+        }),
+        { status: 200 },
+      ),
+    );
+
+    const result = await createReader().readProjectPolicyUsage({
+      tenantId: '00000000-0000-4000-8000-000000000100',
+      projectId: '00000000-0000-4000-8000-000000000200',
+      monthFrom: new Date('2026-07-01T00:00:00.000Z'),
+      monthTo: new Date('2026-08-01T00:00:00.000Z'),
+      dayFrom: new Date('2026-07-20T00:00:00.000Z'),
+      dayTo: new Date('2026-07-21T00:00:00.000Z'),
+      identities: [
+        { employeeId, userId: null, email: 'employee@example.invalid' },
+      ],
+    });
+
+    expect(result.byEmployeeId.get(employeeId)).toEqual({
+      usedMicroUsd: 31n,
+      dailyUsedTokens: 120n,
+    });
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(String(url)).toContain('param_project_id=');
+    expect(String(url)).toContain('param_day_from=');
+    expect(String(init?.body)).toContain('sumIf(');
+    expect(String(init?.body)).toContain('project_id = {project_id:UUID}');
+  });
+
   it('returns a stable 503 without exposing a ClickHouse error body', async () => {
     jest.spyOn(global, 'fetch').mockResolvedValue(
       new Response('sensitive backend error', { status: 500 }),

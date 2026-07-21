@@ -23,6 +23,25 @@ export type ClickHouseEmployeeUsageResult = {
   lastSourceAt: Date | null;
 };
 
+export type EmployeeSecurityAggregate = {
+  requestCount: bigint;
+  maskedRequestCount: bigint;
+  blockedRequestCount: bigint;
+};
+
+export type ClickHouseEmployeeSecurityResult = {
+  byEmployeeId: Map<string, EmployeeSecurityAggregate>;
+};
+
+export type ProjectEmployeePolicyUsage = {
+  dailyUsedTokens: bigint;
+  usedMicroUsd: bigint;
+};
+
+export type ClickHouseProjectEmployeePolicyUsageResult = {
+  byEmployeeId: Map<string, ProjectEmployeePolicyUsage>;
+};
+
 type ClickHouseAggregateRow = {
   employee_identity_hash?: unknown;
   request_count?: unknown;
@@ -31,6 +50,19 @@ type ClickHouseAggregateRow = {
   total_tokens?: unknown;
   cost_micro_usd?: unknown;
   source_max_at_ms?: unknown;
+};
+
+type ClickHouseSecurityRow = {
+  employee_identity_hash?: unknown;
+  request_count?: unknown;
+  masked_request_count?: unknown;
+  blocked_request_count?: unknown;
+};
+
+type ClickHouseProjectPolicyUsageRow = {
+  employee_identity_hash?: unknown;
+  daily_used_tokens?: unknown;
+  used_micro_usd?: unknown;
 };
 
 const EMPTY_USAGE = Object.freeze<EmployeeUsageAggregate>({
@@ -86,41 +118,16 @@ export class ClickHouseEmployeeUsageReader {
     }
 
     const identityOwners = this.buildIdentityOwners(input.identities);
-    const endpoint = new URL(this.endpointUrl);
-    endpoint.searchParams.set('database', this.database);
-    endpoint.searchParams.set('param_tenant_id', input.tenantId);
-    endpoint.searchParams.set('param_from', input.from.toISOString());
-    endpoint.searchParams.set('param_to', input.to.toISOString());
-
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
-    timeout.unref?.();
-
-    let response: Response;
-    let body: string;
-    try {
-      response = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          Authorization: `Basic ${Buffer.from(`${this.username}:${this.password}`, 'utf8').toString('base64')}`,
-          'Content-Type': 'text/plain; charset=utf-8',
-        },
-        body: this.query(),
-        signal: controller.signal,
-      });
-      if (!response.ok) {
-        await response.body?.cancel().catch(() => undefined);
-        throw unavailable();
-      }
-      body = await response.text();
-      if (Buffer.byteLength(body, 'utf8') > 8 * 1024 * 1024) {
-        throw unavailable();
-      }
-    } catch {
-      throw unavailable();
-    } finally {
-      clearTimeout(timeout);
-    }
+    const body = await this.execute(
+      this.usageQuery(),
+      {
+        tenant_id: input.tenantId,
+        from: input.from.toISOString(),
+        to: input.to.toISOString(),
+      },
+      'EMPLOYEE_USAGE_ANALYTICS_UNAVAILABLE',
+      'Employee usage analytics is temporarily unavailable.',
+    );
 
     const byEmployeeId = new Map<string, EmployeeUsageAggregate>();
     let unattributed = { ...EMPTY_USAGE };
@@ -146,13 +153,166 @@ export class ClickHouseEmployeeUsageReader {
         }
       }
     } catch {
-      throw unavailable();
+      throw unavailable(
+        'EMPLOYEE_USAGE_ANALYTICS_UNAVAILABLE',
+        'Employee usage analytics is temporarily unavailable.',
+      );
     }
 
     return { byEmployeeId, unattributed, lastSourceAt };
   }
 
-  private query(): string {
+  async readProjectSecurity(input: {
+    tenantId: string;
+    from: Date;
+    to: Date;
+    identities: EmployeeUsageIdentity[];
+  }): Promise<ClickHouseEmployeeSecurityResult> {
+    if (!this.enabled) {
+      return { byEmployeeId: new Map() };
+    }
+    const identityOwners = this.buildIdentityOwners(input.identities);
+    const body = await this.execute(
+      this.securityQuery(),
+      {
+        tenant_id: input.tenantId,
+        from: input.from.toISOString(),
+        to: input.to.toISOString(),
+      },
+      'EMPLOYEE_SECURITY_ANALYTICS_UNAVAILABLE',
+      'Employee security analytics is temporarily unavailable.',
+    );
+    const byEmployeeId = new Map<string, EmployeeSecurityAggregate>();
+    try {
+      for (const line of body.split('\n')) {
+        if (line.trim().length === 0) continue;
+        const row = JSON.parse(line) as ClickHouseSecurityRow;
+        const employeeId = identityOwners.get(
+          readIdentityHash(row.employee_identity_hash),
+        );
+        if (!employeeId) continue;
+        const current = byEmployeeId.get(employeeId) ?? {
+          requestCount: 0n,
+          maskedRequestCount: 0n,
+          blockedRequestCount: 0n,
+        };
+        byEmployeeId.set(employeeId, {
+          requestCount:
+            current.requestCount + readNonNegativeBigInt(row.request_count),
+          maskedRequestCount:
+            current.maskedRequestCount +
+            readNonNegativeBigInt(row.masked_request_count),
+          blockedRequestCount:
+            current.blockedRequestCount +
+            readNonNegativeBigInt(row.blocked_request_count),
+        });
+      }
+    } catch {
+      throw unavailable(
+        'EMPLOYEE_SECURITY_ANALYTICS_UNAVAILABLE',
+        'Employee security analytics is temporarily unavailable.',
+      );
+    }
+    return { byEmployeeId };
+  }
+
+  async readProjectPolicyUsage(input: {
+    tenantId: string;
+    projectId: string;
+    monthFrom: Date;
+    monthTo: Date;
+    dayFrom: Date;
+    dayTo: Date;
+    identities: EmployeeUsageIdentity[];
+  }): Promise<ClickHouseProjectEmployeePolicyUsageResult> {
+    if (!this.enabled) {
+      return { byEmployeeId: new Map() };
+    }
+    const identityOwners = this.buildIdentityOwners(input.identities);
+    const body = await this.execute(
+      this.projectPolicyUsageQuery(),
+      {
+        tenant_id: input.tenantId,
+        project_id: input.projectId,
+        month_from: input.monthFrom.toISOString(),
+        month_to: input.monthTo.toISOString(),
+        day_from: input.dayFrom.toISOString(),
+        day_to: input.dayTo.toISOString(),
+      },
+      'EMPLOYEE_USAGE_ANALYTICS_UNAVAILABLE',
+      'Employee usage analytics is temporarily unavailable.',
+    );
+    const byEmployeeId = new Map<string, ProjectEmployeePolicyUsage>();
+    try {
+      for (const line of body.split('\n')) {
+        if (line.trim().length === 0) continue;
+        const row = JSON.parse(line) as ClickHouseProjectPolicyUsageRow;
+        const employeeId = identityOwners.get(
+          readIdentityHash(row.employee_identity_hash),
+        );
+        if (!employeeId) continue;
+        const current = byEmployeeId.get(employeeId) ?? {
+          dailyUsedTokens: 0n,
+          usedMicroUsd: 0n,
+        };
+        byEmployeeId.set(employeeId, {
+          dailyUsedTokens:
+            current.dailyUsedTokens +
+            readNonNegativeBigInt(row.daily_used_tokens),
+          usedMicroUsd:
+            current.usedMicroUsd + readNonNegativeBigInt(row.used_micro_usd),
+        });
+      }
+    } catch {
+      throw unavailable(
+        'EMPLOYEE_USAGE_ANALYTICS_UNAVAILABLE',
+        'Employee usage analytics is temporarily unavailable.',
+      );
+    }
+    return { byEmployeeId };
+  }
+
+  private async execute(
+    query: string,
+    parameters: Record<string, string>,
+    errorCode: string,
+    errorMessage: string,
+  ): Promise<string> {
+    const endpoint = new URL(this.endpointUrl);
+    endpoint.searchParams.set('database', this.database);
+    for (const [key, value] of Object.entries(parameters)) {
+      endpoint.searchParams.set(`param_${key}`, value);
+    }
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
+    timeout.unref?.();
+    try {
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          Authorization: `Basic ${Buffer.from(`${this.username}:${this.password}`, 'utf8').toString('base64')}`,
+          'Content-Type': 'text/plain; charset=utf-8',
+        },
+        body: query,
+        signal: controller.signal,
+      });
+      if (!response.ok) {
+        await response.body?.cancel().catch(() => undefined);
+        throw unavailable(errorCode, errorMessage);
+      }
+      const body = await response.text();
+      if (Buffer.byteLength(body, 'utf8') > 8 * 1024 * 1024) {
+        throw unavailable(errorCode, errorMessage);
+      }
+      return body;
+    } catch {
+      throw unavailable(errorCode, errorMessage);
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  private usageQuery(): string {
     return `
 SELECT
   employee_identity_hash,
@@ -166,6 +326,45 @@ FROM \`${this.database}\`.\`${this.table}\` FINAL
 WHERE tenant_id = {tenant_id:UUID}
   AND created_at >= parseDateTime64BestEffort({from:String}, 3, 'UTC')
   AND created_at < parseDateTime64BestEffort({to:String}, 3, 'UTC')
+GROUP BY employee_identity_hash
+FORMAT JSONEachRow
+`.trim();
+  }
+
+  private securityQuery(): string {
+    return `
+SELECT
+  employee_identity_hash,
+  count() AS request_count,
+  countIf(masking_action = 'redacted') AS masked_request_count,
+  countIf(
+    masking_action = 'blocked'
+    OR positionCaseInsensitive(safety_outcome, 'block') > 0
+  ) AS blocked_request_count
+FROM \`${this.database}\`.\`${this.table}\` FINAL
+WHERE tenant_id = {tenant_id:UUID}
+  AND created_at >= parseDateTime64BestEffort({from:String}, 3, 'UTC')
+  AND created_at < parseDateTime64BestEffort({to:String}, 3, 'UTC')
+GROUP BY employee_identity_hash
+FORMAT JSONEachRow
+`.trim();
+  }
+
+  private projectPolicyUsageQuery(): string {
+    return `
+SELECT
+  employee_identity_hash,
+  sum(cost_micro_usd) AS used_micro_usd,
+  sumIf(
+    total_tokens,
+    created_at >= parseDateTime64BestEffort({day_from:String}, 3, 'UTC')
+    AND created_at < parseDateTime64BestEffort({day_to:String}, 3, 'UTC')
+  ) AS daily_used_tokens
+FROM \`${this.database}\`.\`${this.table}\` FINAL
+WHERE tenant_id = {tenant_id:UUID}
+  AND project_id = {project_id:UUID}
+  AND created_at >= parseDateTime64BestEffort({month_from:String}, 3, 'UTC')
+  AND created_at < parseDateTime64BestEffort({month_to:String}, 3, 'UTC')
 GROUP BY employee_identity_hash
 FORMAT JSONEachRow
 `.trim();
@@ -268,9 +467,9 @@ function addAggregate(
   };
 }
 
-function unavailable(): ServiceUnavailableException {
+function unavailable(code: string, message: string): ServiceUnavailableException {
   return new ServiceUnavailableException({
-    code: 'EMPLOYEE_USAGE_ANALYTICS_UNAVAILABLE',
-    message: 'Employee usage analytics is temporarily unavailable.',
+    code,
+    message,
   });
 }
