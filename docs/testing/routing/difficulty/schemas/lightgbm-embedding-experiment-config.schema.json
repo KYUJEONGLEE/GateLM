@@ -1,0 +1,137 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gatelm.local/docs/testing/routing/difficulty/schemas/lightgbm-embedding-experiment-config.schema.json",
+  "title": "GateLM embedding-only LightGBM offline experiment configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "experimentId",
+    "experimentVersion",
+    "protocolSha256",
+    "outputRoot",
+    "dataset",
+    "encoder",
+    "champion",
+    "slicePolicy",
+    "bootstrap"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "gatelm.lightgbm-embedding-experiment-config.v1" },
+    "experimentId": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,159}$" },
+    "experimentVersion": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,159}$" },
+    "protocolSha256": { "$ref": "#/$defs/sha256" },
+    "outputRoot": { "type": "string", "minLength": 1, "maxLength": 1024 },
+    "dataset": { "$ref": "#/$defs/dataset" },
+    "encoder": { "$ref": "#/$defs/encoder" },
+    "champion": { "$ref": "#/$defs/immutableIdentity" },
+    "slicePolicy": { "$ref": "#/$defs/immutableIdentity" },
+    "bootstrap": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["thresholdRepeats", "testRepeats"],
+      "properties": {
+        "thresholdRepeats": { "type": "integer", "minimum": 1, "maximum": 100000 },
+        "testRepeats": { "type": "integer", "minimum": 1, "maximum": 100000 }
+      }
+    }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "inputFile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1, "maxLength": 1024 },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "immutableIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "sha256"],
+      "properties": {
+        "version": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "dataset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "datasetSha256",
+        "manifestPath",
+        "manifestSha256",
+        "splitPolicyVersion",
+        "train",
+        "validation",
+        "test",
+        "testMembership",
+        "testAggregate"
+      ],
+      "properties": {
+        "version": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "datasetSha256": { "$ref": "#/$defs/sha256" },
+        "manifestPath": { "type": "string", "minLength": 1, "maxLength": 1024 },
+        "manifestSha256": { "$ref": "#/$defs/sha256" },
+        "splitPolicyVersion": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "train": { "$ref": "#/$defs/inputFile" },
+        "validation": { "$ref": "#/$defs/inputFile" },
+        "test": { "$ref": "#/$defs/inputFile" },
+        "testMembership": { "$ref": "#/$defs/inputFile" },
+        "testAggregate": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["records", "families", "simple", "complex"],
+          "properties": {
+            "records": { "type": "integer", "minimum": 2 },
+            "families": { "type": "integer", "minimum": 1 },
+            "simple": { "type": "integer", "minimum": 1 },
+            "complex": { "type": "integer", "minimum": 1 }
+          }
+        }
+      }
+    },
+    "encoderDescriptor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "providerKind",
+        "modelId",
+        "sourceRevision",
+        "inputPrefix",
+        "maximumTokenLength",
+        "pooling",
+        "normalization",
+        "outputDtype",
+        "outputDimension",
+        "artifactIdentitySha256"
+      ],
+      "properties": {
+        "providerKind": { "const": "local_e5_small_native_pooled_v2" },
+        "modelId": { "const": "intfloat/multilingual-e5-small" },
+        "sourceRevision": { "const": "614241f622f53c4eeff9890bdc4f31cfecc418b3" },
+        "inputPrefix": { "const": "query: " },
+        "maximumTokenLength": { "const": 128 },
+        "pooling": { "const": "attention_mask_weighted_mean_excluding_padding" },
+        "normalization": { "const": "none_native_pooled" },
+        "outputDtype": { "const": "float32" },
+        "outputDimension": { "const": 384 },
+        "artifactIdentitySha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "encoder": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "manifestPath", "artifactRoot", "descriptor"],
+      "properties": {
+        "kind": { "const": "local_e5_small_native_pooled_v2" },
+        "manifestPath": { "type": "string", "minLength": 1, "maxLength": 1024 },
+        "artifactRoot": { "type": "string", "minLength": 1, "maxLength": 1024 },
+        "descriptor": { "$ref": "#/$defs/encoderDescriptor" }
+      }
+    }
+  }
+}

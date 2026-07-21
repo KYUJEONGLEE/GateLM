@@ -80,3 +80,16 @@ A/B 일치만으로 `human_reviewed=true`, `review_status=approved`, `training_e
 corepack pnpm run routing:difficulty:generate-gemini-targeted-review-packet
 corepack pnpm run verify:routing-difficulty-gemini-targeted-review-packet
 ```
+
+같은 GPT 계열의 정밀 재검토는 Reviewer C 보조 증거로 분리한다. C는 같은 3,650건을 B와 다른 순서로 받고, 기존 후보·B 결과·선정 사유 없이 추론, 작업 의존성, 제약 trade-off, 전문 판단, 문맥 통합, 도구·외부 근거, 검증 필요성의 7개 축을 먼저 구조화한다. 같은 모델 계열의 second pass이므로 독립 리뷰어 한 명이 추가된 것으로 계산하지 않는다.
+
+```powershell
+corepack pnpm run routing:difficulty:generate-gpt-reviewer-c-deep-review-packet
+corepack pnpm run verify:routing-difficulty-gpt-reviewer-c-deep-review-packet
+```
+
+B/C가 일치하고 모두 high confidence인 항목은 LLM 합의 후보로만 표시한다. B/C 불일치, 어느 한쪽의 low confidence, 또는 한 번이라도 `needs_human_adjudication=true`였던 항목은 사람 adjudication queue에서 제거하지 않는다. Gemini A까지 일치해도 `human_reviewed=true`로 자동 전환하지 않는다.
+
+Reviewer C 결과 3,650건의 수신·복구·7축 schema 검증과 B/C 비교 결과는 [`reviews/independent-llm/reviewer-c-gpt/reviewer-c-report.md`](reviews/independent-llm/reviewer-c-gpt/reviewer-c-report.md)에 기록한다. C는 B와 같은 GPT 계열이므로 import가 완료돼도 독립 리뷰어 A 완료로 표시하지 않는다.
+
+Dataset owner 요청에 따라 B/C가 같은 라벨을 냈고 기존 후보와 달랐던 3,215건은 별도 수정본에 반영한다. 원본 dataset은 B/C 리뷰 입력의 재현 가능한 증거로 보존한다. 수정본도 `human_reviewed=false`, `training_eligible=false`이며 B/C 사람 adjudication queue 2,249건을 제거하지 않는다. 적용 결과와 남은 blocker는 [`reviews/independent-llm/reviewer-c-gpt/reviewer-b-c-label-application-report.md`](reviews/independent-llm/reviewer-c-gpt/reviewer-b-c-label-application-report.md)에 기록한다.

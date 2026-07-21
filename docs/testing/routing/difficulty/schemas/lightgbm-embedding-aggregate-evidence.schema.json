@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gatelm.local/docs/testing/routing/difficulty/schemas/lightgbm-embedding-aggregate-evidence.schema.json",
+  "title": "GateLM embedding-only LightGBM aggregate offline evidence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "experimentId",
+    "experimentVersion",
+    "protocolSha256",
+    "evidenceClass",
+    "promotionState",
+    "runtimeProfileGenerated",
+    "experimentExecuted",
+    "testAccessState",
+    "stages",
+    "environment",
+    "deviations",
+    "limitations",
+    "containsEmbeddingMatrix",
+    "containsPerSampleScore",
+    "evidenceSha256"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "gatelm.lightgbm-embedding-aggregate-evidence.v1" },
+    "experimentId": { "type": "string", "minLength": 1, "maxLength": 160 },
+    "experimentVersion": { "type": "string", "minLength": 1, "maxLength": 160 },
+    "protocolSha256": { "$ref": "#/$defs/sha256" },
+    "evidenceClass": { "const": "exploratory_offline_only" },
+    "promotionState": { "const": "exploratory_only" },
+    "runtimeProfileGenerated": { "const": false },
+    "experimentExecuted": { "type": "boolean" },
+    "testAccessState": { "enum": ["untouched", "consumed_once"] },
+    "stages": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["validation", "tuning", "freezeCandidate", "freezeRecord", "test"],
+      "properties": {
+        "validation": { "$ref": "#/$defs/nullableAggregate" },
+        "tuning": { "$ref": "#/$defs/nullableAggregate" },
+        "freezeCandidate": { "$ref": "#/$defs/nullableAggregate" },
+        "freezeRecord": { "$ref": "#/$defs/nullableAggregate" },
+        "test": { "$ref": "#/$defs/nullableAggregate" }
+      }
+    },
+    "environment": { "type": "object" },
+    "deviations": { "type": "array", "items": { "type": "object" } },
+    "limitations": { "type": "array", "items": { "type": "string" } },
+    "containsEmbeddingMatrix": { "const": false },
+    "containsPerSampleScore": { "const": false },
+    "evidenceSha256": { "$ref": "#/$defs/sha256" }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "nullableAggregate": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "not": {
+            "anyOf": [
+              { "required": ["embeddingMatrix"] },
+              { "required": ["perSampleScore"] },
+              { "required": ["instructionText"] },
+              { "required": ["rawPrompt"] }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

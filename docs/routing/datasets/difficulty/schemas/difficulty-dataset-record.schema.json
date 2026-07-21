@@ -29,7 +29,7 @@
     },
     "label": {
       "enum": ["simple", "complex"],
-      "description": "Current candidate label. It is not production gold while review_status is pending."
+      "description": "Current candidate label. It is production gold only after recorded human approval and dataset-owner promotion."
     },
     "expected_category": {
       "enum": ["general", "code", "translation", "summarization", "reasoning"],
@@ -103,7 +103,7 @@
       "maxLength": 80
     },
     "label_source": {
-      "enum": ["synthetic_design", "public_rule_candidate"]
+      "enum": ["synthetic_design", "public_rule_candidate", "llm_same_family_consensus_candidate"]
     },
     "label_confidence": {
       "type": "number",
@@ -324,7 +324,9 @@
         "properties": {
           "boundary_case": { "const": false },
           "counterexample_type": { "type": "null" },
-          "label_source": { "const": "public_rule_candidate" }
+          "label_source": {
+            "enum": ["public_rule_candidate", "llm_same_family_consensus_candidate"]
+          }
         },
         "required": [
           "source_dataset",
@@ -351,6 +353,21 @@
       },
       "then": {
         "properties": { "human_reviewed": { "const": false } }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "label_source": { "const": "llm_same_family_consensus_candidate" }
+        },
+        "required": ["label_source"]
+      },
+      "then": {
+        "properties": {
+          "source": { "const": "public" },
+          "human_reviewed": { "const": false },
+          "review_status": { "enum": ["pending", "needs_adjudication"] }
+        }
       }
     }
   ]

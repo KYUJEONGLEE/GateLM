@@ -2,7 +2,7 @@
 
 | 항목 | 값 |
 |---|---|
-| 상태 | 버전 독립 routing 데이터 작업 영역; 초기 15,000개 후보 구축 완료 |
+| 상태 | 버전 독립 routing 데이터 작업 영역; 초기 15,000개와 Reviewer B/C 라벨 수정본 구축 완료 |
 | 전체 초기 목표 | 15,000개 (`simple` 7,500 / `complex` 7,500) |
 | 현재 생성 범위 | 공개 7,000 + 서비스 맞춤형 합성 6,000 + 경계 사례 2,000 |
 | 공개 소스 조사 | [`public-source-review.md`](public-source-review.md) |
@@ -13,7 +13,7 @@
 
 이 문서는 사용자 프롬프트를 `Simple` 또는 `Complex`로 분류하는 GateLM 난이도 모델의 데이터 구축·검수·분할·운영 개선 계획과 현재 생성된 15,000개 후보 데이터를 함께 관리한다. 이 영역은 제품 SemVer와 분리된 `docs/routing/` 아래에 있으며, 기존 `docs/v2.1.0` 평가 fixture를 수정하거나 새 데이터의 저장 위치로 사용하지 않는다.
 
-현재 데이터는 사람이 승인한 gold label이 아니다. 합성 데이터는 시나리오 설계 규칙으로, 공개 데이터는 길이를 제외한 고정 규칙과 난이도 점수로 후보 라벨을 부여했다. KLUE는 질문 필드 142개만 사용하며 문맥 직렬화와 KLUE 유래 `rag_query`를 제거했다. 모든 record는 `review_status=pending`, `human_reviewed=false`다. 공개 7,000개 중 사람 원문 기원은 6,873개지만 최종 Prompt 직접 사람 작성 확인분은 2,674개로 60% 목표보다 1,526개 부족하고, 익명 접근·재배포 가능한 실제 서비스 사용자 Prompt는 0개다. 작업·도메인 재균형과 multilingual-E5 의미 중복 전수 감사 결과는 [`bias-audit.md`](bias-audit.md)에 기록한다. 남은 blocker와 독립 판정·사람 검수가 해소되기 전에는 학습·threshold 선택·runtime 승격 근거로 사용할 수 없다.
+현재 데이터는 사람이 승인한 gold label이 아니다. 합성 데이터는 시나리오 설계 규칙으로, 공개 데이터의 원본 후보는 길이를 제외한 고정 규칙과 난이도 점수로 라벨을 부여했다. Reviewer B/C가 같은 GPT 계열에서 블라인드로 동일 판정을 내렸고 원본 후보와 달랐던 공개 데이터 3,215건은 별도 수정본의 현재 `label`에 반영했다. 이 중 1,814건을 포함한 B/C 사람 adjudication queue 2,249건은 그대로 유지하며, 모든 record의 `human_reviewed=false`와 전체 `training_eligible=false`도 유지한다. 원본 15,000건은 리뷰 입력 증거로 보존한다. KLUE는 질문 필드 142개만 사용하며 문맥 직렬화와 KLUE 유래 `rag_query`를 제거했다. 공개 7,000개 중 사람 원문 기원은 6,873개지만 최종 Prompt 직접 사람 작성 확인분은 2,674개로 60% 목표보다 1,526개 부족하고, 익명 접근·재배포 가능한 실제 서비스 사용자 Prompt는 0개다. 작업·도메인 재균형과 multilingual-E5 의미 중복 전수 감사 결과는 [`bias-audit.md`](bias-audit.md)에 기록한다. 남은 blocker와 독립 판정·사람 검수가 해소되기 전에는 학습·threshold 선택·runtime 승격 근거로 사용할 수 없다.
 
 ## 1. 목표와 구축 전략
 
@@ -308,7 +308,7 @@ Canonical record schema는 [`schemas/difficulty-dataset-record.schema.json`](sch
 | `source` | `synthetic | boundary | public` |
 | `boundary_case` | 경계·반례 여부 |
 | `counterexample_type` | 경계 유형; 일반 합성은 `null` |
-| `label_source` | `synthetic_design | public_rule_candidate` |
+| `label_source` | `synthetic_design | public_rule_candidate | llm_same_family_consensus_candidate` |
 | `label_confidence` | 검수 우선순위용 confidence; 학습 확률 target 아님 |
 | `label_reason` | prompt fragment 없는 안전한 판정 근거 |
 | `human_reviewed` | 사람 검수 완료 여부 |
@@ -394,6 +394,12 @@ lexical heuristic 뒤 pinned multilingual-E5 전수 감사를 수행한다. cosi
 | [`data/initial-routing-difficulty-15000.jsonl`](data/initial-routing-difficulty-15000.jsonl) | 합성·경계·공개를 합친 초기 15,000개 bundle |
 | [`data/initial-routing-difficulty-15000.manifest.json`](data/initial-routing-difficulty-15000.manifest.json) | 통합 hash, component hash와 전체 분포 |
 | [`data/initial-routing-difficulty-15000.semantic-dedup.json`](data/initial-routing-difficulty-15000.semantic-dedup.json) | pinned E5 전수 감사, 보정·후보·cluster 증거(원문·embedding 비저장) |
+| [`data/enterprise-synthetic-8000.reviewer-b-c-revised.jsonl`](data/enterprise-synthetic-8000.reviewer-b-c-revised.jsonl) | 라벨은 보존하고 B/C 사람 queue 19건의 검수 상태만 반영한 합성·경계 수정본 |
+| [`data/enterprise-synthetic-8000.reviewer-b-c-revised.manifest.json`](data/enterprise-synthetic-8000.reviewer-b-c-revised.manifest.json) | 합성·경계 수정본 hash와 검수 blocker |
+| [`data/public-prompts-7000.reviewer-b-c-revised.jsonl`](data/public-prompts-7000.reviewer-b-c-revised.jsonl) | B/C 동일 GPT 계열 합의로 3,215건의 현재 라벨을 교체한 공개 수정본 |
+| [`data/public-prompts-7000.reviewer-b-c-revised.manifest.json`](data/public-prompts-7000.reviewer-b-c-revised.manifest.json) | 공개 수정본 hash, 라벨·검수 상태와 blocker |
+| [`data/initial-routing-difficulty-15000.reviewer-b-c-revised.jsonl`](data/initial-routing-difficulty-15000.reviewer-b-c-revised.jsonl) | 현재 라벨 검토용 15,000건 통합 수정본; 원본은 리뷰 증거로 보존 |
+| [`data/initial-routing-difficulty-15000.reviewer-b-c-revised.manifest.json`](data/initial-routing-difficulty-15000.reviewer-b-c-revised.manifest.json) | 통합 수정본 hash, 분포, 의미 중복 재검사와 training blocker |
 | [`schemas/difficulty-dataset-record.schema.json`](schemas/difficulty-dataset-record.schema.json) | 독립 record schema |
 | [`schemas/difficulty-dataset-manifest.schema.json`](schemas/difficulty-dataset-manifest.schema.json) | manifest schema |
 | [`../../../../scripts/routing_difficulty_model/dataset/generate-enterprise-synthetic-8000.mjs`](../../../../scripts/routing_difficulty_model/dataset/generate-enterprise-synthetic-8000.mjs) | seed 기반 결정론적 생성기 |
@@ -404,6 +410,7 @@ lexical heuristic 뒤 pinned multilingual-E5 전수 감사를 수행한다. cosi
 | [`../../../../scripts/routing_difficulty_model/dataset/verify-public-prompts-7000.mjs`](../../../../scripts/routing_difficulty_model/dataset/verify-public-prompts-7000.mjs) | 공개·통합 분포, hash, 중복, 누수 검증기 |
 | [`../../../../scripts/routing_difficulty_model/dataset/semantic-dedup.py`](../../../../scripts/routing_difficulty_model/dataset/semantic-dedup.py) | pinned multilingual-E5 전수 감사와 remediation 생성기 |
 | [`../../../../scripts/routing_difficulty_model/dataset/verify-semantic-dedup.mjs`](../../../../scripts/routing_difficulty_model/dataset/verify-semantic-dedup.mjs) | 감사의 데이터·모델 hash, 보정 정밀도, 후보 0쌍 빠른 검증기 |
+| [`../../../../scripts/routing_difficulty_model/dataset/apply-reviewer-b-c-consensus-labels.mjs`](../../../../scripts/routing_difficulty_model/dataset/apply-reviewer-b-c-consensus-labels.mjs) | B/C 비교 증거에서 3,215건 라벨 수정본과 Prompt 없는 override 이력을 생성·검증 |
 
 ```powershell
 corepack pnpm run routing:difficulty:generate-enterprise-8000
@@ -413,6 +420,8 @@ corepack pnpm run routing:difficulty:generate-public-7000
 corepack pnpm run routing:difficulty:audit-semantic-dedup
 corepack pnpm run verify:routing-difficulty-public-7000
 corepack pnpm run verify:routing-difficulty-semantic-dedup
+corepack pnpm run routing:difficulty:apply-reviewer-b-c-labels
+corepack pnpm run verify:routing-difficulty-reviewer-b-c-labels
 ```
 
 통합 manifest의 핵심 값은 다음과 같다.
@@ -432,6 +441,8 @@ train        10,500
 validation    2,250
 test          2,250
 ```
+
+위 수치는 보존된 원본 후보의 50:50 분포다. Reviewer B/C 수정본은 요청된 3,215건을 모두 반영하여 `simple=9,729`, `complex=5,271`이며 더 이상 50:50이 아니다. 상세 적용·잔여 작업은 [`reviews/independent-llm/reviewer-c-gpt/reviewer-b-c-label-application-report.md`](reviews/independent-llm/reviewer-c-gpt/reviewer-b-c-label-application-report.md)에서 확인한다.
 
 ## 12. 프로젝트 규모별 권장 데이터
 
