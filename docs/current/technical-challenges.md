@@ -314,17 +314,33 @@ On 2026-07-21, an isolated PostgreSQL 16 database was loaded with 180,000 synthe
 | Policy Impact read p95, 5 samples | 1,217.847ms | 5.248ms | 99.569% lower, 232.059× |
 | Aggregate parity | baseline | request, cost, saved cost, cache, routing, model all equal | PASS |
 
+### Production-clone rehearsal and the failed first cutover
+
+The same reader implementation was then measured on an AWS production-clone Data host (`m7i.large`) against 70,252 copied request logs. Five raw and five Rollup samples used the same tenant, project, time range, and database.
+
+| Metric | Raw reader | Rollup reader | Result |
+|---|---:|---:|---:|
+| Policy Impact p50 | 5,934.689ms | 1.961ms | about 3,026× |
+| Policy Impact p95 | 6,221.145ms | 2.048ms | 99.967% lower, 3,037.606× |
+| Policy Impact maximum | 6,221.145ms | 2.048ms | about 3,037.61× |
+| Request and complete response parity | 70,252 | 70,252 | PASS |
+
+The first writer cutover still failed parent parity even though minute parity passed: raw and minute totals were 70,252, while hour and day totals were 88,256. A legacy `06:00` hour row containing 18,004 requests had no corresponding raw or minute rows. Source-driven minute backfill never enqueued that empty parent, so the stale row survived and was merged into the day.
+
+The rollout was extended with an explicit, approved one-hour parent rebuild. It includes existing legacy hour states and rows, clears the target parent before merging minute children, and then propagates the corrected result to day and month. The second rehearsal produced `raw = minute = hour = day = 70,252`, with no closed hour/day dirty bucket. This is why rollout parity must cover every active grain rather than only raw versus minute.
+
 ### Evidence
 
 - [Minute Rollup writer and parent merge](../../apps/control-plane-api/src/modules/dashboard-rollup/dashboard-rollup.service.ts)
 - [Bounded Policy Impact Rollup reader](../../apps/gateway-core/internal/adapters/invocationlog/postgres/analytics_policy_impact_rollup.go)
 - [Reproducible 180,000-row benchmark](../../scripts/dev/dashboard-minute-rollup-benchmark.ps1)
+- [Bounded parent cutover rebuild](../../db/maintenance/enqueue_dashboard_parent_rollup_rebuild.sql)
 - [Performance comparison report](../../reports/perf/dashboard-minute-rollup-benchmark-20260721.ko.md)
 - [Rollout and fallback contract proposal](proposals/dashboard-observability-rollup-contract.md)
 
 ### Claim boundary
 
-The A/B result proves query parity and the measured implementation delta in one isolated local PostgreSQL environment. It does not yet prove the same improvement factor on the production `m7i.large`, while writes, Dashboard polling, and two Gateway readers run concurrently. Production activation remains gated by shadow parity, cursor catch-up, zero dirty buckets, canary reader activation, and a repeated `300 RPS × 10 minute` dashboard-aware test.
+The local A/B proves the implementation delta in an isolated PostgreSQL environment. The production-clone rehearsal additionally proves exact reader and parent-grain parity for the copied 70,252-row dataset and the measured raw-versus-Rollup reader delta on an `m7i.large`. It still does not prove the same factor on live production while writes, Dashboard polling, and two Gateway readers run concurrently. Production activation remains gated by shadow parity, cursor catch-up, zero closed dirty buckets, canary reader activation, and a repeated `300 RPS × 10 minute` dashboard-aware test.
 
 ## 12. Large-Scale Validation Still Required
 
@@ -350,4 +366,4 @@ Suggested evidence-producing tests are:
 
 > GateLM's difficult work is not forwarding a prompt to an LLM. It is preserving correct behavior when requests retry, streams disconnect, providers fail ambiguously, workers scale out, and tenant data must never cross a retrieval, cache, or encryption boundary.
 
-For the Dashboard pipeline specifically, the challenge progressed from diagnosing a post-load PostgreSQL saturation incident, through a query-plan recovery that still required a 37-second hour rebuild, to bounding source replacement at one minute and removing unbounded raw fallback. The 180,000-row local A/B measured exact aggregate parity, a 93.14% reduction in maximum rebuild time, and a 99.569% reduction in Policy Impact read p95; production end-to-end revalidation remains pending.
+For the Dashboard pipeline specifically, the challenge progressed from diagnosing a post-load PostgreSQL saturation incident, through a query-plan recovery that still required a 37-second hour rebuild, to bounding source replacement at one minute and removing unbounded raw fallback. The 180,000-row local A/B measured a 93.14% reduction in maximum rebuild time and a 99.569% reduction in Policy Impact read p95. The AWS production-clone rehearsal then exposed and fixed stale legacy-parent duplication before reaching `raw = minute = hour = day = 70,252` and a 99.967% reader p95 reduction; live production end-to-end revalidation remains pending.

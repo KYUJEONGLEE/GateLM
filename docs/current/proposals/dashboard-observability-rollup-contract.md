@@ -141,6 +141,7 @@ Policy Impact reader는 완료된 minute Rollup, 분 경계 앞의 작은 raw ed
 - background writer는 `legacy | shadow | minute` build mode로 점진 활성화한다. 기본값은 `legacy`다.
 - `shadow`는 기존 hour source rebuild를 유지하면서 minute 결과를 함께 만들어 정합성과 처리시간을 비교한다. shadow minute completion은 기존 hour parent를 덮어쓰지 않는다.
 - `minute`는 source에서 minute만 만들고 parent chain을 child merge로 전환한다.
+- `shadow → minute` 전환 시에는 원본이 존재하는 minute만 백필해서는 안 된다. 기존 legacy hour row가 있지만 대응하는 minute가 없는 closed hour도 `db/maintenance/enqueue_dashboard_parent_rollup_rebuild.sql`로 한 시간씩 다시 큐잉해 먼저 비운다. 그렇지 않으면 stale hour가 day/month에 다시 합산될 수 있다.
 - Policy Impact reader는 `raw | rollup` read mode를 사용하며 기본값은 `raw`다.
 - schema migration을 먼저 적용하고 shadow parity 검증 후 builder, 마지막으로 reader를 전환한다.
 - 기존 대용량 P0 log에는 `(ingested_at, request_id)`, `(tenant_id, created_at)` index를 `CREATE INDEX CONCURRENTLY`로 추가한다. 배포 시 추가 I/O와 디스크 사용량을 관찰한다.
@@ -157,6 +158,7 @@ Policy Impact reader는 완료된 minute Rollup, 분 경계 앞의 작은 raw ed
 7. 긴 범위 Dashboard의 query plan과 응답 시간이 raw-only 기준보다 개선됨을 별도 evidence로 남긴다.
 8. 5분 이하의 sub-minute 시계열은 raw와 동일하게 유지되고, Rollup lag가 raw-tail 상한을 넘으면 full-range raw query 없이 `partial/stale`가 반환된다.
 9. `legacy → shadow → minute` 전환과 `raw → rollup` reader 전환을 독립적으로 rollback할 수 있다.
+10. 전환 범위에서 raw, minute, hour, day의 additive total이 같고, source가 없는 legacy parent bucket이 제거된다.
 
 ## 11. Performance Evidence
 
