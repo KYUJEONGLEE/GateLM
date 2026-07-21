@@ -9,6 +9,7 @@ import {
   DashboardRollupService,
   dashboardHistogramPercentileUpperBound,
   enqueueDashboardRollupDirtyBucket,
+  enqueueDashboardRollupDirtyHierarchy,
   utcBucketEnd,
   utcBucketStart,
 } from './dashboard-rollup.service';
@@ -27,11 +28,34 @@ const employeeUsageMigrationPath = resolve(
   __dirname,
   '../../../prisma/migrations/20260714190000_employee_usage_rollups/migration.sql',
 );
+const minuteMigrationPath = resolve(
+  __dirname,
+  '../../../prisma/migrations/20260721100000_dashboard_rollup_minute_buckets/migration.sql',
+);
+const minuteDirtyIndexMigrationPath = resolve(
+  __dirname,
+  '../../../prisma/migrations/20260721100100_dashboard_rollup_minute_dirty_index/migration.sql',
+);
+const minuteStateIndexMigrationPath = resolve(
+  __dirname,
+  '../../../prisma/migrations/20260721100200_dashboard_rollup_minute_state_index/migration.sql',
+);
+const policyImpactMigrationPath = resolve(
+  __dirname,
+  '../../../prisma/migrations/20260721101000_dashboard_rollup_policy_impact_metrics/migration.sql',
+);
+const policyOutcomeIndexMigrationPath = resolve(
+  __dirname,
+  '../../../prisma/migrations/20260721101100_dashboard_rollup_policy_outcome_index/migration.sql',
+);
 
 describe('DashboardRollupService', () => {
-  it('aligns hour, day, and month buckets in UTC', () => {
+  it('aligns minute, hour, day, and month buckets in UTC', () => {
     const value = new Date('2026-07-14T23:45:12.345+09:00');
 
+    expect(utcBucketStart(value, 'minute').toISOString()).toBe(
+      '2026-07-14T14:45:00.000Z',
+    );
     expect(utcBucketStart(value, 'hour').toISOString()).toBe(
       '2026-07-14T14:00:00.000Z',
     );
@@ -43,6 +67,43 @@ describe('DashboardRollupService', () => {
     );
     expect(utcBucketEnd(value, 'month').toISOString()).toBe(
       '2026-08-01T00:00:00.000Z',
+    );
+    expect(utcBucketEnd(value, 'minute').toISOString()).toBe(
+      '2026-07-14T14:46:00.000Z',
+    );
+  });
+
+  it('keeps legacy, shadow, and minute dirty hierarchies isolated', async () => {
+    const executeRaw = jest.fn().mockResolvedValue(1);
+    const tx = { $executeRaw: executeRaw };
+    const base = {
+      tenantId: tenantA,
+      surface: 'project_application' as const,
+      occurredAt: new Date('2026-07-14T12:34:56Z'),
+      reasonCode: 'SOURCE_DISCOVERED' as const,
+    };
+
+    await enqueueDashboardRollupDirtyHierarchy(tx as never, {
+      ...base,
+      buildMode: 'legacy',
+    });
+    expect(executeRaw).toHaveBeenCalledTimes(3);
+
+    executeRaw.mockClear();
+    await enqueueDashboardRollupDirtyHierarchy(tx as never, {
+      ...base,
+      buildMode: 'shadow',
+    });
+    expect(executeRaw).toHaveBeenCalledTimes(4);
+
+    executeRaw.mockClear();
+    await enqueueDashboardRollupDirtyHierarchy(tx as never, {
+      ...base,
+      buildMode: 'minute',
+    });
+    expect(executeRaw).toHaveBeenCalledTimes(1);
+    expect(rawQuery(executeRaw.mock.calls[0]?.[0]).values).toContainEqual(
+      new Date('2026-07-14T12:34:00Z'),
     );
   });
 
@@ -121,6 +182,32 @@ describe('DashboardRollupService', () => {
     await expect(service.runOnce()).resolves.toEqual({ discovered: 0, aggregated: 0 });
     finishDiscovery?.(0);
     await expect(first).resolves.toEqual({ discovered: 0, aggregated: 0 });
+  });
+
+  it('waits for source coverage and child completion before minute parents', async () => {
+    const queryRaw = jest.fn().mockResolvedValue([]);
+    const prisma = {
+      $transaction: jest.fn(
+        async (callback: (client: { $queryRaw: typeof queryRaw }) => unknown) =>
+          callback({ $queryRaw: queryRaw }),
+      ),
+    } as unknown as PrismaService;
+    const service = createService(prisma, {
+      DASHBOARD_ROLLUP_BUILD_MODE: 'minute',
+    });
+    const internals = service as unknown as {
+      processNextDirtyBucket: () => Promise<boolean>;
+    };
+
+    await expect(internals.processNextDirtyBucket()).resolves.toBe(false);
+
+    const claim = rawQuery(queryRaw.mock.calls[0]?.[0]);
+    expect(claim.sql).toContain('cursor.caught_up_through');
+    expect(claim.sql).toContain("dirty.grain <> 'minute'");
+    expect(claim.sql).toContain("= 'legacy'");
+    expect(claim.sql).toContain('NOT EXISTS');
+    expect(claim.sql).toContain('FROM dashboard_rollup_dirty_buckets child');
+    expect(claim.values).toContain('minute');
   });
 
   it('reconciles the recent cutoff window instead of a stale cursor window', async () => {
@@ -305,7 +392,7 @@ describe('DashboardRollupService', () => {
     const tx = { $executeRaw: executeRaw };
     const service = createService();
     const internals = service as unknown as {
-      rebuildProjectApplicationHour: (
+      rebuildProjectApplicationSourceBucket: (
         client: typeof tx,
         bucket: {
           tenant_id: string;
@@ -318,7 +405,7 @@ describe('DashboardRollupService', () => {
     };
     const bucketStart = new Date('2026-07-14T12:00:00Z');
 
-    await internals.rebuildProjectApplicationHour(
+    await internals.rebuildProjectApplicationSourceBucket(
       tx,
       {
         tenant_id: tenantA,
@@ -342,12 +429,54 @@ describe('DashboardRollupService', () => {
     expect(employeeUsageSql).toContain('"deletedAt" IS NULL');
   });
 
+  it('keeps unknown project routing difficulty out of routing dimensions', async () => {
+    const executeRaw = jest.fn().mockResolvedValue(1);
+    const tx = { $executeRaw: executeRaw };
+    const service = createService();
+    const internals = service as unknown as {
+      rebuildProjectApplicationSourceBucket: (
+        client: typeof tx,
+        bucket: {
+          tenant_id: string;
+          surface: 'project_application';
+          grain: 'minute';
+          bucket_start: Date;
+        },
+        bucketEnd: Date,
+      ) => Promise<void>;
+    };
+
+    await internals.rebuildProjectApplicationSourceBucket(
+      tx,
+      {
+        tenant_id: tenantA,
+        surface: 'project_application',
+        grain: 'minute',
+        bucket_start: new Date('2026-07-14T12:00:00Z'),
+      },
+      new Date('2026-07-14T12:01:00Z'),
+    );
+
+    const dimensionSql = rawQuery(executeRaw.mock.calls[1]?.[0]).sql;
+    expect(dimensionSql).toContain(
+      "CASE lower(nullif(metadata ->> 'promptDifficulty', ''))",
+    );
+    expect(dimensionSql).toContain("WHEN 'simple' THEN 'simple'");
+    expect(dimensionSql).toContain('ELSE NULL');
+    expect(dimensionSql).toContain(
+      "('routing', prompt_category, prompt_difficulty, routing_reason, prompt_difficulty IS NOT NULL)",
+    );
+    expect(dimensionSql).not.toContain(
+      "coalesce(nullif(metadata ->> 'promptDifficulty', ''), 'simple')",
+    );
+  });
+
   it('rolls up persisted Tenant Chat TTFT rather than a synthetic null value', async () => {
     const executeRaw = jest.fn().mockResolvedValue(1);
     const tx = { $executeRaw: executeRaw };
     const service = createService();
     const internals = service as unknown as {
-      rebuildTenantChatHour: (
+      rebuildTenantChatSourceBucket: (
         client: typeof tx,
         bucket: {
           tenant_id: string;
@@ -359,7 +488,7 @@ describe('DashboardRollupService', () => {
       ) => Promise<void>;
     };
 
-    await internals.rebuildTenantChatHour(
+    await internals.rebuildTenantChatSourceBucket(
       tx,
       {
         tenant_id: tenantA,
@@ -420,6 +549,20 @@ describe('DashboardRollupService', () => {
     const sql = readFileSync(migrationPath, 'utf8');
     const discoveryIndexSql = readFileSync(discoveryIndexMigrationPath, 'utf8');
     const employeeUsageSql = readFileSync(employeeUsageMigrationPath, 'utf8');
+    const minuteSql = readFileSync(minuteMigrationPath, 'utf8');
+    const minuteDirtyIndexSql = readFileSync(
+      minuteDirtyIndexMigrationPath,
+      'utf8',
+    );
+    const minuteStateIndexSql = readFileSync(
+      minuteStateIndexMigrationPath,
+      'utf8',
+    );
+    const policyImpactSql = readFileSync(policyImpactMigrationPath, 'utf8');
+    const policyOutcomeIndexSql = readFileSync(
+      policyOutcomeIndexMigrationPath,
+      'utf8',
+    );
 
     expect(sql).not.toMatch(/\b(?:DROP|TRUNCATE)\b/i);
     expect(sql).toContain(
@@ -446,10 +589,31 @@ describe('DashboardRollupService', () => {
     expect(employeeUsageSql).not.toMatch(
       /raw_prompt|raw_response|authorization|api_key|app_token/i,
     );
+    expect(minuteSql).toContain("'minute', 'hour', 'day', 'month'");
+    expect(minuteDirtyIndexSql).toContain(
+      'CREATE INDEX CONCURRENTLY dashboard_rollup_minute_dirty_idx',
+    );
+    expect(minuteStateIndexSql).toContain(
+      'CREATE INDEX CONCURRENTLY dashboard_rollup_minute_state_idx',
+    );
+    expect(policyImpactSql).toContain('saved_cost_known_request_count');
+    expect(policyImpactSql).toContain("'policy_outcome'");
+    expect(policyOutcomeIndexSql).toContain(
+      'CREATE INDEX CONCURRENTLY dashboard_rollup_policy_outcome_idx',
+    );
+    expect(minuteSql).not.toMatch(
+      /raw_prompt|raw_response|authorization|api_key|app_token/i,
+    );
+    expect(policyImpactSql).not.toMatch(
+      /raw_prompt|raw_response|authorization|api_key|app_token/i,
+    );
   });
 });
 
-function createService(prisma?: PrismaService): DashboardRollupService {
+function createService(
+  prisma?: PrismaService,
+  overrides: Record<string, unknown> = {},
+): DashboardRollupService {
   const database =
     prisma ??
     ({
@@ -457,9 +621,11 @@ function createService(prisma?: PrismaService): DashboardRollupService {
     } as unknown as PrismaService);
   const values: Record<string, unknown> = {
     DASHBOARD_ROLLUP_BUCKET_BATCH_SIZE: 8,
+    DASHBOARD_ROLLUP_BUILD_MODE: 'legacy',
     DASHBOARD_ROLLUP_DISCOVERY_BATCH_SIZE: 500,
     DASHBOARD_ROLLUP_ENABLED: 'false',
     DASHBOARD_ROLLUP_INTERVAL_MS: 1000,
+    ...overrides,
   };
   const config = {
     get: jest.fn((key: string) => values[key]),

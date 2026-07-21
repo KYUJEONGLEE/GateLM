@@ -97,6 +97,8 @@ valid_env="${tmp_dir}/valid.env"
 write_valid_env "${valid_env}"
 validate_env "${valid_env}" >/dev/null
 grep -Fq 'GATEWAY_AUTH_CACHE_TTL_MS: "5000"' "${DIST_COMPOSE_PATH}"
+grep -Fq 'DASHBOARD_ROLLUP_BUILD_MODE: ${DASHBOARD_ROLLUP_BUILD_MODE:-legacy}' "${DIST_COMPOSE_PATH}"
+grep -Fq 'GATEWAY_ANALYTICS_POLICY_IMPACT_READ_MODE: ${GATEWAY_ANALYTICS_POLICY_IMPACT_READ_MODE:-raw}' "${DIST_COMPOSE_PATH}"
 
 attestation_dir="${tmp_dir}/attestations"
 mkdir "${attestation_dir}"

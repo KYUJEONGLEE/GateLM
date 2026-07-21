@@ -22,7 +22,19 @@ func (r *QueryReader) GetAnalyticsPolicyImpact(
 	if err != nil {
 		return invocationlog.AnalyticsPolicyImpactFields{}, err
 	}
+	if r.analyticsPolicyImpactReadMode == "rollup" {
+		config := policyImpactBucketConfig(normalized)
+		if config.Interval == 0 || config.Interval >= time.Minute {
+			return r.getAnalyticsPolicyImpactFromRollup(ctx, normalized)
+		}
+	}
+	return r.getAnalyticsPolicyImpactFromRaw(ctx, normalized)
+}
 
+func (r *QueryReader) getAnalyticsPolicyImpactFromRaw(
+	ctx context.Context,
+	normalized invocationlog.AnalyticsPolicyImpactFilter,
+) (invocationlog.AnalyticsPolicyImpactFields, error) {
 	snapshot, err := r.queryAnalyticsPolicyImpactSnapshot(ctx, normalized)
 	if err != nil {
 		return invocationlog.AnalyticsPolicyImpactFields{}, err

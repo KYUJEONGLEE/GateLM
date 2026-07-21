@@ -15,6 +15,7 @@ describe('validateEnv', () => {
       'tenant_chat_cache_keys_v1',
     );
     expect(env.DASHBOARD_ROLLUP_ENABLED).toBe('false');
+    expect(env.DASHBOARD_ROLLUP_BUILD_MODE).toBe('legacy');
     expect(env.DASHBOARD_ROLLUP_INTERVAL_MS).toBe(1000);
     expect(env.DASHBOARD_ROLLUP_DISCOVERY_BATCH_SIZE).toBe(500);
     expect(env.DASHBOARD_ROLLUP_BUCKET_BATCH_SIZE).toBe(8);
@@ -58,6 +59,7 @@ describe('validateEnv', () => {
     const env = validateEnv({
       ...baseEnv(),
       DASHBOARD_ROLLUP_ENABLED: 'true',
+      DASHBOARD_ROLLUP_BUILD_MODE: 'shadow',
       DASHBOARD_ROLLUP_INTERVAL_MS: '500',
       DASHBOARD_ROLLUP_DISCOVERY_BATCH_SIZE: '750',
       DASHBOARD_ROLLUP_BUCKET_BATCH_SIZE: '12',
@@ -68,12 +70,24 @@ describe('validateEnv', () => {
 
     expect(env.CONTROL_PLANE_PORT).toBe(3001);
     expect(env.DASHBOARD_ROLLUP_ENABLED).toBe('true');
+    expect(env.DASHBOARD_ROLLUP_BUILD_MODE).toBe('shadow');
     expect(env.DASHBOARD_ROLLUP_INTERVAL_MS).toBe(500);
     expect(env.DASHBOARD_ROLLUP_DISCOVERY_BATCH_SIZE).toBe(750);
     expect(env.DASHBOARD_ROLLUP_BUCKET_BATCH_SIZE).toBe(12);
     expect(env.DASHBOARD_ROLLUP_DISCOVERY_LAG_MS).toBe(30000);
     expect(env.DASHBOARD_ROLLUP_RECONCILIATION_INTERVAL_MS).toBe(120000);
     expect(env.DASHBOARD_ROLLUP_RECONCILIATION_LOOKBACK_MS).toBe(1800000);
+  });
+
+  it('rejects an unknown dashboard rollup build mode', () => {
+    expect(() =>
+      validateEnv({
+        ...baseEnv(),
+        DASHBOARD_ROLLUP_BUILD_MODE: 'unsafe-active',
+      }),
+    ).toThrow(
+      'DASHBOARD_ROLLUP_BUILD_MODE must be legacy, shadow, or minute',
+    );
   });
 
   it('validates Tenant Chat projector bounds without changing ports', () => {

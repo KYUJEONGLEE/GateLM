@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -9,6 +10,199 @@ import (
 
 	"gatelm/apps/gateway-core/internal/domain/invocationlog"
 )
+
+func TestQueryReaderGetAnalyticsPolicyImpactUsesCompleteMinuteRollup(t *testing.T) {
+	from := time.Date(2026, 7, 18, 0, 0, 0, 0, time.UTC)
+	to := from.Add(time.Hour)
+	lastEventAt := to.Add(-time.Second)
+	lastAggregatedAt := to.Add(time.Minute)
+	db := &fakeQueryer{rowByQuery: []fakeQueryRow{
+		{
+			contains: "with required(source)",
+			row: fakeRow{values: []any{
+				sql.NullTime{Time: to, Valid: true},
+				int64(0),
+				sql.NullTime{Time: lastAggregatedAt, Valid: true},
+			}},
+		},
+		{
+			contains: "with totals as materialized",
+			row: fakeRow{values: []any{
+				mustMarshalPolicyImpactJSON(t, []invocationlog.AnalyticsPolicyImpactSurfaceTotal{{
+					Surface:      invocationlog.AnalyticsSurfaceProjectApplication,
+					RequestCount: 180000, CostMicroUSD: 360000,
+					KnownSavedCostMicroUSD:          120000,
+					SavedCostKnownRequests:          180000,
+					MaskingKnownRequests:            180000,
+					RoutingKnownRequests:            180000,
+					ModelKnownRequests:              180000,
+					HighPerformanceRequests:         60000,
+					HighPerformanceEligibleRequests: 180000,
+					LastEventAt:                     &lastEventAt,
+				}}),
+				mustMarshalPolicyImpactJSON(t, []invocationlog.AnalyticsPolicyImpactOutcome{{
+					Surface: invocationlog.AnalyticsSurfaceProjectApplication,
+					Outcome: "cache_hit", RequestCount: 30000,
+				}}),
+				mustMarshalPolicyImpactJSON(t, []invocationlog.AnalyticsPolicyImpactRoutingRole{{
+					Surface: invocationlog.AnalyticsSurfaceProjectApplication,
+					Scheme:  "difficulty", Role: "complex", RequestCount: 60000,
+				}}),
+				mustMarshalPolicyImpactJSON(t, []invocationlog.AnalyticsPolicyImpactModelBucket{{
+					Surface:     invocationlog.AnalyticsSurfaceProjectApplication,
+					PeriodStart: from, Provider: "mock", Model: "mock-fast",
+					RequestCount: 180000,
+				}}),
+				mustMarshalPolicyImpactJSON(t, []invocationlog.AnalyticsPolicyImpactUsageSource{{
+					Surface:      invocationlog.AnalyticsSurfaceProjectApplication,
+					ProjectID:    "11111111-1111-4111-8111-111111111111",
+					RequestCount: 180000, CostMicroUSD: 360000,
+				}}),
+			}},
+		},
+	}}
+	reader := NewQueryReaderWithOptions(db, QueryReaderOptions{
+		AnalyticsPolicyImpactReadMode:   "rollup",
+		AnalyticsPolicyImpactMaxRawTail: 2 * time.Minute,
+	})
+
+	impact, err := reader.GetAnalyticsPolicyImpact(
+		context.Background(),
+		invocationlog.AnalyticsPolicyImpactFilter{
+			TenantID: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+			Period:   "hour",
+			From:     from,
+			To:       to,
+		},
+	)
+	if err != nil {
+		t.Fatalf("get rollup policy impact: %v", err)
+	}
+	if impact.Totals.RequestCount != 180000 || impact.DataFreshness.IsStale {
+		t.Fatalf("unexpected rollup result: %+v", impact)
+	}
+	if impact.DataFreshness.Source != "postgresql_policy_impact_rollup_hybrid" {
+		t.Fatalf("unexpected rollup source: %+v", impact.DataFreshness)
+	}
+	joined := strings.Join(db.queries, "\n")
+	if strings.Contains(joined, "from p0_llm_invocation_logs") ||
+		!strings.Contains(joined, "grain = 'minute'") ||
+		!strings.Contains(joined, "dimension_type in ('policy_outcome', 'routing', 'policy_model')") {
+		t.Fatalf("expected minute rollup-only query, got: %s", joined)
+	}
+}
+
+func TestQueryReaderGetAnalyticsPolicyImpactKeepsSubMinuteSeriesOnRawReader(t *testing.T) {
+	from := time.Date(2026, 7, 21, 0, 0, 0, 0, time.UTC)
+	db := &fakeQueryer{rowByQuery: []fakeQueryRow{{
+		contains: "analytics_policy_impact_single_scan",
+		row: fakeRow{values: []any{
+			mustMarshalPolicyImpactJSON(t, []invocationlog.AnalyticsPolicyImpactSurfaceTotal{}),
+			mustMarshalPolicyImpactJSON(t, []invocationlog.AnalyticsPolicyImpactOutcome{}),
+			mustMarshalPolicyImpactJSON(t, []invocationlog.AnalyticsPolicyImpactRoutingRole{}),
+			mustMarshalPolicyImpactJSON(t, []invocationlog.AnalyticsPolicyImpactModelBucket{}),
+			mustMarshalPolicyImpactJSON(t, []invocationlog.AnalyticsPolicyImpactUsageSource{}),
+		}},
+	}}}
+	reader := NewQueryReaderWithOptions(db, QueryReaderOptions{
+		AnalyticsPolicyImpactReadMode:   "rollup",
+		AnalyticsPolicyImpactMaxRawTail: 2 * time.Minute,
+	})
+
+	impact, err := reader.GetAnalyticsPolicyImpact(
+		context.Background(),
+		invocationlog.AnalyticsPolicyImpactFilter{
+			TenantID: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+			Period:   "hour",
+			From:     from,
+			To:       from.Add(time.Minute),
+		},
+	)
+	if err != nil {
+		t.Fatalf("get short policy impact: %v", err)
+	}
+	if impact.DataFreshness.Source != "postgresql_unified_policy_impact_raw" {
+		t.Fatalf("sub-minute series must retain raw semantics: %+v", impact.DataFreshness)
+	}
+	joined := strings.Join(db.queries, "\n")
+	if strings.Contains(joined, "with required(source)") ||
+		!strings.Contains(joined, "analytics_policy_impact_single_scan") {
+		t.Fatalf("expected only raw policy impact query, got: %s", joined)
+	}
+}
+
+func TestQueryReaderGetAnalyticsPolicyImpactBoundsRawTailWhenRollupLags(t *testing.T) {
+	from := time.Date(2026, 7, 21, 0, 0, 0, 0, time.UTC)
+	to := from.Add(time.Hour)
+	caughtUp := from.Add(30 * time.Minute)
+	db := &fakeQueryer{rowByQuery: []fakeQueryRow{
+		{
+			contains: "with required(source)",
+			row: fakeRow{values: []any{
+				sql.NullTime{Time: caughtUp, Valid: true},
+				int64(0),
+				sql.NullTime{Time: caughtUp.Add(time.Minute), Valid: true},
+			}},
+		},
+		{
+			contains: "with totals as materialized",
+			row: fakeRow{values: []any{
+				mustMarshalPolicyImpactJSON(t, []invocationlog.AnalyticsPolicyImpactSurfaceTotal{{
+					Surface: invocationlog.AnalyticsSurfaceProjectApplication, RequestCount: 30000,
+				}}),
+				mustMarshalPolicyImpactJSON(t, []invocationlog.AnalyticsPolicyImpactOutcome{}),
+				mustMarshalPolicyImpactJSON(t, []invocationlog.AnalyticsPolicyImpactRoutingRole{}),
+				mustMarshalPolicyImpactJSON(t, []invocationlog.AnalyticsPolicyImpactModelBucket{}),
+				mustMarshalPolicyImpactJSON(t, []invocationlog.AnalyticsPolicyImpactUsageSource{}),
+			}},
+		},
+		{
+			contains: "analytics_policy_impact_single_scan",
+			row: fakeRow{values: []any{
+				mustMarshalPolicyImpactJSON(t, []invocationlog.AnalyticsPolicyImpactSurfaceTotal{{
+					Surface: invocationlog.AnalyticsSurfaceProjectApplication, RequestCount: 2000,
+				}}),
+				mustMarshalPolicyImpactJSON(t, []invocationlog.AnalyticsPolicyImpactOutcome{}),
+				mustMarshalPolicyImpactJSON(t, []invocationlog.AnalyticsPolicyImpactRoutingRole{}),
+				mustMarshalPolicyImpactJSON(t, []invocationlog.AnalyticsPolicyImpactModelBucket{}),
+				mustMarshalPolicyImpactJSON(t, []invocationlog.AnalyticsPolicyImpactUsageSource{}),
+			}},
+		},
+	}}
+	reader := NewQueryReaderWithOptions(db, QueryReaderOptions{
+		AnalyticsPolicyImpactReadMode:   "rollup",
+		AnalyticsPolicyImpactMaxRawTail: 2 * time.Minute,
+	})
+
+	impact, err := reader.GetAnalyticsPolicyImpact(
+		context.Background(),
+		invocationlog.AnalyticsPolicyImpactFilter{
+			TenantID:  "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+			ProjectID: "11111111-1111-4111-8111-111111111111",
+			Period:    "hour",
+			From:      from,
+			To:        to,
+		},
+	)
+	if err != nil {
+		t.Fatalf("get lagging policy impact: %v", err)
+	}
+	if impact.Totals.RequestCount != 32000 || !impact.DataFreshness.IsStale ||
+		impact.DataFreshness.Source != "postgresql_policy_impact_rollup_partial" {
+		t.Fatalf("expected explicit partial result: %+v", impact)
+	}
+
+	var rawArgs []any
+	for index, query := range db.queries {
+		if strings.Contains(query, "analytics_policy_impact_single_scan") {
+			rawArgs = db.argsList[index]
+			break
+		}
+	}
+	if len(rawArgs) < 2 || rawArgs[0] != to.Add(-2*time.Minute) || rawArgs[1] != to {
+		t.Fatalf("raw fallback must be bounded to two minutes, got: %#v", rawArgs)
+	}
+}
 
 func TestQueryReaderGetAnalyticsPolicyImpactCombinesSurfacesWithoutRequestRowCap(t *testing.T) {
 	from := time.Date(2026, 7, 18, 0, 0, 0, 0, time.UTC)

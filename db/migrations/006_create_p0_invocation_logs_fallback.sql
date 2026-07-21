@@ -48,8 +48,24 @@ create table if not exists p0_llm_invocation_logs (
   ingested_at timestamptz not null default now()
 );
 
-create unique index if not exists ux_p0_llm_invocation_logs_request_id
-  on p0_llm_invocation_logs (request_id);
+do $$
+declare
+  logs_kind "char";
+begin
+  select relkind
+    into logs_kind
+  from pg_class
+  where oid = to_regclass('public.p0_llm_invocation_logs');
+
+  if logs_kind = 'p' then
+    create unique index if not exists ux_p0_llm_invocation_logs_request_id
+      on p0_llm_invocation_logs (request_id, created_at);
+  else
+    create unique index if not exists ux_p0_llm_invocation_logs_request_id
+      on p0_llm_invocation_logs (request_id);
+  end if;
+end
+$$;
 
 create index if not exists ix_p0_llm_invocation_logs_project_created
   on p0_llm_invocation_logs (tenant_id, project_id, created_at desc);

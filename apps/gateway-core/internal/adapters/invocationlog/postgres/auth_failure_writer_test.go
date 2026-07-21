@@ -60,6 +60,9 @@ func TestAuthFailureWriterMapsInvalidAPIKeyToP0InvocationLog(t *testing.T) {
 	if !strings.Contains(execer.query, "insert into p0_llm_invocation_logs") {
 		t.Fatalf("expected p0_llm_invocation_logs insert, got %s", execer.query)
 	}
+	if !strings.Contains(execer.query, "on conflict do nothing") || strings.Contains(execer.query, "on conflict (request_id)") {
+		t.Fatalf("auth failure writer must remain compatible with legacy and partitioned log constraints: %s", execer.query)
+	}
 	if len(execer.args) != 36 {
 		t.Fatalf("expected 36 insert args, got %d", len(execer.args))
 	}
