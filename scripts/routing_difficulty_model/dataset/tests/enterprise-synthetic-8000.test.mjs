@@ -32,9 +32,9 @@ test("covers all requested task, domain, language, and boundary dimensions", () 
   const { records, manifest } = buildArtifacts();
   assert.equal(new Set(records.map((record) => record.task_type)).size, 23);
   assert.equal(new Set(records.map((record) => record.service_domain)).size, 23);
-  assert.equal(manifest.distributions.language.ko, 7400);
-  assert.equal(manifest.distributions.language.en, 200);
-  assert.equal(manifest.distributions.language.mixed, 400);
+  assert.equal(manifest.distributions.language.ko, 7800);
+  assert.equal(manifest.distributions.language.en ?? 0, 0);
+  assert.equal(manifest.distributions.language.mixed, 200);
   assert.equal(manifest.coverage.long_simple_records, 800);
   assert.equal(manifest.coverage.long_complex_records, 800);
   assert.equal(

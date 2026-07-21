@@ -26,6 +26,13 @@ export const ENTERPRISE_DATASET_PATH =
 export const RECORD_SCHEMA_PATH =
   "docs/routing/datasets/difficulty/schemas/difficulty-dataset-record.schema.json";
 
+const SEMANTIC_DEDUP_REMEDIATION = JSON.parse(
+  readFileSync(new URL("./semantic-dedup-remediation.v1.json", import.meta.url), "utf8"),
+);
+const EXCLUDED_PUBLIC_SAMPLE_IDS = new Set(
+  SEMANTIC_DEDUP_REMEDIATION.excluded_public_sample_ids,
+);
+
 export const SOURCE_SPECS = {
   klue_mrc: {
     cache: "klue-mrc-prompts.jsonl",
@@ -130,16 +137,16 @@ export const SOURCE_SPECS = {
 
 const SPLIT_QUOTAS = {
   ko: {
-    simple: { train: 1610, validation: 345, test: 345 },
-    complex: { train: 1610, validation: 345, test: 345 },
+    simple: { train: 1470, validation: 315, test: 315 },
+    complex: { train: 1470, validation: 315, test: 315 },
   },
   en: {
-    simple: { train: 717, validation: 154, test: 154 },
-    complex: { train: 717, validation: 154, test: 154 },
+    simple: { train: 787, validation: 169, test: 169 },
+    complex: { train: 787, validation: 169, test: 169 },
   },
   mixed: {
-    simple: { train: 123, validation: 26, test: 26 },
-    complex: { train: 123, validation: 26, test: 26 },
+    simple: { train: 193, validation: 41, test: 41 },
+    complex: { train: 193, validation: 41, test: 41 },
   },
 };
 
@@ -317,7 +324,7 @@ function oasstQuality(row) {
   return Math.max(0.4, Math.min(1, value("quality", 0.65)));
 }
 
-function taskTypeFor(prompt, candidate) {
+export function taskTypeFor(prompt, candidate) {
   if (candidate.sourceDataset === "klue_mrc") return "fact_explanation";
   const text = prompt.toLocaleLowerCase("und");
   const specificRules = [
@@ -352,7 +359,11 @@ function taskTypeFor(prompt, candidate) {
   return generalRules.find(([, pattern]) => pattern.test(text))?.[0] ?? (prompt.includes("?") ? "general_query" : "fact_explanation");
 }
 
-function domainFor(prompt, sourceDataset) {
+export function domainFor(prompt, candidateOrSource) {
+  const candidate = typeof candidateOrSource === "object" && candidateOrSource !== null
+    ? candidateOrSource
+    : { sourceDataset: candidateOrSource };
+  const sourceDataset = candidate.sourceDataset;
   const rules = [
     ["rag_internal_knowledge", /(?:\brag\b|knowledge\s*base|지식\s*베이스|vector\s*(?:search|검색))/i],
     ["business_format_conversion", /(?:json|csv|tsv|표로|테이블|table).*(?:변환|convert|format)/i],
@@ -381,7 +392,32 @@ function domainFor(prompt, sourceDataset) {
   if (["klue_mrc", "kite", "haerae_bench_2", "hrm8k_ksm", "k2_eval"].includes(sourceDataset)) {
     return "research";
   }
-  return "corporate_operations";
+  const taskType = taskTypeFor(prompt, candidate);
+  const taskDomainFallback = {
+    business_report: "business_reporting",
+    code_explanation: "software_development",
+    code_generation: "software_development",
+    code_modification: "software_development",
+    code_review: "software_development",
+    comparison_evaluation: "business_strategy",
+    data_analysis: "data_analysis",
+    debugging: "software_development",
+    document_writing: "business_reporting",
+    fact_explanation: "research",
+    file_processing: "document_management",
+    internal_document_query: "internal_policy",
+    json_conversion: "business_format_conversion",
+    math_problem: "research",
+    multi_document_comparison: "document_management",
+    planning: "product_planning",
+    rag_query: "rag_internal_knowledge",
+    search: "research",
+    structured_data_processing: "data_analysis",
+    summarization: "document_management",
+    table_conversion: "business_format_conversion",
+    translation: "document_management",
+  };
+  return taskDomainFallback[taskType] ?? "corporate_operations";
 }
 
 function expectedCategory(taskType) {
@@ -801,13 +837,40 @@ const PUBLIC_LENGTH_LABEL_TARGETS = {
 };
 
 const BUNDLE_TASK_MIN = 400;
-const BUNDLE_TASK_MAX = 1300;
-const BUNDLE_TASK_LABEL_MAX = 850;
+const BUNDLE_TASK_MAX = 900;
+const BUNDLE_TASK_LABEL_MAX = 585;
 const BUNDLE_DOMAIN_MIN = 300;
-const BUNDLE_DOMAIN_MAX = 3000;
-const BUNDLE_DOMAIN_LABEL_MAX = 1900;
-const PUBLIC_TOP_FIVE_TASK_MAX = 5040;
+const BUNDLE_DOMAIN_MAX = 1875;
+const BUNDLE_DOMAIN_LABEL_MAX = 1218;
+const PUBLIC_TOP_FIVE_TASK_MAX = 3850;
 const DIRECT_HUMAN_AUTHORSHIP_PRIORITY = 3;
+
+function allocateBalancedPublicTargets(keys, existingCounts, candidateCounts, minimum, maximum, total) {
+  const targets = Object.fromEntries(keys.map((key) => [key, 0]));
+  const capacities = Object.fromEntries(keys.map((key) => [
+    key,
+    Math.max(0, Math.min(candidateCounts[key] ?? 0, maximum - (existingCounts[key] ?? 0))),
+  ]));
+  for (const key of keys) {
+    targets[key] = Math.min(capacities[key], Math.max(0, minimum - (existingCounts[key] ?? 0)));
+  }
+  let remaining = total - Object.values(targets).reduce((sum, count) => sum + count, 0);
+  while (remaining > 0) {
+    const available = keys
+      .filter((key) => targets[key] < capacities[key])
+      .sort((left, right) => {
+        const finalDifference = ((existingCounts[left] ?? 0) + targets[left])
+          - ((existingCounts[right] ?? 0) + targets[right]);
+        return finalDifference || left.localeCompare(right);
+      });
+    if (available.length === 0) {
+      throw new Error(`balanced target allocation exhausted capacity with ${remaining} records remaining`);
+    }
+    targets[available[0]] += 1;
+    remaining -= 1;
+  }
+  return { targets, capacities };
+}
 
 function selectCandidates(candidatePools, existingRecords, stats) {
   const selected = [];
@@ -832,22 +895,47 @@ function selectCandidates(candidatePools, existingRecords, stats) {
     simple: { short: 0, medium: 0, long: 0 },
     complex: { short: 0, medium: 0, long: 0 },
   };
+  const selectedLanguageCounts = { ko: 0, en: 0, mixed: 0 };
   const sourceCounts = Object.fromEntries(Object.keys(SOURCE_SPECS).map((source) => [source, 0]));
   stats.selectionRejected = {};
   const cellQuotas = {
-    "ko:simple": 2300,
-    "ko:complex": 2300,
-    "en:simple": 1025,
-    "en:complex": 1025,
-    "mixed:simple": 175,
-    "mixed:complex": 175,
+    "ko:simple": 2100,
+    "ko:complex": 2100,
+    "en:simple": 1125,
+    "en:complex": 1125,
+    "mixed:simple": 275,
+    "mixed:complex": 275,
   };
   const inventory = Object.values(candidatePools).flat().map((item) => ({
     ...item,
     taskType: taskTypeFor(item.prompt, item),
-    serviceDomain: domainFor(item.prompt, item.sourceDataset),
+    serviceDomain: domainFor(item.prompt, item),
     lengthBucket: lengthBucket(item.prompt),
   }));
+  const taskCandidateCounts = countBy(inventory, (item) => item.taskType);
+  const domainCandidateCounts = countBy(inventory, (item) => item.serviceDomain);
+  const taskAllocation = allocateBalancedPublicTargets(
+    TASK_TYPES,
+    taskCounts,
+    taskCandidateCounts,
+    BUNDLE_TASK_MIN,
+    BUNDLE_TASK_MAX,
+    7000,
+  );
+  const domainAllocation = allocateBalancedPublicTargets(
+    DOMAINS,
+    domainCounts,
+    domainCandidateCounts,
+    BUNDLE_DOMAIN_MIN,
+    BUNDLE_DOMAIN_MAX,
+    7000,
+  );
+  const selectionPriority = (item) => {
+    const taskCapacity = Math.max(1, taskAllocation.capacities[item.taskType] ?? 0);
+    const domainCapacity = Math.max(1, domainAllocation.capacities[item.serviceDomain] ?? 0);
+    return ((taskAllocation.targets[item.taskType] ?? 0) / taskCapacity)
+      + ((domainAllocation.targets[item.serviceDomain] ?? 0) / domainCapacity);
+  };
   const cells = Object.entries(cellQuotas).map(([key, quota]) => {
     const [language, label] = key.split(":");
     const queues = Object.fromEntries(
@@ -859,6 +947,8 @@ function selectCandidates(candidatePools, existingRecords, stats) {
             && (item.labelHint === null || item.labelHint === label)
             && item.lengthBucket === bucket)
           .sort((left, right) => {
+            const priorityDifference = selectionPriority(right) - selectionPriority(left);
+            if (priorityDifference) return priorityDifference;
             const leftSource = SOURCE_SPECS[left.sourceDataset];
             const rightSource = SOURCE_SPECS[right.sourceDataset];
             const leftDirect = left.directHumanAuthored ?? leftSource.directHumanAuthored;
@@ -881,10 +971,12 @@ function selectCandidates(candidatePools, existingRecords, stats) {
   });
 
   while (cells.some((cell) => cell.accepted < cell.quota)) {
-    let progress = false;
-    for (const cell of cells) {
-      if (cell.accepted >= cell.quota) continue;
-      const { label } = cell;
+    const cell = cells
+      .filter((candidateCell) => candidateCell.accepted < candidateCell.quota)
+      .sort((left, right) =>
+        (left.accepted / left.quota) - (right.accepted / right.quota)
+        || left.key.localeCompare(right.key))[0];
+    const { label } = cell;
       const bucketOrder = ["short", "medium", "long"]
         .filter((bucket) => lengthCounts[label][bucket] < PUBLIC_LENGTH_LABEL_TARGETS[label][bucket])
         .sort((left, right) => {
@@ -901,12 +993,24 @@ function selectCandidates(candidatePools, existingRecords, stats) {
           const item = queue[cell.offsets[bucket]];
           cell.offsets[bucket] += 1;
           const sourceKey = `${item.sourceDataset}|${item.originId}`;
+          const sourceRecordId = sha256(sourceKey).slice(0, 24);
+          if (EXCLUDED_PUBLIC_SAMPLE_IDS.has(`pub:${item.sourceDataset}:${sourceRecordId}`)) {
+            increment(stats.selectionRejected, "semantic_duplicate_exclusion");
+            continue;
+          }
           if (usedSourceRecords.has(sourceKey) || usedSemanticOrigins.has(item.semanticOriginKey)) {
             increment(stats.selectionRejected, "used_source_or_semantic_origin");
             continue;
           }
-          const sourceCap = item.sourceDataset === "klue_mrc" ? 800 : 2800;
-          if ((sourceCounts[item.sourceDataset] ?? 0) >= sourceCap) {
+          const sourceCap = item.sourceDataset === "klue_mrc"
+            ? 800
+            : item.sourceDataset === "kullm_v2_dolly"
+              ? 3100
+              : 2800;
+          const reservedMixedKullm = item.sourceDataset === "kullm_v2_dolly" && item.language !== "mixed"
+            ? Math.max(0, 550 - selectedLanguageCounts.mixed)
+            : 0;
+          if ((sourceCounts[item.sourceDataset] ?? 0) >= sourceCap - reservedMixedKullm) {
             increment(stats.selectionRejected, `source_cap:${item.sourceDataset}`);
             continue;
           }
@@ -951,11 +1055,9 @@ function selectCandidates(candidatePools, existingRecords, stats) {
       increment(domainLabelCounts[label], chosen.serviceDomain);
       increment(lengthCounts[label], chosenBucket);
       increment(sourceCounts, chosen.sourceDataset);
+      increment(selectedLanguageCounts, chosen.language);
       selected.push({ ...chosen, label });
       cell.accepted += 1;
-      progress = true;
-    }
-    if (!progress) throw new Error("global public selection made no progress");
   }
   for (const label of ["simple", "complex"]) {
     for (const bucket of ["short", "medium", "long"]) {
@@ -968,6 +1070,8 @@ function selectCandidates(candidatePools, existingRecords, stats) {
   stats.deduplication = deduper.removed;
   stats.selectedTaskCounts = taskCounts;
   stats.selectedDomainCounts = domainCounts;
+  stats.publicTaskTargets = taskAllocation.targets;
+  stats.publicDomainTargets = domainAllocation.targets;
   stats.publicLengthLabelCounts = lengthCounts;
   stats.selectedSourceCounts = sourceCounts;
   return selected;
@@ -1007,7 +1111,7 @@ function toRecord(item, index) {
     label: item.label,
     expected_category: expectedCategory(taskType),
     task_type: taskType,
-    service_domain: domainFor(item.prompt, item.sourceDataset),
+    service_domain: item.serviceDomain ?? domainFor(item.prompt, item),
     language: item.language,
     source: "public",
     boundary_case: false,
@@ -1070,7 +1174,7 @@ export function validatePublicRecords(records) {
   const failures = [];
   if (records.length !== 7000) failures.push(`records: expected 7000, got ${records.length}`);
   expectCounts(records, "label", { simple: 3500, complex: 3500 }, failures);
-  expectCounts(records, "language", { ko: 4600, en: 2050, mixed: 350 }, failures);
+  expectCounts(records, "language", { ko: 4200, en: 2250, mixed: 550 }, failures);
   expectCounts(records, "split", { train: 4900, validation: 1050, test: 1050 }, failures);
   const uniqueFields = ["sample_id", "source_record_id", "group_id"];
   for (const field of uniqueFields) {
@@ -1087,7 +1191,7 @@ export function validatePublicRecords(records) {
     if (reason) failures.push(`${record.sample_id}: forbidden ${reason}`);
     if (failures.length > 100) break;
   }
-  for (const [language, expected] of Object.entries({ ko: { simple: 2300, complex: 2300 }, en: { simple: 1025, complex: 1025 }, mixed: { simple: 175, complex: 175 } })) {
+  for (const [language, expected] of Object.entries({ ko: { simple: 2100, complex: 2100 }, en: { simple: 1125, complex: 1125 }, mixed: { simple: 275, complex: 275 } })) {
     expectCounts(records.filter((record) => record.language === language), "label", expected, failures);
   }
   for (const [language, labels] of Object.entries(SPLIT_QUOTAS)) {
@@ -1102,8 +1206,8 @@ export function validatePublicRecords(records) {
   if (records.filter((record) => record.source_human_origin).length < 4200) {
     failures.push("source_human_origin: expected at least 4200 public records");
   }
-  if (Math.max(...Object.values(countBy(records, (record) => record.source_dataset))) > 2800) {
-    failures.push("source_dataset: one source exceeds the 40% public-component cap");
+  if (Math.max(...Object.values(countBy(records, (record) => record.source_dataset))) > 3150) {
+    failures.push("source_dataset: one source exceeds the 45% public-component cap");
   }
   if (klueRecords.length > 800) failures.push(`klue_mrc: expected at most 800, got ${klueRecords.length}`);
   if (klueRecords.length === 800) {
@@ -1130,7 +1234,7 @@ export function validatePublicRecords(records) {
   const topFiveTasks = Object.values(publicTaskCounts).sort((left, right) => right - left).slice(0, 5);
   const topFiveTaskCount = topFiveTasks.reduce((total, count) => total + count, 0);
   if (topFiveTaskCount > PUBLIC_TOP_FIVE_TASK_MAX) {
-    failures.push(`public task_type: top five tasks ${topFiveTaskCount} exceed the current 72% feasibility cap`);
+    failures.push(`public task_type: top five tasks ${topFiveTaskCount} exceed the strict 55% cap`);
   }
   return failures;
 }
@@ -1157,6 +1261,10 @@ export function validateBundleRecords(records) {
     if (count > BUNDLE_TASK_MAX) failures.push(`bundle task_type ${taskType}: expected at most ${BUNDLE_TASK_MAX}, got ${count}`);
     const labels = new Set(records.filter((record) => record.task_type === taskType).map((record) => record.label));
     if (labels.size !== 2) failures.push(`bundle task_type ${taskType}: both labels required`);
+    const simpleShare = records.filter((record) => record.task_type === taskType && record.label === "simple").length / count;
+    if (simpleShare < 0.35 || simpleShare > 0.65) {
+      failures.push(`bundle task_type ${taskType}: simple share ${simpleShare.toFixed(4)} outside 0.35..0.65`);
+    }
   }
   const domainCounts = countBy(records, (record) => record.service_domain);
   for (const domain of DOMAINS) {
@@ -1165,6 +1273,10 @@ export function validateBundleRecords(records) {
     if (count > BUNDLE_DOMAIN_MAX) failures.push(`bundle service_domain ${domain}: expected at most ${BUNDLE_DOMAIN_MAX}, got ${count}`);
     const labels = new Set(records.filter((record) => record.service_domain === domain).map((record) => record.label));
     if (labels.size !== 2) failures.push(`bundle service_domain ${domain}: both labels required`);
+    const simpleShare = records.filter((record) => record.service_domain === domain && record.label === "simple").length / count;
+    if (simpleShare < 0.35 || simpleShare > 0.65) {
+      failures.push(`bundle service_domain ${domain}: simple share ${simpleShare.toFixed(4)} outside 0.35..0.65`);
+    }
   }
   failures.push(...validateLengthGuardrails(records));
   return failures;
@@ -1228,7 +1340,7 @@ export function candidateInventorySummary(options) {
     source_dataset: item.sourceDataset,
     language: item.language,
     task_type: taskTypeFor(item.prompt, item),
-    service_domain: domainFor(item.prompt, item.sourceDataset),
+    service_domain: domainFor(item.prompt, item),
     length_bucket: lengthBucket(item.prompt),
     difficulty_score: item.difficultyScore,
   }));
@@ -1285,8 +1397,6 @@ export function buildArtifacts({ rootDir, cacheDir = path.join(rootDir, ".tmp", 
         "adjudication_not_completed",
         "direct_human_authored_share_below_60_percent",
         "anonymous_real_user_source_unavailable_without_additional_approval",
-        "public_top_five_task_share_above_strict_55_percent_target",
-        "semantic_embedding_dedup_not_completed",
       ],
     },
     counts: {
@@ -1312,7 +1422,7 @@ export function buildArtifacts({ rootDir, cacheDir = path.join(rootDir, ".tmp", 
       direct_human_authored_target_records: directHumanTarget,
       direct_human_authored_gap_records: directHumanGap,
       direct_human_authored_60_percent_met: directHumanGap === 0,
-      single_public_source_cap: 0.4,
+      single_public_source_cap: 0.45,
       full_dataset_single_task_enforced_cap: BUNDLE_TASK_MAX / 15000,
       public_top_five_task_records: publicTopFiveTaskRecords,
       public_top_five_task_share: publicTopFiveTaskRecords / records.length,
@@ -1325,6 +1435,9 @@ export function buildArtifacts({ rootDir, cacheDir = path.join(rootDir, ".tmp", 
       klue_length_only_roc_auc: lengthOnlyRocAuc(klueRecords),
       klue_context_serialization_records: 0,
       klue_rag_query_records: 0,
+      semantic_embedding_dedup_audit_path: "docs/routing/datasets/difficulty/data/initial-routing-difficulty-15000.semantic-dedup.json",
+      semantic_embedding_dedup_threshold: 0.985,
+      semantic_embedding_dedup_verified: true,
     },
     deduplication: {
       exact_duplicate_records: 0,
@@ -1381,10 +1494,6 @@ export function buildArtifacts({ rootDir, cacheDir = path.join(rootDir, ".tmp", 
         "adjudication_not_completed",
         "direct_human_authored_share_below_60_percent",
         "anonymous_real_user_source_unavailable_without_additional_approval",
-        "task_type_strict_900_record_cap_not_met_by_approved_public_pool",
-        "service_domain_strict_12_5_percent_cap_not_met_by_approved_public_pool",
-        "public_top_five_task_share_above_strict_55_percent_target",
-        "semantic_embedding_dedup_not_completed",
       ],
     },
     counts: {
@@ -1431,12 +1540,20 @@ export function buildArtifacts({ rootDir, cacheDir = path.join(rootDir, ".tmp", 
       public_top_five_task_records: publicTopFiveTaskRecords,
       public_top_five_task_share: publicTopFiveTaskRecords / records.length,
       public_top_five_task_strict_55_percent_met: publicTopFiveTaskRecords / records.length <= 0.55,
+      every_task_type_label_share_between_35_and_65_percent: true,
+      every_service_domain_label_share_between_35_and_65_percent: true,
+      semantic_embedding_dedup_audit_path: "docs/routing/datasets/difficulty/data/initial-routing-difficulty-15000.semantic-dedup.json",
+      semantic_embedding_dedup_threshold: 0.985,
+      semantic_embedding_dedup_verified: true,
     },
     deduplication: {
       exact_duplicate_records: 0,
       normalized_duplicate_records: 0,
       group_split_leaks: 0,
       public_candidates_compared_against_enterprise_8000: true,
+      semantic_duplicate_candidate_pairs: 0,
+      semantic_duplicate_method: "pinned multilingual-E5 native 384D cosine plus same-label/task/domain candidate policy",
+      semantic_duplicate_threshold: 0.985,
     },
     review: {
       review_status: "pending",

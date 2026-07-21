@@ -4,7 +4,7 @@
   "record_schema_version": "gatelm.routing-difficulty-dataset-record.v1",
   "record_schema_path": "docs/routing/datasets/difficulty/schemas/difficulty-dataset-record.schema.json",
   "dataset_path": "docs/routing/datasets/difficulty/data/initial-routing-difficulty-15000.jsonl",
-  "dataset_sha256": "ce119d30261f2a70b3b4d4012ee6259f44897626079ff082d248af6a7d5f9a83",
+  "dataset_sha256": "6a08cca05499a70d6730117d51bdbffaf5f3111a5af533b76581569dd074abaf",
   "generated_at": "2026-07-21T00:00:00Z",
   "generation_seed": 20260721,
   "scope": {
@@ -17,11 +17,7 @@
       "rule_assisted_labels_not_human_reviewed",
       "adjudication_not_completed",
       "direct_human_authored_share_below_60_percent",
-      "anonymous_real_user_source_unavailable_without_additional_approval",
-      "task_type_strict_900_record_cap_not_met_by_approved_public_pool",
-      "service_domain_strict_12_5_percent_cap_not_met_by_approved_public_pool",
-      "public_top_five_task_share_above_strict_55_percent_target",
-      "semantic_embedding_dedup_not_completed"
+      "anonymous_real_user_source_unavailable_without_additional_approval"
     ]
   },
   "counts": {
@@ -31,8 +27,8 @@
     "synthetic_records": 6000,
     "boundary_records": 2000,
     "human_reviewed_records": 0,
-    "public_human_origin_records": 6848,
-    "public_direct_human_authored_records": 3224,
+    "public_human_origin_records": 6873,
+    "public_direct_human_authored_records": 2674,
     "public_real_user_records": 0
   },
   "distributions": {
@@ -51,15 +47,15 @@
       "synthetic": 6000
     },
     "source_dataset": {
-      "aya_dataset": 367,
-      "databricks_dolly_15k": 600,
-      "haerae_bench_2": 152,
-      "hrm8k_ksm": 1199,
-      "k2_eval": 90,
-      "kite": 328,
-      "klue_mrc": 745,
-      "kullm_v2_dolly": 2190,
-      "openassistant_oasst1": 1329
+      "aya_dataset": 387,
+      "databricks_dolly_15k": 607,
+      "haerae_bench_2": 127,
+      "hrm8k_ksm": 979,
+      "k2_eval": 55,
+      "kite": 154,
+      "klue_mrc": 142,
+      "kullm_v2_dolly": 3100,
+      "openassistant_oasst1": 1449
     },
     "split": {
       "test": 2250,
@@ -67,74 +63,74 @@
       "validation": 2250
     },
     "task_type": {
-      "business_report": 440,
-      "code_explanation": 431,
-      "code_generation": 826,
-      "code_modification": 433,
-      "code_review": 428,
-      "comparison_evaluation": 694,
-      "data_analysis": 495,
-      "debugging": 457,
-      "document_writing": 748,
-      "fact_explanation": 1300,
-      "file_processing": 515,
-      "general_query": 1300,
-      "internal_document_query": 468,
-      "json_conversion": 451,
-      "math_problem": 1300,
+      "business_report": 444,
+      "code_explanation": 465,
+      "code_generation": 900,
+      "code_modification": 438,
+      "code_review": 429,
+      "comparison_evaluation": 824,
+      "data_analysis": 606,
+      "debugging": 545,
+      "document_writing": 900,
+      "fact_explanation": 900,
+      "file_processing": 470,
+      "general_query": 900,
+      "internal_document_query": 471,
+      "json_conversion": 477,
+      "math_problem": 900,
       "multi_document_comparison": 424,
-      "planning": 579,
-      "rag_query": 428,
-      "search": 487,
-      "structured_data_processing": 1035,
-      "summarization": 712,
-      "table_conversion": 593,
-      "translation": 456
+      "planning": 900,
+      "rag_query": 435,
+      "search": 580,
+      "structured_data_processing": 900,
+      "summarization": 642,
+      "table_conversion": 900,
+      "translation": 550
     },
     "service_domain": {
-      "business_format_conversion": 371,
-      "business_reporting": 426,
-      "business_strategy": 459,
-      "compliance": 375,
-      "corporate_operations": 3000,
-      "customer_support": 471,
-      "data_analysis": 539,
-      "document_management": 427,
-      "finance_accounting": 536,
-      "hr_recruiting": 433,
-      "internal_policy": 402,
-      "legal": 448,
-      "marketing": 446,
-      "meeting_minutes": 413,
-      "privacy": 364,
-      "product_planning": 500,
-      "project_management": 439,
-      "rag_internal_knowledge": 356,
-      "research": 2594,
-      "sales": 435,
-      "security": 465,
-      "software_development": 644,
-      "training_onboarding": 457
+      "business_format_conversion": 786,
+      "business_reporting": 724,
+      "business_strategy": 865,
+      "compliance": 402,
+      "corporate_operations": 400,
+      "customer_support": 662,
+      "data_analysis": 1046,
+      "document_management": 553,
+      "finance_accounting": 562,
+      "hr_recruiting": 565,
+      "internal_policy": 492,
+      "legal": 485,
+      "marketing": 632,
+      "meeting_minutes": 544,
+      "privacy": 404,
+      "product_planning": 840,
+      "project_management": 665,
+      "rag_internal_knowledge": 363,
+      "research": 1609,
+      "sales": 591,
+      "security": 576,
+      "software_development": 586,
+      "training_onboarding": 648
     },
     "length_bucket": {
       "long": 1720,
-      "medium": 6402,
-      "short": 6878
+      "medium": 6254,
+      "short": 7026
     },
     "source_prompt_kind": {
-      "benchmark_instruction": 328,
-      "benchmark_question": 897,
-      "employee_authored_instruction": 600,
-      "handwritten_benchmark_instruction": 90,
-      "human_authored_instruction": 367,
-      "human_authored_prompter": 1329,
-      "human_reviewed_math_question": 1199,
-      "machine_translated_human_instruction": 2190
+      "benchmark_instruction": 154,
+      "benchmark_question": 269,
+      "employee_authored_instruction": 607,
+      "handwritten_benchmark_instruction": 55,
+      "human_authored_instruction": 387,
+      "human_authored_prompter": 1449,
+      "human_reviewed_math_question": 979,
+      "machine_translated_human_instruction": 3100
     },
     "source_transform": {
-      "as_published_field": 4441,
-      "machine_translated_published_field": 2190,
-      "prompt_serialization": 369
+      "as_published_field": 3604,
+      "machine_translated_published_field": 3100,
+      "prompt_serialization": 296
     }
   },
   "coverage": {
@@ -144,53 +140,61 @@
     "language_ratio": "80:15:5",
     "label_ratio": "1:1",
     "klue_length_label_proxy_control": true,
-    "klue_records": 745,
+    "klue_records": 142,
     "klue_label_distribution": {
-      "complex": 378,
-      "simple": 367
+      "complex": 76,
+      "simple": 66
     },
-    "klue_length_only_roc_auc": 0.5074967922379366,
-    "public_human_origin_share": 0.9782857142857143,
-    "public_direct_human_authored_share": 0.4605714285714286,
+    "klue_length_only_roc_auc": 0.48504784688995217,
+    "public_human_origin_share": 0.9818571428571429,
+    "public_direct_human_authored_share": 0.382,
     "public_real_user_share": 0,
-    "direct_human_authored_gap_records": 976,
+    "direct_human_authored_gap_records": 1526,
     "length_label_distribution": {
       "short": {
-        "complex": 2791,
-        "simple": 4087
+        "complex": 2842,
+        "simple": 4184
       },
       "medium": {
-        "complex": 3849,
-        "simple": 2553
+        "complex": 3798,
+        "simple": 2456
       },
       "long": {
         "complex": 860,
         "simple": 860
       }
     },
-    "length_only_roc_auc": 0.5675717422222222,
+    "length_only_roc_auc": 0.5587086133333333,
     "long_records": 1720,
     "long_simple_records": 860,
     "long_complex_records": 860,
     "task_type_min_records": 424,
-    "task_type_max_records": 1300,
-    "task_type_max_share": 0.08666666666666667,
-    "task_type_enforced_range": "400..1300",
-    "task_type_strict_400_to_900_target_met": false,
-    "service_domain_min_records": 356,
-    "service_domain_max_records": 3000,
-    "service_domain_max_share": 0.2,
-    "service_domain_enforced_range": "300..3000",
-    "service_domain_strict_12_5_percent_cap_met": false,
-    "public_top_five_task_records": 4903,
-    "public_top_five_task_share": 0.7004285714285714,
-    "public_top_five_task_strict_55_percent_met": false
+    "task_type_max_records": 900,
+    "task_type_max_share": 0.06,
+    "task_type_enforced_range": "400..900",
+    "task_type_strict_400_to_900_target_met": true,
+    "service_domain_min_records": 363,
+    "service_domain_max_records": 1609,
+    "service_domain_max_share": 0.10726666666666666,
+    "service_domain_enforced_range": "300..1875",
+    "service_domain_strict_12_5_percent_cap_met": true,
+    "public_top_five_task_records": 3806,
+    "public_top_five_task_share": 0.5437142857142857,
+    "public_top_five_task_strict_55_percent_met": true,
+    "every_task_type_label_share_between_35_and_65_percent": true,
+    "every_service_domain_label_share_between_35_and_65_percent": true,
+    "semantic_embedding_dedup_audit_path": "docs/routing/datasets/difficulty/data/initial-routing-difficulty-15000.semantic-dedup.json",
+    "semantic_embedding_dedup_threshold": 0.985,
+    "semantic_embedding_dedup_verified": true
   },
   "deduplication": {
     "exact_duplicate_records": 0,
     "normalized_duplicate_records": 0,
     "group_split_leaks": 0,
-    "public_candidates_compared_against_enterprise_8000": true
+    "public_candidates_compared_against_enterprise_8000": true,
+    "semantic_duplicate_candidate_pairs": 0,
+    "semantic_duplicate_method": "pinned multilingual-E5 native 384D cosine plus same-label/task/domain candidate policy",
+    "semantic_duplicate_threshold": 0.985
   },
   "review": {
     "review_status": "pending",
@@ -202,13 +206,13 @@
       "dataset_version": "routing_difficulty_enterprise_synthetic_8000_rebalanced_2026_07_21",
       "dataset_path": "docs/routing/datasets/difficulty/data/enterprise-synthetic-8000.jsonl",
       "records": 8000,
-      "sha256": "b5061ffada29605448ec2ca0a2926e302bbd40d9c8c7376dc01fb0915c876391"
+      "sha256": "2eadda6a5db4a3a6a88261bd9c532f243f7a099fdd1a53e4a0bae67131d9faef"
     },
     {
       "dataset_version": "routing_difficulty_public_prompts_7000_rebalanced_2026_07_21",
       "dataset_path": "docs/routing/datasets/difficulty/data/public-prompts-7000.jsonl",
       "records": 7000,
-      "sha256": "56b615fc32ee398c8327cfdf97e9efa26193f95569ac19f53710ad23342ca470"
+      "sha256": "797858b59d4e93f446c469db272a7bb65f1e8df6ea3846695f858ff35f17157e"
     }
   ]
 }

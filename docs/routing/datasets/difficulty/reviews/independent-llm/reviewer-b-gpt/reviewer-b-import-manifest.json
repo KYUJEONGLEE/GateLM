@@ -1,0 +1,132 @@
+{
+  "schema_version": "gatelm.routing-difficulty-independent-review-import-manifest.v1",
+  "status": "validated_single_independent_reviewer_human_adjudication_pending",
+  "evidence_date": "2026-07-21",
+  "reviewer": {
+    "id": "B",
+    "intended_model_family": "GPT"
+  },
+  "source_zip": {
+    "file_name": "gatelm-reviewer-B-gpt-results.zip",
+    "bytes": 369679,
+    "sha256": "948bb5db5d9ee99d9f173e82f6a10a118748872a591375c0ba07e630e162fbba"
+  },
+  "packet": {
+    "protocol_version": "gatelm.routing-difficulty-independent-review.v1",
+    "records": 15000,
+    "batches": 155,
+    "dataset_sha256": "6a08cca05499a70d6730117d51bdbffaf5f3111a5af533b76581569dd074abaf",
+    "sample_set_sha256": "1bcaf50be185981e1c6bf40788bc4dfa586023999bbfebf3fb92f4182afc2289",
+    "reviewer_order_sha256": "234947d1fe04dfb534bbd513466b62b0b6876e649e6f5d4248af3fb1bf893dfe",
+    "candidate_labels_included": false
+  },
+  "validation": {
+    "file_set_complete": true,
+    "record_set_complete": true,
+    "input_order_preserved": true,
+    "unique_item_ids": true,
+    "result_schema_valid": true,
+    "prompt_or_rationale_in_results": false
+  },
+  "counts": {
+    "records": 15000,
+    "labels": {
+      "simple": 9697,
+      "complex": 5303
+    },
+    "confidence": {
+      "high": 10746,
+      "medium": 3946,
+      "low": 308
+    },
+    "needs_human_adjudication": 316,
+    "priority_human_queue": 316,
+    "candidate_comparison": {
+      "agreement": 11509,
+      "disagreement": 3491,
+      "agreement_rate": 0.7672666666666667,
+      "transitions": {
+        "simple_to_simple": 6853,
+        "simple_to_complex": 647,
+        "complex_to_simple": 2844,
+        "complex_to_complex": 4656
+      }
+    },
+    "length_only_roc_auc": 0.6460459736930756,
+    "by_language": {
+      "mixed": {
+        "simple": 665,
+        "complex": 85
+      },
+      "ko": {
+        "simple": 7102,
+        "complex": 4898
+      },
+      "en": {
+        "simple": 1930,
+        "complex": 320
+      }
+    },
+    "by_source": {
+      "public": {
+        "simple": 5681,
+        "complex": 1319
+      },
+      "synthetic": {
+        "simple": 3016,
+        "complex": 2984
+      },
+      "boundary": {
+        "simple": 1000,
+        "complex": 1000
+      }
+    },
+    "by_length_bucket": {
+      "medium": {
+        "simple": 3166,
+        "complex": 3088
+      },
+      "short": {
+        "simple": 5611,
+        "complex": 1415
+      },
+      "long": {
+        "simple": 920,
+        "complex": 800
+      }
+    },
+    "reason_codes": {
+      "single_bounded_task": 9389,
+      "direct_retrieval_or_explanation": 5231,
+      "dependent_multistep_workflow": 4847,
+      "verification_or_falsification": 3137,
+      "expert_analysis_or_tradeoff": 2623,
+      "mechanical_transformation": 2479,
+      "multiple_dependent_deliverables": 1609,
+      "multi_source_or_context_synthesis": 1096,
+      "long_but_simple": 863,
+      "state_concurrency_or_system_reasoning": 779,
+      "multi_tool_or_external_evidence": 659,
+      "ambiguous_or_missing_context": 316,
+      "technical_terms_not_decisive": 151,
+      "limited_local_reasoning": 80
+    }
+  },
+  "artifacts": {
+    "normalized_file": "reviewer-b-results.normalized.jsonl",
+    "normalized_sha256": "caa0c02ca05e4308ecf88df275f0bc78ea32d439a1bd4da36cba65eefaa016f5",
+    "report_file": "reviewer-b-report.md",
+    "report_sha256": "1ce185e813dab6b0de7f984f6d2652db59fc19f6841784a9a54836536202dcba"
+  },
+  "gates": {
+    "second_independent_reviewer_completed": false,
+    "human_adjudication_completed": false,
+    "dataset_labels_updated": false,
+    "training_eligible": false
+  },
+  "blockers": [
+    "second_independent_reviewer_not_completed",
+    "human_adjudication_not_completed",
+    "dataset_owner_approval_not_completed"
+  ]
+}

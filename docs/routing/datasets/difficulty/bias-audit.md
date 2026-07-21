@@ -1,38 +1,94 @@
 # Routing difficulty 데이터 편향 감사
 
-기준일은 2026-07-21이며 대상은 `initial-routing-difficulty-15000.jsonl`이다. 이 문서는 재균형 구현의 기준과 현재 남은 한계를 기록한다. 데이터는 여전히 사람 검수 전 후보이며 `training_eligible=false`다.
+기준일은 2026-07-21이며 대상은 `initial-routing-difficulty-15000.jsonl`이다. 이 문서는 재균형·길이 편향·의미 중복 검사의 현재 증거와 남은 사용 제한을 기록한다. 모든 라벨은 아직 사람 승인 전이므로 `training_eligible=false`다.
 
 ## 결론
 
-- 공개 후보의 `difficultyScore()`에서 문자 수, 문장 수, 코드 길이, 문서 길이를 직접 가산하던 규칙을 제거했다.
-- 길이 bucket 기준을 모든 생성기에서 `short < 160`, `medium < 800`, `long >= 800` 문자로 통일했다.
-- 긴 Simple 860개와 긴 Complex 860개를 확보했다. 종전 긴 Prompt 858개 중 Complex 838개(97.7%)였던 결합은 제거됐다.
-- 길이 bucket마다 두 라벨 비중을 35~65% 안에 두고, 문자 길이 하나만 사용한 ROC-AUC를 0.60 이하로 검증한다.
-- 현재 전체 길이 분포는 short `Simple 4,087 / Complex 2,791`, medium `Simple 2,553 / Complex 3,849`, long `Simple 860 / Complex 860`이며 길이 단독 ROC-AUC는 약 `0.5676`이다.
-- KLUE는 질문 필드 745개만 사용하고 context 직렬화와 KLUE 유래 `rag_query`는 0개로 유지한다. 길이가 인접한 질문끼리 짝지은 뒤 의미 난이도를 상대 비교해 라벨 후보를 만들며, KLUE 길이 단독 ROC-AUC는 약 `0.5075`다.
-- 23개 작업 유형은 각각 424~1,300개, 23개 서비스 도메인은 각각 356~3,000개다. 최대 작업 유형 비중은 8.67%, 최대 도메인 비중은 20.0%다.
+- 언어 비율은 한국어 12,000개, 영어 2,250개, 한영 혼합 750개로 80:15:5를 유지한다.
+- 라벨은 Simple 7,500개, Complex 7,500개다.
+- 23개 작업 유형은 424~900개, 23개 서비스 도메인은 363~1,609개다.
+- 모든 작업 유형과 서비스 도메인에서 Simple/Complex 비율이 각각 35~65% 안에 든다.
+- 공개 7,000개의 상위 5개 작업 유형은 3,806개(54.37%)로 55% 상한을 충족한다.
+- 긴 Prompt는 Simple/Complex 각각 860개이며 길이 단독 ROC-AUC는 0.5587로 0.60 상한을 충족한다.
+- pinned `intfloat/multilingual-e5-small` 전수 검사에서 임계값 0.985 이상의 실제 의미 중복 후보는 0쌍이다.
 
-## 자동 라벨 규칙 감사
+따라서 이번 작업 범위였던 작업·도메인 편중 조정과 embedding 기반 의미 중복 검사·제거는 완료됐다. 다만 규칙 보조 라벨의 독립 LLM 재판정, 사람 adjudication, 직접 사람 작성 비율 부족, 승인된 실제 사용자 Prompt 부재는 별도 blocker로 남는다.
 
-이전 공개 후보 점수는 긴 입력 자체에 점수를 더했다. 그 결과 내용상 단순한 장문 변환도 Complex 쪽으로 이동할 수 있었다. 현재 점수는 분석·비교·검증, 의존 단계, 충돌 처리, 복수 자료 통합처럼 작업 복잡도를 나타내는 신호만 사용한다. 문자 수, 문장 수, 단락 수, 코드 존재, 문서 존재는 점수에 직접 포함하지 않는다.
+## 작업 유형·도메인 재균형
 
-테스트는 같은 요청에 의미 없는 중립 문자열을 길게 덧붙여도 `difficultyScore()`가 변하지 않는지 확인한다. 최종 bundle 검증은 별도로 길이-라벨 교차표, long 최소 1,500개, 길이 단독 ROC-AUC 상한을 검사한다.
+생성기는 통합 15,000개를 선택할 때 다음 제약을 강제한다.
 
-## 재균형 방법
+| 항목 | 강제 범위 | 현재 결과 |
+|---|---:|---:|
+| 작업 유형별 레코드 | 400~900 | 424~900 |
+| 서비스 도메인별 레코드 | 300~1,875 | 363~1,609 |
+| 유형·도메인별 각 라벨 비율 | 35~65% | 모두 충족 |
+| 공개 상위 5개 작업 유형 | 최대 3,850개(55%) | 3,806개(54.37%) |
+| 단일 공개 source | 최대 3,150개(45%) | 3,100개(44.29%) |
 
-합성 8,000개에는 각 라벨 800개씩 장문 counterexample을 넣었다. 긴 Simple은 긴 입력에서 한 가지 직접 변환·추출만 요구하고, 긴 Complex는 같은 길이대에서 여러 근거의 비교·의존 단계·검증을 요구한다.
+`domainFor()`는 미분류 Prompt를 일괄 `corporate_operations`로 보내지 않는다. 먼저 명시적 도메인 표현을 적용하고, 남은 Prompt는 작업 의미에 따라 `software_development`, `data_analysis`, `document_management`, `research`, `business_reporting` 등으로 배정한다. 공개 후보가 부족한 셀은 다른 의미로 재분류하지 않고, 기존 8,000개와 공개 후보를 함께 고려한 제한 선택으로 보충한다.
 
-공개 7,000개는 source별 고정 quota 순차 추출 대신 언어×라벨×길이 cell을 round-robin으로 선택한다. 선택 중 전체 15,000개 기준 작업 유형, 도메인, source, label별 상한을 동시에 적용한다. KLUE는 최대 800개, 단일 공개 source는 최대 2,800개다.
+현재 작업 유형별 수량은 다음과 같다.
 
-## 엄격 목표와 현재 한계
+| 작업 유형 | 수량 | 작업 유형 | 수량 |
+|---|---:|---|---:|
+| business report | 444 | code explanation | 465 |
+| code generation | 900 | code modification | 438 |
+| code review | 429 | comparison/evaluation | 824 |
+| data analysis | 606 | debugging | 545 |
+| document writing | 900 | fact explanation | 900 |
+| file processing | 470 | general query | 900 |
+| internal document query | 471 | JSON conversion | 477 |
+| math problem | 900 | multi-document comparison | 424 |
+| planning | 900 | RAG query | 435 |
+| search | 580 | structured data processing | 900 |
+| summarization | 642 | table conversion | 900 |
+| translation | 550 |  |  |
 
-요청한 이상적 목표인 작업 유형별 400~900개, 공개 상위 5개 유형 55% 이하, 도메인별 최대 12.5%는 현재 승인된 공개 후보 pool만으로 동시에 충족하지 못했다. 현재 공개 상위 5개 유형은 4,891개(69.9%)다. 전체에서는 `fact_explanation`, `general_query`, `math_problem`이 각각 1,300개이고 `corporate_operations`가 3,000개다.
+## 길이 편향
 
-이를 숫자만 맞추려고 다른 의미의 task/domain으로 재분류하거나 같은 template을 대량 복제하지 않았다. 생성기는 현재 달성 가능한 가드레일인 작업 유형 400~1,300개, 도메인 300~3,000개, 공개 상위 5개 72% 이하를 강제한다. 엄격 목표 미달은 manifest의 training blocker와 coverage에 명시한다.
+공개 후보의 `difficultyScore()`는 문자 수, 문장 수, 코드 길이, 문서 길이를 직접 사용하지 않는다. 길이 bucket은 `short < 160`, `medium < 800`, `long >= 800` 문자로 통일한다.
 
-공개 7,000개 중 사람 원문 기원은 6,848개이고, 최종 Prompt가 직접 사람 작성임을 확인할 수 있는 데이터는 3,224개(46.1%)다. 직접 사람 작성 60% 목표까지 976개 부족하다. 이는 승인된 한국어 업무 Prompt source를 추가하지 않고는 해소하기 어렵다.
+| 길이 bucket | Simple | Complex |
+|---|---:|---:|
+| short | 4,184 | 2,842 |
+| medium | 2,456 | 3,798 |
+| long | 860 | 860 |
 
-MinHash/Jaccard 기반 의미 중복 후보 제거는 수행했지만 multilingual embedding 기반 군집 검토와 사람 판정은 아직 남아 있다. 따라서 현재 데이터는 학습용 gold로 간주하지 않는다.
+KLUE는 context 없이 질문 필드만 142개 사용하고 KLUE 유래 `rag_query`는 0개다. KLUE 길이 단독 ROC-AUC는 0.4850이다.
+
+## Embedding 의미 중복 감사
+
+전체 감사 산출물은 [`data/initial-routing-difficulty-15000.semantic-dedup.json`](data/initial-routing-difficulty-15000.semantic-dedup.json)이다.
+
+| 항목 | 값 |
+|---|---|
+| encoder | `intfloat/multilingual-e5-small` |
+| revision | `614241f622f53c4eeff9890bdc4f31cfecc418b3` |
+| ONNX | pinned dynamic QInt8, SHA-256 검증 |
+| 입력 | `query: ` prefix, 최대 128 token |
+| 표현 | native 384D masked-mean 후 L2 정규화 |
+| 유사도·임계값 | cosine, 0.985 |
+| 보정 reference | 동일 `group_id` 변형 positive / 동일 라벨·작업·도메인의 다른 group deterministic negative |
+| 보정 정밀도 | 1.0(최소 요구 0.95) |
+| 실제 중복 후보 | 0쌍 |
+| split 충돌 cluster | 0개 |
+| 원문·embedding 저장 | 없음 |
+
+임계값 이상 교차 group 관측쌍은 517쌍이지만 모두 라벨 또는 서비스 도메인이 다른 의도적 대조쌍이다. 실제 제거 후보는 `동일 라벨 + 동일 작업 유형 + 동일 서비스 도메인` 조건을 함께 만족하는 쌍으로 정의했다. 이 조건은 같은 형태의 업무가 서로 다른 도메인에서 요청되는 데이터나 Simple/Complex 경계 대조군을 오탐으로 삭제하지 않기 위한 것이다.
+
+remediation은 공개 Prompt 원문을 수정하지 않고 열위 후보를 제외한 뒤 동일 제약으로 보충한다. 합성 레코드는 언어·라벨·작업·도메인 메타데이터를 유지하면서 실제 업무 의미가 다른 대체 템플릿으로 교체한다. 제외·대체 목록은 `scripts/routing_difficulty_model/dataset/semantic-dedup-remediation.v1.json`에 고정돼 있다.
+
+## 사람 작성 provenance와 남은 blocker
+
+공개 7,000개 중 사람 원문 기원은 6,873개(98.19%)이며 최종 Prompt를 직접 사람이 작성했다고 확인할 수 있는 데이터는 2,674개(38.20%)다. 직접 사람 작성 60% 목표 4,200개까지 1,526개 부족하고, 익명 접근·재배포가 승인된 실제 서비스 사용자 Prompt는 0개다.
+
+남은 training blocker는 다음 네 가지다.
+
+- 규칙 보조 라벨의 독립 LLM 재판정 미완료
+- 사람 adjudication 미완료
+- 직접 사람 작성 공개 Prompt 60% 미달
+- 추가 승인 없는 익명 실제 사용자 source 부재
 
 ## 재현·검증
 
@@ -41,6 +97,7 @@ corepack pnpm run routing:difficulty:generate-enterprise-8000
 corepack pnpm run routing:difficulty:generate-public-7000
 corepack pnpm run verify:routing-difficulty-enterprise-8000
 corepack pnpm run verify:routing-difficulty-public-7000
+corepack pnpm run verify:routing-difficulty-semantic-dedup
 ```
 
-세부 수치는 생성된 두 manifest의 `distributions`, `coverage`, `filtering.selection_rejected_candidates`를 기준으로 한다.
+E5 전수 감사는 로컬에 준비된 pinned 모델과 전용 Python 환경에서 `semantic-dedup.py`를 실행한다. 일반 검증은 저장된 감사의 데이터 SHA-256, encoder identity, 보정 정밀도, 후보·cluster 수를 빠르게 확인한다.

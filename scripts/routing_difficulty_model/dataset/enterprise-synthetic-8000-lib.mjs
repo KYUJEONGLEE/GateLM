@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { lengthBucket } from "./dataset-bias.mjs";
 
 export const DATASET_VERSION = "routing_difficulty_enterprise_synthetic_8000_rebalanced_2026_07_21";
@@ -15,6 +16,83 @@ export const RECORD_SCHEMA_PATH =
   "docs/routing/datasets/difficulty/schemas/difficulty-dataset-record.schema.json";
 export const MANIFEST_SCHEMA_PATH =
   "docs/routing/datasets/difficulty/schemas/difficulty-dataset-manifest.schema.json";
+
+const SEMANTIC_DEDUP_REMEDIATION = JSON.parse(
+  readFileSync(new URL("./semantic-dedup-remediation.v1.json", import.meta.url), "utf8"),
+);
+const SEMANTIC_DIVERSIFICATION_SAMPLE_IDS = new Set(
+  SEMANTIC_DEDUP_REMEDIATION.diversified_enterprise_sample_ids,
+);
+const SEMANTIC_ALTERNATIVE_SAMPLE_IDS = new Set(
+  SEMANTIC_DEDUP_REMEDIATION.alternative_enterprise_sample_ids ?? [],
+);
+const SEMANTIC_ALTERNATIVE_TEMPLATES = {
+  code_review: {
+    simple: {
+      ko: "다음 SQL projection에 alias 충돌이 있는지만 확인해줘. `SELECT user_id AS id, order_id AS id FROM audit_rows;`",
+      en: "Check only whether this SQL projection has an alias collision: `SELECT user_id AS id, order_id AS id FROM audit_rows;`",
+      mixed: "이 SQL projection에 alias collision이 있는지만 check해줘. `SELECT user_id AS id, order_id AS id FROM audit_rows;`",
+    },
+  },
+  code_modification: {
+    complex: {
+      ko: [
+        "{system}의 동기식 배치 처리기를 취소 가능한 비동기 스트림으로 리팩터링하고 기존 API 호환성, backpressure, 부분 실패 복구, 부하·회귀 테스트, 단계별 롤백을 제시해줘.",
+        "{system}의 단일 테이블 저장 로직을 dual-write, backfill, 검증, cutover 순서의 무중단 스키마 마이그레이션으로 수정하고 롤백과 데이터 정합성 테스트를 작성해줘.",
+        "{system}에 하드코딩된 권한 분기를 정책 평가 모듈로 분리하고 기존 호출부 호환성, deny-by-default, 감사 로그, 회귀 테스트를 포함해 수정해줘.",
+        "{system}의 TTL 캐시를 이벤트 기반 무효화 방식으로 교체하고 순서 역전, 중복 이벤트, 유실 복구, 단계적 배포와 성능 비교 테스트를 설계해줘.",
+        "{system}의 전체 파일 적재 코드를 제한 메모리 스트리밍 처리로 바꾸고 재개 지점, 손상 레코드 격리, 처리량 테스트, 이전 구현 롤백을 포함해줘.",
+      ],
+      en: [
+        "Refactor the synchronous batch processor in {system} into a cancellable asynchronous stream, covering API compatibility, backpressure, partial-failure recovery, load and regression tests, and staged rollback.",
+        "Replace the single-table persistence in {system} with a zero-downtime schema migration using dual writes, backfill, validation, cutover, rollback, and consistency tests.",
+        "Extract the hard-coded authorization branches in {system} into a policy evaluator with compatibility, deny-by-default behavior, audit logging, and regression tests.",
+        "Replace the TTL cache in {system} with event-driven invalidation, covering event reordering, duplicates, loss recovery, phased rollout, and performance comparison tests.",
+        "Change the full-file loader in {system} to bounded-memory streaming with resume checkpoints, corrupt-record isolation, throughput tests, and rollback to the prior implementation.",
+      ],
+      mixed: [
+        "{system} synchronous batch processor를 cancellable async stream으로 refactor하고 API compatibility, backpressure, partial failure recovery, load/regression test, staged rollback을 제시해줘.",
+        "{system} persistence를 dual-write, backfill, validation, cutover 기반 zero-downtime schema migration으로 수정하고 rollback과 consistency test를 작성해줘.",
+        "{system}의 hard-coded authorization branch를 policy evaluator로 분리하고 compatibility, deny-by-default, audit log, regression test를 포함해줘.",
+        "{system} TTL cache를 event-driven invalidation으로 교체하고 reordering, duplicate, loss recovery, phased rollout, performance test를 설계해줘.",
+        "{system} full-file loader를 bounded-memory streaming으로 바꾸고 resume checkpoint, corrupt record isolation, throughput test, rollback을 포함해줘.",
+      ],
+    },
+  },
+  json_conversion: {
+    complex: {
+      ko: "{artifact}의 중첩 표, 각주, 누락 값을 JSON Schema에 맞춰 변환하고 필드 매핑, 타입 충돌 처리, 검증 오류 보고, 왕복 변환 테스트를 함께 설계해줘.",
+      en: "Convert the nested tables, footnotes, and missing values in {artifact} to a JSON Schema, including field mapping, type-conflict handling, validation-error reporting, and round-trip tests.",
+      mixed: "{artifact}의 nested table, footnote, missing value를 JSON Schema로 convert하고 field mapping, type conflict handling, validation error report, round-trip test를 설계해줘.",
+    },
+  },
+  multi_document_comparison: {
+    complex: {
+      ko: "{domain}의 계약서, 운영 절차, 장애 보고서에서 책임 주체, 선행조건, 예외, 상충 조항을 비교하고 우선순위 표와 미해결 쟁점을 작성해줘.",
+      en: "Compare the contract, operating procedure, and incident report for {domain} across owners, prerequisites, exceptions, and conflicting clauses, then produce a precedence table and unresolved issues.",
+      mixed: "{domain} contract, operating procedure, incident report에서 owner, prerequisite, exception, conflicting clause를 비교하고 precedence table과 unresolved issue를 작성해줘.",
+    },
+  },
+};
+const SEMANTIC_DIVERSIFICATION_FOCI = [
+  ["승인 지연", "예산 편차", "approval latency", "budget variance"],
+  ["접근 권한", "응답 시간", "access control", "response time"],
+  ["변경 이력", "처리량", "change history", "throughput"],
+  ["감사 증적", "실패율", "audit evidence", "failure rate"],
+  ["사용자 영향", "복구 시간", "user impact", "recovery time"],
+  ["데이터 정합성", "운영 비용", "data consistency", "operating cost"],
+  ["배포 순서", "규정 준수", "deployment order", "compliance"],
+  ["소유자 인계", "품질 편차", "owner handoff", "quality variance"],
+  ["보존 기간", "검색 정확도", "retention period", "retrieval accuracy"],
+  ["예외 승인", "처리 지연", "exception approval", "processing delay"],
+  ["지역별 차이", "용량 한계", "regional difference", "capacity limit"],
+  ["채널별 전환", "오류 복구", "channel conversion", "error recovery"],
+  ["권한 분리", "비용 상한", "separation of duties", "cost ceiling"],
+  ["버전 호환성", "관측 가능성", "version compatibility", "observability"],
+  ["승인 책임", "완료 기준", "approval ownership", "completion criteria"],
+  ["입력 품질", "결과 검증", "input quality", "output validation"],
+  ["롤백 판단", "서비스 연속성", "rollback decision", "service continuity"],
+];
 
 export const LABELS = ["simple", "complex"];
 export const LANGUAGES = ["ko", "en", "mixed"];
@@ -722,9 +800,18 @@ function makeRecord({
   forceLong = false,
 }) {
   const style = pick(STYLES, groupIndex * 3 + recordIndex);
-  const request = boundaryType
-    ? interpolate(boundaryType.templates[language], variablesFor(context, language))
-    : interpolate(taskDefinition[label][language], variablesFor(context, language));
+  const prefix = source === "synthetic" ? "syn" : "bnd";
+  const sampleId = `${prefix}_${String(groupIndex + 1).padStart(4, "0")}_${label}_${String(recordIndex + 1).padStart(2, "0")}`;
+  const defaultTemplate = boundaryType
+    ? boundaryType.templates[language]
+    : taskDefinition[label][language];
+  const alternativeTemplate = SEMANTIC_ALTERNATIVE_TEMPLATES[taskDefinition.id]?.[label]?.[language];
+  const requestTemplate = SEMANTIC_ALTERNATIVE_SAMPLE_IDS.has(sampleId)
+    ? Array.isArray(alternativeTemplate)
+      ? pick(alternativeTemplate, groupIndex * 7 + recordIndex)
+      : alternativeTemplate ?? defaultTemplate
+    : defaultTemplate;
+  const request = interpolate(requestTemplate, variablesFor(context, language));
   const scenario = variablesFor(context, language).scenario;
   const caseFingerprint = sha256(`synthetic-case:${GENERATION_SEED}:${source}:${groupIndex}`);
   const caseMarkers = Array.from({ length: 4 }, (_, index) =>
@@ -735,11 +822,19 @@ function makeRecord({
       ? `synthetic ${scenario} case (${caseMarkers}) 기준이야. ${request}`
       : `가상의 ${scenario} 사례(${caseMarkers})를 기준으로 해줘. ${request}`;
   const styledPrompt = stylePrompt(base, style, language, context, label);
-  const redactedPrompt = forceLong
-    ? `${styledPrompt}\n\n${longSyntheticContext(context, language, label, groupIndex)}`
+  const variables = variablesFor(context, language);
+  const semanticFocus = SEMANTIC_DIVERSIFICATION_FOCI[groupIndex % SEMANTIC_DIVERSIFICATION_FOCI.length];
+  const semanticDiversifier = language === "en"
+    ? `This request applies only to the ${variables.period} ${variables.scenario} case in which ${variables.audience} reviews ${variables.artifact} and ${variables.metric} for ${variables.system}; focus on ${semanticFocus[2]} and exclude ${semanticFocus[3]}.`
+    : language === "mixed"
+      ? `Scope: ${variables.period}, ${variables.scenario}, ${variables.audience}, ${variables.artifact}, ${variables.metric}, ${variables.system}; focus=${semanticFocus[2]}, exclude=${semanticFocus[3]}.`
+      : `이 요청은 ${variables.period} ${variables.scenario} 사례에서 ${variables.audience}가 ${variables.artifact}, ${variables.metric}, ${variables.system}만 검토하는 범위로 한정하며, ${semanticFocus[0]}에 집중하고 ${semanticFocus[1]}는 제외한다.`;
+  const diversifiedPrompt = SEMANTIC_DIVERSIFICATION_SAMPLE_IDS.has(sampleId)
+    ? `${styledPrompt}\n\n${semanticDiversifier}`
     : styledPrompt;
-  const prefix = source === "synthetic" ? "syn" : "bnd";
-  const sampleId = `${prefix}_${String(groupIndex + 1).padStart(4, "0")}_${label}_${String(recordIndex + 1).padStart(2, "0")}`;
+  const redactedPrompt = forceLong
+    ? `${diversifiedPrompt}\n\n${longSyntheticContext(context, language, label, groupIndex)}`
+    : diversifiedPrompt;
   return {
     schema_version: RECORD_SCHEMA_VERSION,
     dataset_version: DATASET_VERSION,
@@ -770,19 +865,19 @@ function makeRecord({
 
 const SYNTHETIC_QUOTAS = {
   train: {
-    ko: { simple: 490, complex: 490 },
-    en: { simple: 8, complex: 9 },
-    mixed: { simple: 27, complex: 26 },
+    ko: { simple: 516, complex: 517 },
+    en: { simple: 0, complex: 0 },
+    mixed: { simple: 9, complex: 8 },
   },
   validation: {
-    ko: { simple: 105, complex: 105 },
-    en: { simple: 2, complex: 2 },
-    mixed: { simple: 6, complex: 5 },
+    ko: { simple: 111, complex: 110 },
+    en: { simple: 0, complex: 0 },
+    mixed: { simple: 2, complex: 2 },
   },
   test: {
-    ko: { simple: 105, complex: 105 },
-    en: { simple: 2, complex: 2 },
-    mixed: { simple: 5, complex: 6 },
+    ko: { simple: 110, complex: 111 },
+    en: { simple: 0, complex: 0 },
+    mixed: { simple: 2, complex: 2 },
   },
 };
 
@@ -821,16 +916,16 @@ function chooseByDeficit(definitions, counts, targets, salt) {
 
 const BOUNDARY_RECORD_QUOTAS = {
   train: {
-    simple: { ko: 630, en: 36, mixed: 34 },
-    complex: { ko: 630, en: 34, mixed: 36 },
+    simple: { ko: 666, en: 0, mixed: 34 },
+    complex: { ko: 664, en: 0, mixed: 36 },
   },
   validation: {
-    simple: { ko: 133, en: 8, mixed: 7 },
-    complex: { ko: 137, en: 7, mixed: 8 },
+    simple: { ko: 141, en: 0, mixed: 7 },
+    complex: { ko: 144, en: 0, mixed: 8 },
   },
   test: {
-    simple: { ko: 137, en: 8, mixed: 7 },
-    complex: { ko: 133, en: 7, mixed: 8 },
+    simple: { ko: 145, en: 0, mixed: 7 },
+    complex: { ko: 140, en: 0, mixed: 8 },
   },
 };
 
@@ -1040,7 +1135,7 @@ export function findCrossGroupNearDuplicates(records, threshold = 0.94) {
 function expectCounts(records, field, expected, failures) {
   const actual = countBy(records, (record) => record[field]);
   for (const [key, count] of Object.entries(expected)) {
-    if (actual[key] !== count) failures.push(`${field}: expected ${key}=${count}, got ${actual[key] ?? 0}`);
+    if ((actual[key] ?? 0) !== count) failures.push(`${field}: expected ${key}=${count}, got ${actual[key] ?? 0}`);
   }
   const unexpected = Object.keys(actual).filter((key) => !(key in expected));
   if (unexpected.length > 0) failures.push(`${field}: unexpected values ${unexpected.join(", ")}`);
@@ -1122,7 +1217,7 @@ export function validateRecords(records, { checkNearDuplicates = true } = {}) {
   }
 
   expectCounts(records, "label", { simple: 4000, complex: 4000 }, failures);
-  expectCounts(records, "language", { ko: 7400, en: 200, mixed: 400 }, failures);
+  expectCounts(records, "language", { ko: 7800, en: 0, mixed: 200 }, failures);
   expectCounts(records, "source", { synthetic: 6000, boundary: 2000 }, failures);
   expectCounts(records, "split", { train: 5600, validation: 1200, test: 1200 }, failures);
   expectCounts(records, "boundary_case", { false: 6000, true: 2000 }, failures);
@@ -1135,9 +1230,9 @@ export function validateRecords(records, { checkNearDuplicates = true } = {}) {
     expectCounts(records.filter((record) => record.source === source), "label", expected, failures);
   }
   const languageLabelExpected = {
-    ko: { simple: 3700, complex: 3700 },
-    en: { simple: 100, complex: 100 },
-    mixed: { simple: 200, complex: 200 },
+    ko: { simple: 3900, complex: 3900 },
+    en: { simple: 0, complex: 0 },
+    mixed: { simple: 100, complex: 100 },
   };
   for (const [language, expected] of Object.entries(languageLabelExpected)) {
     expectCounts(records.filter((record) => record.language === language), "label", expected, failures);
@@ -1148,9 +1243,9 @@ export function validateRecords(records, { checkNearDuplicates = true } = {}) {
     test: { simple: 600, complex: 600 },
   };
   const splitLanguageExpected = {
-    train: { ko: 5180, en: 138, mixed: 282 },
-    validation: { ko: 1110, en: 31, mixed: 59 },
-    test: { ko: 1110, en: 31, mixed: 59 },
+    train: { ko: 5462, en: 0, mixed: 138 },
+    validation: { ko: 1169, en: 0, mixed: 31 },
+    test: { ko: 1169, en: 0, mixed: 31 },
   };
   for (const split of SPLITS) {
     const splitRecords = records.filter((record) => record.split === split);

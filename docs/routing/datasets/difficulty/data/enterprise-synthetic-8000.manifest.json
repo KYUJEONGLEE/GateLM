@@ -4,7 +4,7 @@
   "record_schema_version": "gatelm.routing-difficulty-dataset-record.v1",
   "record_schema_path": "docs/routing/datasets/difficulty/schemas/difficulty-dataset-record.schema.json",
   "dataset_path": "docs/routing/datasets/difficulty/data/enterprise-synthetic-8000.jsonl",
-  "dataset_sha256": "b5061ffada29605448ec2ca0a2926e302bbd40d9c8c7376dc01fb0915c876391",
+  "dataset_sha256": "2eadda6a5db4a3a6a88261bd9c532f243f7a099fdd1a53e4a0bae67131d9faef",
   "generated_at": "2026-07-20T00:00:00Z",
   "generation_seed": 20260720,
   "scope": {
@@ -32,9 +32,8 @@
       "simple": 4000
     },
     "language": {
-      "en": 200,
-      "ko": 7400,
-      "mixed": 400
+      "ko": 7800,
+      "mixed": 200
     },
     "source": {
       "boundary": 2000,
@@ -114,15 +113,15 @@
       "typo": 501
     },
     "prompt_structure": {
-      "keyword_list": 402,
-      "multi_paragraph": 2002,
-      "multi_sentence": 800,
-      "single_sentence": 4796
+      "keyword_list": 401,
+      "multi_paragraph": 2001,
+      "multi_sentence": 799,
+      "single_sentence": 4799
     },
     "length_bucket": {
       "long": 1600,
-      "medium": 3522,
-      "short": 2878
+      "medium": 3374,
+      "short": 3026
     },
     "counterexample_type": {
       "code_present_simple": 80,

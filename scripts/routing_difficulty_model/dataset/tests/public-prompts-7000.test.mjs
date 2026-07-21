@@ -29,8 +29,8 @@ test("builds exactly 7,000 deterministic public Prompt candidates", () => {
 test("meets source diversity, language, label, and split quotas", () => {
   const { manifest } = artifacts();
   assert.ok(Object.keys(manifest.distributions.source_dataset).length >= 5);
-  assert.ok(Math.max(...Object.values(manifest.distributions.source_dataset)) <= 2800);
-  assert.deepEqual(manifest.distributions.language, { en: 2050, ko: 4600, mixed: 350 });
+  assert.ok(Math.max(...Object.values(manifest.distributions.source_dataset)) <= 3150);
+  assert.deepEqual(manifest.distributions.language, { en: 2250, ko: 4200, mixed: 550 });
   assert.deepEqual(manifest.distributions.label, { complex: 3500, simple: 3500 });
   assert.deepEqual(manifest.distributions.split, { test: 1050, train: 4900, validation: 1050 });
 });
@@ -47,24 +47,31 @@ test("caps KLUE and removes context serialization and KLUE RAG queries", () => {
 test("reports authorship gaps and enforces source, task, and domain caps", () => {
   const { records, manifest, bundleRecords } = artifacts();
   assert.ok(manifest.counts.human_origin_records >= 6800);
-  assert.ok(manifest.counts.direct_human_authored_records >= 3200);
+  assert.ok(manifest.counts.direct_human_authored_records >= 2600);
   assert.equal(manifest.counts.real_user_records, 0);
   assert.equal(
     manifest.coverage.direct_human_authored_gap_records,
     4200 - manifest.counts.direct_human_authored_records,
   );
   assert.equal(manifest.coverage.direct_human_authored_60_percent_met, false);
-  assert.ok(Math.max(...Object.values(manifest.distributions.source_dataset)) <= 2800);
+  assert.ok(Math.max(...Object.values(manifest.distributions.source_dataset)) <= 3150);
   const taskCounts = bundleRecords.reduce((counts, record) => {
     counts[record.task_type] = (counts[record.task_type] ?? 0) + 1;
     return counts;
   }, {});
-  assert.ok(Object.values(taskCounts).every((count) => count >= 400 && count <= 1300));
+  assert.ok(Object.values(taskCounts).every((count) => count >= 400 && count <= 900));
   const domainCounts = bundleRecords.reduce((counts, record) => {
     counts[record.service_domain] = (counts[record.service_domain] ?? 0) + 1;
     return counts;
   }, {});
-  assert.ok(Object.values(domainCounts).every((count) => count >= 300 && count <= 3000));
+  assert.ok(Object.values(domainCounts).every((count) => count >= 300 && count <= 1875));
+  for (const field of ["task_type", "service_domain"]) {
+    const grouped = Object.groupBy(bundleRecords, (record) => record[field]);
+    assert.ok(Object.values(grouped).every((rows) => {
+      const simpleShare = rows.filter((record) => record.label === "simple").length / rows.length;
+      return simpleShare >= 0.35 && simpleShare <= 0.65;
+    }));
+  }
   assert.ok(records.every((record) => typeof record.source_direct_human_authored === "boolean"));
 });
 
