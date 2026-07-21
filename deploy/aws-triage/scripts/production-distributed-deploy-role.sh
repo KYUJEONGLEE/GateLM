@@ -132,6 +132,7 @@ upsert_env_value() {
 promote_pii_release_env() {
   local current_uri bucket_uri
   current_uri="$(awk -F= '$1 == "GATELM_PRODUCTION_DISTRIBUTED_PII_ARTIFACT_S3_URI" {print $2}' "${env_file}")"
+  current_uri="$(perf_trim "${current_uri}")"
   current_uri="$(perf_unquote_env_value "${current_uri}")"
   [[ "${current_uri}" =~ ^s3://[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]/pii/v36/[A-Za-z0-9._/-]+\.tar\.gz$ ]] || \
     deploy_fail "Current PII artifact URI is not in the approved private S3 namespace."
