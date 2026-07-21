@@ -1,0 +1,39 @@
+name: gatelm-clickhouse
+
+services:
+  clickhouse:
+    image: clickhouse/clickhouse-server:25.3-alpine@sha256:a4e8cf46e526a06f4f52d22f7fa8d07472b55d3c896d7ca3f159e249be38ae62
+    restart: unless-stopped
+    environment:
+      CLICKHOUSE_DB: analytics
+      CLICKHOUSE_USER: ${CLICKHOUSE_USERNAME:?CLICKHOUSE_USERNAME is required}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?CLICKHOUSE_PASSWORD is required}
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+    ports:
+      - "${CLICKHOUSE_PRIVATE_BIND_IP:?CLICKHOUSE_PRIVATE_BIND_IP is required}:8123:8123"
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+      - clickhouse-logs:/var/log/clickhouse-server
+      - ./init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          clickhouse-client
+          --user "$${CLICKHOUSE_USER}"
+          --password "$${CLICKHOUSE_PASSWORD}"
+          --query "SELECT 1"
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+
+volumes:
+  clickhouse-data:
+    name: gatelm-clickhouse-data
+  clickhouse-logs:
+    name: gatelm-clickhouse-logs

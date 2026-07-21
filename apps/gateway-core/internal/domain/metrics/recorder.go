@@ -224,6 +224,30 @@ type AsyncLogEvent struct {
 	DurationSeconds float64
 }
 
+type ClickHouseMirrorWrite struct {
+	Operation       string
+	Status          string
+	DurationSeconds float64
+	RecordCount     int
+}
+
+func (r *Registry) ClickHouseMirrorWrite(write ClickHouseMirrorWrite) {
+	if write.RecordCount <= 0 {
+		return
+	}
+	status := "error"
+	switch strings.TrimSpace(write.Status) {
+	case "success", "timeout", "error":
+		status = strings.TrimSpace(write.Status)
+	}
+	labels := []Label{
+		{Name: "operation", Value: "terminal_mirror"},
+		{Name: "status", Value: status},
+	}
+	r.AddCounter(ClickHouseLogWritesTotal, labels, float64(write.RecordCount))
+	r.ObserveHistogram(ClickHouseLogWriteDurationSeconds, labels, write.DurationSeconds)
+}
+
 func (r *Registry) AsyncLogEnqueue(event AsyncLogEvent) {
 	labels := asyncLogLabels(event.Operation, event.Status)
 	r.AddCounter(AsyncLogEnqueueTotal, labels, 1)

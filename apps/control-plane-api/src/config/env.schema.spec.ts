@@ -22,6 +22,11 @@ describe('validateEnv', () => {
     expect(env.DASHBOARD_ROLLUP_DISCOVERY_LAG_MS).toBe(60000);
     expect(env.DASHBOARD_ROLLUP_RECONCILIATION_INTERVAL_MS).toBe(60000);
     expect(env.DASHBOARD_ROLLUP_RECONCILIATION_LOOKBACK_MS).toBe(900000);
+    expect(env.CLICKHOUSE_ANALYTICS_READ_ENABLED).toBe('false');
+    expect(env.CLICKHOUSE_DATABASE).toBe('analytics');
+    expect(env.CLICKHOUSE_TABLE).toBe('llm_invocations');
+    expect(env.CLICKHOUSE_USERNAME).toBe('analytics_reader');
+    expect(env.CLICKHOUSE_QUERY_TIMEOUT_MS).toBe(1500);
     expect(env.TENANT_CHAT_RAG_ENABLED).toBe('false');
     expect(env.RAG_EMBEDDING_PROVIDER).toBe('openai');
     expect(env.RAG_EMBEDDING_MODEL).toBe('text-embedding-3-large');
@@ -104,6 +109,49 @@ describe('validateEnv', () => {
     expect(env.TENANT_CHAT_PROJECTOR_BATCH_SIZE).toBe(25);
     expect(env.TENANT_CHAT_PROJECTOR_INTERVAL_MS).toBe(500);
     expect(env.TENANT_CHAT_PROJECTOR_MAX_ATTEMPTS).toBe(7);
+  });
+
+  it('validates ClickHouse analytics read settings only when enabled', () => {
+    const env = validateEnv({
+      ...baseEnv(),
+      CLICKHOUSE_ANALYTICS_READ_ENABLED: 'true',
+      CLICKHOUSE_URL: 'http://10.78.2.60:8123',
+      CLICKHOUSE_DATABASE: 'analytics',
+      CLICKHOUSE_TABLE: 'llm_invocations',
+      CLICKHOUSE_USERNAME: 'analytics_writer',
+      CLICKHOUSE_PASSWORD: 'strong-test-password',
+      CLICKHOUSE_EMPLOYEE_IDENTITY_HMAC_SECRET:
+        'employee-identity-hmac-secret-at-least-32-characters',
+      CLICKHOUSE_QUERY_TIMEOUT_MS: '2000',
+    });
+
+    expect(env.CLICKHOUSE_ANALYTICS_READ_ENABLED).toBe('true');
+    expect(env.CLICKHOUSE_URL).toBe('http://10.78.2.60:8123');
+    expect(env.CLICKHOUSE_QUERY_TIMEOUT_MS).toBe(2000);
+  });
+
+  it('rejects incomplete or credential-bearing ClickHouse read settings', () => {
+    expect(() =>
+      validateEnv({
+        ...baseEnv(),
+        CLICKHOUSE_ANALYTICS_READ_ENABLED: 'true',
+        CLICKHOUSE_URL: 'http://10.78.2.60:8123',
+        CLICKHOUSE_PASSWORD: 'strong-test-password',
+      }),
+    ).toThrow(
+      'CLICKHOUSE_EMPLOYEE_IDENTITY_HMAC_SECRET must be at least 32 characters',
+    );
+
+    expect(() =>
+      validateEnv({
+        ...baseEnv(),
+        CLICKHOUSE_ANALYTICS_READ_ENABLED: 'true',
+        CLICKHOUSE_URL: 'http://user:password@10.78.2.60:8123',
+        CLICKHOUSE_PASSWORD: 'strong-test-password',
+        CLICKHOUSE_EMPLOYEE_IDENTITY_HMAC_SECRET:
+          'employee-identity-hmac-secret-at-least-32-characters',
+      }),
+    ).toThrow('without embedded credentials');
   });
 
   it('does not treat a local AWS region setting as production-like by itself', () => {

@@ -8,6 +8,7 @@ import { EmailSender, InMemoryEmailSender } from '@/modules/auth/email-sender';
 import { SmtpEmailSender } from '@/modules/auth/smtp-email-sender';
 
 import { EmployeesController } from './employees.controller';
+import { ClickHouseEmployeeUsageReader } from './clickhouse-employee-usage.reader';
 import { EmployeeUsageService } from './employee-usage.service';
 import { EmployeeSecurityService } from './employee-security.service';
 import { EmployeesService } from './employees.service';
@@ -17,6 +18,7 @@ import { EmployeesService } from './employees.service';
   controllers: [EmployeesController],
   providers: [
     EmployeesService,
+    ClickHouseEmployeeUsageReader,
     EmployeeUsageService,
     EmployeeSecurityService,
     AdminAuthGuard,

@@ -2,6 +2,7 @@ import { BadRequestException } from '@nestjs/common';
 
 import { PrismaService } from '@/infrastructure/database/prisma/prisma.service';
 
+import type { ClickHouseEmployeeUsageReader } from './clickhouse-employee-usage.reader';
 import { EmployeeUsageService } from './employee-usage.service';
 
 const tenantId = '00000000-0000-4000-8000-000000000100';
@@ -171,6 +172,92 @@ describe('EmployeeUsageService', () => {
       expect(selected.values).toContain(employeeA);
     }
   });
+
+  it('uses ClickHouse for project usage without querying PostgreSQL invocation logs', async () => {
+    const queryRaw = jest.fn().mockResolvedValue([
+      {
+        employeeId: employeeA,
+        requestCount: 2n,
+        inputTokens: 10n,
+        outputTokens: 5n,
+        totalTokens: 15n,
+        costMicroUsd: 4n,
+        sourceMaxAt: new Date('2026-07-14T00:00:00.000Z'),
+        hasRawUsage: true,
+        hasRollupUsage: false,
+      },
+    ]);
+    const reader = {
+      isEnabled: jest.fn().mockReturnValue(true),
+      readProjectUsage: jest.fn().mockResolvedValue({
+        byEmployeeId: new Map([
+          [
+            employeeA,
+            {
+              requestCount: 3n,
+              inputTokens: 100n,
+              outputTokens: 20n,
+              totalTokens: 120n,
+              costMicroUsd: 10n,
+            },
+          ],
+        ]),
+        unattributed: {
+          requestCount: 1n,
+          inputTokens: 2n,
+          outputTokens: 1n,
+          totalTokens: 3n,
+          costMicroUsd: 1n,
+        },
+        lastSourceAt: new Date('2026-07-13T23:59:59.000Z'),
+      }),
+    } as unknown as ClickHouseEmployeeUsageReader;
+    const service = createClickHouseService(queryRaw, reader);
+
+    const result = await service.listEmployeeUsage(tenantId, {
+      from: '2026-07-13T00:00:00.000Z',
+      to: '2026-07-14T00:00:00.000Z',
+      limit: 10,
+    });
+
+    expect(result.data[0]).toMatchObject({
+      employeeId: employeeA,
+      total: { requestCount: 5, totalTokens: 135, costMicroUsd: 14 },
+      sources: {
+        projectApplication: { requestCount: 3, totalTokens: 120 },
+        tenantChat: { requestCount: 2, totalTokens: 15 },
+      },
+    });
+    expect(result.unattributed.sources.projectApplication).toMatchObject({
+      requestCount: 1,
+      totalTokens: 3,
+    });
+    expect(reader.readProjectUsage).toHaveBeenCalledTimes(1);
+    expect(queryRaw).toHaveBeenCalledTimes(1);
+    const tenantChat = rawQuery(queryRaw.mock.calls[0]?.[0]);
+    expect(tenantChat.sql).toContain('FROM tenant_chat_invocation_logs');
+    expect(tenantChat.sql).not.toContain('p0_llm_invocation_logs');
+  });
+
+  it('skips ClickHouse and PostgreSQL project logs for tenant-chat-only reads', async () => {
+    const queryRaw = jest.fn().mockResolvedValue([]);
+    const reader = {
+      isEnabled: jest.fn().mockReturnValue(true),
+      readProjectUsage: jest.fn(),
+    } as unknown as ClickHouseEmployeeUsageReader;
+    const service = createClickHouseService(queryRaw, reader);
+
+    await service.listEmployeeUsage(tenantId, {
+      from: '2026-07-13T00:00:00.000Z',
+      to: '2026-07-14T00:00:00.000Z',
+      source: 'tenant_chat',
+    });
+
+    expect(reader.readProjectUsage).not.toHaveBeenCalled();
+    expect(rawQuery(queryRaw.mock.calls[0]?.[0]).sql).not.toContain(
+      'p0_llm_invocation_logs',
+    );
+  });
 });
 
 function createService(queryRaw: jest.Mock) {
@@ -181,6 +268,39 @@ function createService(queryRaw: jest.Mock) {
     },
   } as unknown as PrismaService;
   return new EmployeeUsageService(prisma);
+}
+
+function createClickHouseService(
+  queryRaw: jest.Mock,
+  reader: ClickHouseEmployeeUsageReader,
+) {
+  const prisma = {
+    $queryRaw: queryRaw,
+    tenant: {
+      findUnique: jest.fn().mockResolvedValue({ id: tenantId }),
+    },
+    employee: {
+      findMany: jest.fn().mockResolvedValue([
+        {
+          id: employeeA,
+          userId: null,
+          email: 'employee-a@example.invalid',
+          name: 'Employee A',
+          department: 'Platform',
+          status: 'active',
+        },
+        {
+          id: employeeB,
+          userId: null,
+          email: 'employee-b@example.invalid',
+          name: 'Employee B',
+          department: 'Platform',
+          status: 'active',
+        },
+      ]),
+    },
+  } as unknown as PrismaService;
+  return new EmployeeUsageService(prisma, reader);
 }
 
 function usageRow(

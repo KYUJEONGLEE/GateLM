@@ -70,6 +70,12 @@ func TestRegistryRendersPrometheusTextWithDeterministicSafeLabels(t *testing.T) 
 		Reason:  "timeout",
 	})
 	registry.SetGatewayDependencyReady("ai_safety_sidecar", false, true)
+	registry.ClickHouseMirrorWrite(ClickHouseMirrorWrite{
+		Operation:       "request-derived-operation-must-be-ignored",
+		Status:          "success",
+		DurationSeconds: 0.03,
+		RecordCount:     2,
+	})
 
 	first := registry.RenderPrometheus()
 	second := registry.RenderPrometheus()
@@ -98,6 +104,8 @@ func TestRegistryRendersPrometheusTextWithDeterministicSafeLabels(t *testing.T) 
 	assertMetricsContains(t, first, `gatelm_ai_safety_sidecar_call_duration_seconds_sum{inference_path="hybrid",mode="enforce",outcome="redacted",surface="tenant_chat"} 0.125`)
 	assertMetricsContains(t, first, `gatelm_ai_safety_sidecar_fallback_total{mode="enforce",reason="timeout",surface="tenant_chat"} 1`)
 	assertMetricsContains(t, first, `gatelm_gateway_dependency_ready{dependency="ai_safety_sidecar",required="false"} 1`)
+	assertMetricsContains(t, first, `gatelm_clickhouse_log_writes_total{operation="terminal_mirror",status="success"} 2`)
+	assertMetricsContains(t, first, `gatelm_clickhouse_log_write_duration_seconds_sum{operation="terminal_mirror",status="success"} 0.03`)
 	assertMetricsDoesNotContainForbiddenLabels(t, first)
 }
 
@@ -122,6 +130,8 @@ func TestRegistryRenderIncludesAllRequiredMetricFamilies(t *testing.T) {
 		AsyncLogDroppedTotal,
 		AsyncLogPersistTotal,
 		AsyncLogPersistDurationSeconds,
+		ClickHouseLogWritesTotal,
+		ClickHouseLogWriteDurationSeconds,
 		StreamsActive,
 		StreamRelayTotal,
 		StreamDurationSeconds,

@@ -4,6 +4,14 @@ type RawEnv = Record<string, string | undefined>;
 
 interface ControlPlaneEnv extends RagRuntimeConfig {
   AUTH_EMAIL_TRANSPORT?: string;
+  CLICKHOUSE_ANALYTICS_READ_ENABLED: string;
+  CLICKHOUSE_DATABASE: string;
+  CLICKHOUSE_EMPLOYEE_IDENTITY_HMAC_SECRET?: string;
+  CLICKHOUSE_PASSWORD?: string;
+  CLICKHOUSE_QUERY_TIMEOUT_MS: number;
+  CLICKHOUSE_TABLE: string;
+  CLICKHOUSE_URL?: string;
+  CLICKHOUSE_USERNAME: string;
   CONTROL_PLANE_INTERNAL_SERVICE_TOKEN?: string;
   TENANT_CHAT_CONTROL_PLANE_SERVICE_TOKEN?: string;
   TENANT_CHAT_CACHE_KEY_SET_ID?: string;
@@ -170,6 +178,72 @@ function readOptionalString(env: RawEnv, key: keyof ControlPlaneEnv): string | u
   return value.trim();
 }
 
+function readClickHouseReadConfig(env: RawEnv) {
+  const enabled =
+    readBooleanString(env, 'CLICKHOUSE_ANALYTICS_READ_ENABLED') ?? 'false';
+  const endpoint = readOptionalString(env, 'CLICKHOUSE_URL');
+  const database = readOptionalString(env, 'CLICKHOUSE_DATABASE') ?? 'analytics';
+  const table = readOptionalString(env, 'CLICKHOUSE_TABLE') ?? 'llm_invocations';
+  const username =
+    readOptionalString(env, 'CLICKHOUSE_USERNAME') ?? 'analytics_reader';
+  const password = readOptionalString(env, 'CLICKHOUSE_PASSWORD');
+  const identitySecret = readOptionalString(
+    env,
+    'CLICKHOUSE_EMPLOYEE_IDENTITY_HMAC_SECRET',
+  );
+  const timeoutMs =
+    readOptionalInteger(env, 'CLICKHOUSE_QUERY_TIMEOUT_MS', 100, 10_000) ??
+    1_500;
+
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(database)) {
+    throw new Error('CLICKHOUSE_DATABASE must be a simple identifier');
+  }
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(table)) {
+    throw new Error('CLICKHOUSE_TABLE must be a simple identifier');
+  }
+  if (enabled === 'true') {
+    if (!endpoint) {
+      throw new Error('Missing required environment variable: CLICKHOUSE_URL');
+    }
+    let parsed: URL;
+    try {
+      parsed = new URL(endpoint);
+    } catch {
+      throw new Error('CLICKHOUSE_URL must be an absolute HTTP(S) URL');
+    }
+    if (
+      (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') ||
+      parsed.username !== '' ||
+      parsed.password !== ''
+    ) {
+      throw new Error(
+        'CLICKHOUSE_URL must be an absolute HTTP(S) URL without embedded credentials',
+      );
+    }
+    if (!password) {
+      throw new Error(
+        'Missing required environment variable: CLICKHOUSE_PASSWORD',
+      );
+    }
+    if (!identitySecret || identitySecret.length < 32) {
+      throw new Error(
+        'CLICKHOUSE_EMPLOYEE_IDENTITY_HMAC_SECRET must be at least 32 characters when ClickHouse reads are enabled',
+      );
+    }
+  }
+
+  return {
+    CLICKHOUSE_ANALYTICS_READ_ENABLED: enabled,
+    CLICKHOUSE_DATABASE: database,
+    CLICKHOUSE_EMPLOYEE_IDENTITY_HMAC_SECRET: identitySecret,
+    CLICKHOUSE_PASSWORD: password,
+    CLICKHOUSE_QUERY_TIMEOUT_MS: timeoutMs,
+    CLICKHOUSE_TABLE: table,
+    CLICKHOUSE_URL: endpoint,
+    CLICKHOUSE_USERNAME: username,
+  };
+}
+
 function readCacheKeySetId(env: RawEnv): string {
   const value =
     readOptionalString(env, 'TENANT_CHAT_CACHE_KEY_SET_ID') ??
@@ -217,6 +291,7 @@ export function validateEnv(config: RawEnv): ValidatedControlPlaneEnv {
     'TENANT_CHAT_CONTROL_PLANE_SERVICE_TOKEN',
   );
   const ragRuntimeConfig = validateRagRuntimeConfig(config);
+  const clickHouseReadConfig = readClickHouseReadConfig(config);
   const ragEnabled = ragRuntimeConfig.TENANT_CHAT_RAG_ENABLED === 'true';
   const productionLike = isProductionLikeEnv(config);
   const ragObjectStoreDriver = readRagObjectStoreDriver(
@@ -317,6 +392,7 @@ export function validateEnv(config: RawEnv): ValidatedControlPlaneEnv {
   return {
     ...config,
     ...ragRuntimeConfig,
+    ...clickHouseReadConfig,
     AUTH_EMAIL_TRANSPORT: emailTransport,
     CONTROL_PLANE_INTERNAL_SERVICE_TOKEN: internalServiceToken,
     TENANT_CHAT_CONTROL_PLANE_SERVICE_TOKEN: tenantChatServiceToken,
