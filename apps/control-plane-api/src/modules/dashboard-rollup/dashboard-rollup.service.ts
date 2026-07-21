@@ -898,9 +898,10 @@ export class DashboardRollupService
             WHEN 'reasoning' THEN 'reasoning'
             ELSE 'general'
           END AS prompt_category,
-          CASE lower(coalesce(nullif(metadata ->> 'promptDifficulty', ''), 'simple'))
+          CASE lower(nullif(metadata ->> 'promptDifficulty', ''))
+            WHEN 'simple' THEN 'simple'
             WHEN 'complex' THEN 'complex'
-            ELSE 'simple'
+            ELSE NULL
           END AS prompt_difficulty,
           coalesce(
             nullif(metadata #>> '{domainOutcomes,safety,outcome}', ''),
@@ -945,7 +946,7 @@ export class DashboardRollupService
             ('cache_outcome', cache_outcome, cache_type, '', true),
             ('fallback_outcome', fallback_outcome, '', '', true),
             ('budget_outcome', budget_outcome, '', '', true),
-            ('routing', prompt_category, prompt_difficulty, routing_reason, true),
+            ('routing', prompt_category, prompt_difficulty, routing_reason, prompt_difficulty IS NOT NULL),
             ('policy_outcome', 'cache_hit', '', '', cache_outcome = 'hit'),
             ('policy_outcome', 'pii_masked', '', '', masking_action = 'redacted'),
             ('policy_outcome', 'safety_blocked', '', '', safety_outcome = 'blocked'),

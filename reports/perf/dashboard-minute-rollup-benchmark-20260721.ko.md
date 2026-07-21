@@ -15,7 +15,7 @@
 - 최대 재집계 구간 감소: `93.14%`, 약 `14.58배`
 - 요청 수·비용·절감액·캐시 hit·복잡도 라우팅·모델 집계: 모두 일치
 
-이 결과는 동일한 로컬 DB와 데이터셋에서 수행한 A/B 결과다. 아직 운영 EC2의 Dashboard 동시 접속, 지속적인 로그 적재, worker catch-up, PostgreSQL CPU 회복까지 재시험한 결과는 아니다.
+추가로 2026-07-21 AWS 운영 복제 환경의 실제 로그 70,252건을 같은 reader 구현으로 비교했다. Raw p95는 `6,221.145ms`, Rollup p95는 `2.048ms`로 `99.967%` 감소했고, 요청 수와 Policy Impact 전체 결과의 exact parity가 통과했다. 이 값은 운영과 같은 `m7i.large` Data 인스턴스의 복제 DB에서 측정했지만, 실제 운영 트래픽이 동시에 흐르는 production end-to-end 결과는 아니다.
 
 ## 2. 문제와 원인
 
@@ -136,6 +136,35 @@ Rollup 지연이 2분을 초과하면 빠진 전체 구간을 raw scan하지 않
 
 운영과 로컬은 CPU, DB cache, 디스크, 동시 부하가 다르므로 `37.353초`와 `1.067초`를 직접 나눠 운영 개선 배수로 주장하지 않는다. 개선 배수는 같은 로컬 실행의 기존/개선 결과만 사용한다.
 
+### 5.4 AWS 운영 복제 환경 A/B
+
+운영 DB의 복제본을 사용하는 별도 Data EC2(`m7i.large`)에서 동일한 Go Policy Impact reader를 `raw`와 `rollup` 모드로 각각 5회 실행했다. 대상 tenant/project의 실제 로그는 70,252건이며 조회 기간은 UTC `2026-07-19 05:00–16:00`이다. 측정 중 실제 운영 요청은 복제 환경으로 들어오지 않았다.
+
+| 비교 항목 | Raw reader | Rollup reader | 변화 |
+|---|---:|---:|---:|
+| 표본 수 | 5회 | 5회 | 동일 |
+| 조회 p50 | 5,934.689ms | 1.961ms | 약 3,026배 |
+| 조회 p95 | 6,221.145ms | 2.048ms | 99.967% 감소, 3,037.606배 |
+| 조회 max | 6,221.145ms | 2.048ms | 약 3,037.61배 |
+| Request count | 70,252 | 70,252 | PASS |
+| 전체 Policy Impact 결과 | 기준값 | 기준값과 동일 | PASS |
+
+기존 HTTP endpoint도 같은 70,252건에서 10회 모두 `13.229–14.841초`가 걸렸다. 다만 당시 Gateway image는 아직 Rollup reader로 교체하지 않았으므로 이 HTTP 수치와 위 direct reader 수치를 나눠 end-to-end 개선 배수로 사용하지 않는다.
+
+Minute 백필은 원본과 `70,252 = 70,252`로 일치했지만 첫 Parent 병합 결과는 Hour/Day가 `88,256건`이었다. 기존 Legacy `06:00` Hour row 18,004건이 대응하는 raw/minute row 없이 남았고, 원본이 있는 minute만 큐에 넣는 백필로는 이 고아 row가 지워지지 않았기 때문이다.
+
+이를 해결하기 위해 Minute 전환 후 기존 Hour state/row까지 포함해 한 시간씩 Parent rebuild를 명시적으로 큐잉하도록 보완했다. 해당 Hour는 먼저 기존 row를 삭제한 뒤 child Minute만 병합하고 Day/Month를 연쇄 재생성한다. 재검증 결과는 다음과 같다.
+
+| 집계 단계 | 보완 전 | 보완 후 | 결과 |
+|---|---:|---:|---|
+| Raw | 70,252 | 70,252 | 기준값 |
+| Minute | 70,252 | 70,252 | PASS |
+| Hour | 88,256 | 70,252 | stale 18,004건 제거 |
+| Day | 88,256 | 70,252 | PASS |
+| Closed Hour/Day dirty queue | 0 | 0 | PASS |
+
+백필 중 16,813–27,005건이 집중된 시간대에는 PostgreSQL 컨테이너 CPU가 약 `99.7–100.4%`까지 올라갔다. 따라서 운영에서는 전체 기간을 한 번에 큐잉하지 않고 승인된 UTC 1시간 단위로 처리하며 CPU와 dirty queue를 관찰해야 한다. 처리 완료 후 복제 환경의 즉시 표본은 PostgreSQL `12.61%`, Control Plane `0.70%`였다.
+
 ## 6. 기술적 챌린지 스토리
 
 ### 문제
@@ -144,19 +173,19 @@ Rollup 지연이 2분을 초과하면 빠진 전체 구간을 raw scan하지 않
 
 ### 시도와 한계
 
-Dashboard 조회와 worker를 분리해 CPU 점유 주체를 특정했고, JSON 반복 평가를 `MATERIALIZED` CTE로 줄여 실패하던 hour bucket을 60초 안에 완료시켰다. 그러나 hour 전체 재계산은 데이터가 늘수록 트랜잭션도 계속 커지고, Rollup이 늦을 때 전체 raw fallback이 같은 DB 부하를 다시 만들 수 있었다.
+Dashboard 조회와 worker를 분리해 CPU 점유 주체를 특정했고, JSON 반복 평가를 `MATERIALIZED` CTE로 줄여 실패하던 hour bucket을 60초 안에 완료시켰다. 그러나 hour 전체 재계산은 데이터가 늘수록 트랜잭션도 계속 커지고, Rollup이 늦을 때 전체 raw fallback이 같은 DB 부하를 다시 만들 수 있었다. 이후 Minute 결과만 맞으면 충분하다고 가정한 첫 전환 리허설에서도, source가 없는 Legacy Hour row가 상위 집계에 남아 `70,252 → 88,256건`으로 중복되는 한계가 드러났다.
 
 ### 추가 개선
 
-정합성을 유지하는 replacement rebuild 범위를 1분으로 줄이고 상위 bucket은 하위 Rollup만 병합했다. reader는 완료 Rollup과 최대 2분 raw tail만 조합하고, 더 큰 coverage gap은 전체 scan 대신 명시적인 partial 상태로 반환하도록 했다. `legacy → shadow → minute` 모드로 배포 효과와 코드 효과를 분리할 수 있게 했다.
+정합성을 유지하는 replacement rebuild 범위를 1분으로 줄이고 상위 bucket은 하위 Rollup만 병합했다. reader는 완료 Rollup과 최대 2분 raw tail만 조합하고, 더 큰 coverage gap은 전체 scan 대신 명시적인 partial 상태로 반환하도록 했다. `legacy → shadow → minute` 모드로 배포 효과와 코드 효과를 분리할 수 있게 했다. 전환 시에는 기존 Parent row가 있는 closed hour도 한 시간씩 강제로 재빌드해 stale row를 먼저 제거하도록 추가 보완했다.
 
 ### 정량 결과
 
-동일 18만 건 로컬 A/B에서 단일 재집계 최대 시간이 `15.561초 → 1.067초`, Analytics 조회 p95가 `1,217.847ms → 5.248ms`로 감소했다. 여섯 개 핵심 집계 지표의 exact parity도 확인했다.
+동일 18만 건 로컬 A/B에서 단일 재집계 최대 시간이 `15.561초 → 1.067초`, Analytics 조회 p95가 `1,217.847ms → 5.248ms`로 감소했다. AWS 운영 복제 70,252건 A/B에서도 reader p95가 `6,221.145ms → 2.048ms`로 감소했고, Parent 전환 보완 후 `Raw = Minute = Hour = Day = 70,252` exact parity를 확인했다.
 
 ## 7. 아직 증명하지 않은 것
 
-- 운영 EC2에서 minute mode를 켠 뒤 같은 300 RPS × 10분을 재실행한 결과
+- 실제 production에서 minute mode를 켠 뒤 같은 300 RPS × 10분을 재실행한 결과
 - 요청 적재, Rollup worker, Dashboard/Analytics 동시 조회 상태의 PostgreSQL CPU와 I/O
 - Tenant Chat까지 합친 전체 tenant 범위의 대량 parity
 - late correction과 bucket 이동이 많은 데이터의 장시간 soak

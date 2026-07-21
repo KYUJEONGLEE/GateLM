@@ -429,6 +429,48 @@ describe('DashboardRollupService', () => {
     expect(employeeUsageSql).toContain('"deletedAt" IS NULL');
   });
 
+  it('keeps unknown project routing difficulty out of routing dimensions', async () => {
+    const executeRaw = jest.fn().mockResolvedValue(1);
+    const tx = { $executeRaw: executeRaw };
+    const service = createService();
+    const internals = service as unknown as {
+      rebuildProjectApplicationSourceBucket: (
+        client: typeof tx,
+        bucket: {
+          tenant_id: string;
+          surface: 'project_application';
+          grain: 'minute';
+          bucket_start: Date;
+        },
+        bucketEnd: Date,
+      ) => Promise<void>;
+    };
+
+    await internals.rebuildProjectApplicationSourceBucket(
+      tx,
+      {
+        tenant_id: tenantA,
+        surface: 'project_application',
+        grain: 'minute',
+        bucket_start: new Date('2026-07-14T12:00:00Z'),
+      },
+      new Date('2026-07-14T12:01:00Z'),
+    );
+
+    const dimensionSql = rawQuery(executeRaw.mock.calls[1]?.[0]).sql;
+    expect(dimensionSql).toContain(
+      "CASE lower(nullif(metadata ->> 'promptDifficulty', ''))",
+    );
+    expect(dimensionSql).toContain("WHEN 'simple' THEN 'simple'");
+    expect(dimensionSql).toContain('ELSE NULL');
+    expect(dimensionSql).toContain(
+      "('routing', prompt_category, prompt_difficulty, routing_reason, prompt_difficulty IS NOT NULL)",
+    );
+    expect(dimensionSql).not.toContain(
+      "coalesce(nullif(metadata ->> 'promptDifficulty', ''), 'simple')",
+    );
+  });
+
   it('rolls up persisted Tenant Chat TTFT rather than a synthetic null value', async () => {
     const executeRaw = jest.fn().mockResolvedValue(1);
     const tx = { $executeRaw: executeRaw };
