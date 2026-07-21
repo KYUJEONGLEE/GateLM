@@ -70,7 +70,7 @@ func (h AnalyticsReliabilityHandler) ServeHTTP(w http.ResponseWriter, r *http.Re
 			writeGatewayError(w, http.StatusBadRequest, "", "RELIABILITY_RANGE_TOO_BROAD", err.Error())
 		case errors.Is(err, invocationlog.ErrInvalidLogQuery):
 			writeGatewayError(w, http.StatusBadRequest, "", "invalid_log_query", err.Error())
-		case errors.Is(err, invocationlog.ErrReliabilityDataUnavailable):
+		case errors.Is(err, invocationlog.ErrReliabilityDataUnavailable), errors.Is(err, invocationlog.ErrAnalyticsDataUnavailable):
 			logInvocationLogInternalError(r, "get_analytics_reliability", filter.TenantID, filter.ProjectID, err)
 			writeGatewayError(
 				w,

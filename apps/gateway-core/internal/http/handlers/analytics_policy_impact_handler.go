@@ -136,6 +136,11 @@ func (h AnalyticsPolicyImpactHandler) ServeHTTP(w http.ResponseWriter, r *http.R
 			writeGatewayError(w, http.StatusBadRequest, "", "invalid_log_query", err.Error())
 			return
 		}
+		if errors.Is(err, invocationlog.ErrAnalyticsDataUnavailable) {
+			logInvocationLogInternalError(r, "get_analytics_policy_impact", filter.TenantID, filter.ProjectID, err)
+			writeGatewayError(w, http.StatusServiceUnavailable, "", "ANALYTICS_DATA_UNAVAILABLE", "Policy impact data is unavailable.")
+			return
+		}
 		logInvocationLogInternalError(r, "get_analytics_policy_impact", filter.TenantID, filter.ProjectID, err)
 		writeGatewayError(w, http.StatusInternalServerError, "", "internal_error", "Policy impact could not be loaded.")
 		return

@@ -53,7 +53,7 @@ func (r *ProjectReader) ListProjectLogs(ctx context.Context, filter invocationlo
 		params["limit"] = strconv.Itoa(normalized.Limit)
 		rows, queryErr := queryJSONEachRow[projectLogRow](readCtx, r.client, fmt.Sprintf(`
 SELECT
-  request_id, toString(project_id) AS project_id, toString(application_id) AS application_id,
+  request_id, toString(project_id) AS project_id_text, toString(application_id) AS application_id_text,
   budget_scope_type, budget_scope_id, budget_scope_resolved_by,
   provider, model, provider_id, model_id, requested_model, model_ref, routing_reason,
   status, terminal_status, http_status, prompt_tokens, completion_tokens, total_tokens,
@@ -142,8 +142,8 @@ func stringValue(value string) *string {
 
 type projectLogRow struct {
 	RequestID             string `json:"request_id"`
-	ProjectID             string `json:"project_id"`
-	ApplicationID         string `json:"application_id"`
+	ProjectID             string `json:"project_id_text"`
+	ApplicationID         string `json:"application_id_text"`
 	BudgetScopeType       string `json:"budget_scope_type"`
 	BudgetScopeID         string `json:"budget_scope_id"`
 	BudgetScopeResolvedBy string `json:"budget_scope_resolved_by"`
@@ -197,7 +197,6 @@ FROM filtered WHERE requested_model != '' GROUP BY requested_model
 UNION ALL
 SELECT 'budget_scope', '', budget_scope_type, budget_scope_id, budget_scope_resolved_by
 FROM filtered WHERE budget_scope_id != '' GROUP BY budget_scope_type, budget_scope_id, budget_scope_resolved_by
-ORDER BY option_type, value, scope_type, scope_id, resolved_by
 FORMAT JSONEachRow`, r.client.database, r.client.table, strings.Join(where, " AND ")), params)
 		if queryErr != nil {
 			return queryErr
@@ -209,6 +208,18 @@ FORMAT JSONEachRow`, r.client.database, r.client.table, strings.Join(where, " AN
 			}
 			result.BudgetScopes = append(result.BudgetScopes, budget.Scope{Type: row.ScopeType, ID: row.ScopeID, ResolvedBy: row.ResolvedBy})
 		}
+		sort.Strings(result.RequestedModels)
+		sort.Slice(result.BudgetScopes, func(i, j int) bool {
+			left := result.BudgetScopes[i]
+			right := result.BudgetScopes[j]
+			if left.Type != right.Type {
+				return left.Type < right.Type
+			}
+			if left.ID != right.ID {
+				return left.ID < right.ID
+			}
+			return left.ResolvedBy < right.ResolvedBy
+		})
 		return nil
 	})
 	return result, err
@@ -420,10 +431,10 @@ func (r *ProjectReader) queryCostReport(ctx context.Context, filter invocationlo
 	bucketConfig := costBucketConfig(filter)
 	bucketExpr := costBucketExpression(bucketConfig)
 	cte := fmt.Sprintf("WITH filtered AS (SELECT * FROM %s.%s FINAL WHERE %s)\n", r.client.database, r.client.table, strings.Join(where, " AND "))
-	query := cte + fmt.Sprintf(`SELECT 'bucket' kind,toUnixTimestamp64Milli(%s) bucket_ms,'' key1,'' key2,'' key3,count() requests,sum(prompt_tokens) prompt,sum(completion_tokens) completion,sum(total_tokens) tokens,sum(cost_micro_usd) cost,sum(ifNull(saved_cost_micro_usd,0)) saved,toUnixTimestamp64Milli(max(created_at)) last_ms FROM filtered GROUP BY %s
+	query := cte + fmt.Sprintf(`SELECT 'bucket' kind,toUnixTimestamp(%s)*1000 bucket_ms,'' key1,'' key2,'' key3,count() requests,sum(prompt_tokens) prompt,sum(completion_tokens) completion,sum(total_tokens) tokens,sum(cost_micro_usd) cost,sum(ifNull(saved_cost_micro_usd,0)) saved,toUnixTimestamp64Milli(max(created_at)) last_ms FROM filtered GROUP BY %s
 UNION ALL SELECT 'project',0,toString(project_id),'','',count(),sum(prompt_tokens),sum(completion_tokens),sum(total_tokens),sum(cost_micro_usd),sum(ifNull(saved_cost_micro_usd,0)),NULL FROM filtered GROUP BY project_id
 UNION ALL SELECT 'application',0,toString(application_id),'','',count(),sum(prompt_tokens),sum(completion_tokens),sum(total_tokens),sum(cost_micro_usd),sum(ifNull(saved_cost_micro_usd,0)),NULL FROM filtered GROUP BY application_id
-UNION ALL SELECT 'model_bucket',toUnixTimestamp64Milli(%s),provider,model,'',count(),sum(prompt_tokens),sum(completion_tokens),sum(total_tokens),sum(cost_micro_usd),sum(ifNull(saved_cost_micro_usd,0)),NULL FROM filtered WHERE provider!='' AND model!='' GROUP BY %s,provider,model
+UNION ALL SELECT 'model_bucket',toUnixTimestamp(%s)*1000,provider,model,'',count(),sum(prompt_tokens),sum(completion_tokens),sum(total_tokens),sum(cost_micro_usd),sum(ifNull(saved_cost_micro_usd,0)),NULL FROM filtered WHERE provider!='' AND model!='' GROUP BY %s,provider,model
 UNION ALL SELECT 'scope',0,budget_scope_type,budget_scope_id,budget_scope_resolved_by,count(),sum(prompt_tokens),sum(completion_tokens),sum(total_tokens),sum(cost_micro_usd),sum(ifNull(saved_cost_micro_usd,0)),NULL FROM filtered WHERE budget_scope_id!='' GROUP BY budget_scope_type,budget_scope_id,budget_scope_resolved_by
 FORMAT JSONEachRow`, bucketExpr, bucketExpr, bucketExpr, bucketExpr)
 	rows, err := queryJSONEachRow[costRow](ctx, r.client, query, params)
