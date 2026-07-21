@@ -1085,6 +1085,23 @@ func TestAnalyticsPerformanceHandlerRejectsMissingRange(t *testing.T) {
 	}
 }
 
+func TestAnalyticsPerformanceHandlerReturnsBoundedUnavailableResponse(t *testing.T) {
+	handler := AnalyticsPerformanceHandler{
+		Reader: &recordingAnalyticsPerformanceReader{
+			err: invocationlog.ErrAnalyticsDataUnavailable,
+		},
+		TenantID: "tenant_demo",
+	}
+	req := httptest.NewRequest(http.MethodGet, "/api/analytics/performance?from=2026-06-25T00:00:00Z&to=2026-06-26T00:00:00Z", nil)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusServiceUnavailable || !strings.Contains(rr.Body.String(), "ANALYTICS_DATA_UNAVAILABLE") {
+		t.Fatalf("expected bounded 503, got %d: %s", rr.Code, rr.Body.String())
+	}
+}
+
 func captureStructuredLogs(t *testing.T) *bytes.Buffer {
 	t.Helper()
 

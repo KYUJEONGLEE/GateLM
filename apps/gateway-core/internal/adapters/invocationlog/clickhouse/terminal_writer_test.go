@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"gatelm/apps/gateway-core/internal/domain/budget"
 	"gatelm/apps/gateway-core/internal/domain/employeepolicy"
 	"gatelm/apps/gateway-core/internal/domain/invocationlog"
 )
@@ -79,6 +80,20 @@ func TestTerminalLogWriterWritesSafeJSONEachRowBatch(t *testing.T) {
 	if first.EmployeeIdentityHash != expectedHMAC(testIdentitySecret, "employee-id-001") {
 		t.Fatalf("employee identity must prefer the resolved employee id HMAC, got %q", first.EmployeeIdentityHash)
 	}
+	if first.SavedCostMicroUSD == nil || *first.SavedCostMicroUSD != 7 {
+		t.Fatalf("expected known saved cost 7, got %+v", first.SavedCostMicroUSD)
+	}
+	if first.TerminalStatus != invocationlog.StatusSuccess || first.FallbackOutcome != "not_needed" ||
+		first.SafetyOutcome != "passed" || first.BudgetOutcome != budget.OutcomeNotChecked {
+		t.Fatalf("unexpected bounded outcomes: %+v", first)
+	}
+	if first.MaskingAction != "none" || first.ProviderCalled != 1 {
+		t.Fatalf("unexpected masking/provider observation: %+v", first)
+	}
+	if first.BudgetScopeType != budget.ScopeTypeProject || first.BudgetScopeID != "00000000-0000-4000-8000-000000000200" ||
+		first.BudgetScopeResolvedBy != budget.ResolvedByRuntimeSnapshot {
+		t.Fatalf("unexpected budget scope: %+v", first)
+	}
 	for _, forbidden := range []string{
 		"raw prompt must never be mirrored",
 		"raw response must never be mirrored",
@@ -91,6 +106,23 @@ func TestTerminalLogWriterWritesSafeJSONEachRowBatch(t *testing.T) {
 		if strings.Contains(requestBody, forbidden) {
 			t.Fatalf("ClickHouse payload contains forbidden value %q: %s", forbidden, requestBody)
 		}
+	}
+}
+
+func TestTerminalLogWriterPreservesUnknownSavedCostAsNull(t *testing.T) {
+	writer, err := NewTerminalLogWriter(Config{
+		EndpointURL:                "http://clickhouse.internal:8123",
+		Database:                   "analytics",
+		Table:                      "logs",
+		EmployeeIdentityHMACSecret: testIdentitySecret,
+	})
+	if err != nil {
+		t.Fatalf("new writer: %v", err)
+	}
+	entry := testTerminalLog("request_unknown_saved_cost", "employee@example.com")
+	entry.SavedCostMicroUSD = -1
+	if row := writer.row(entry, time.Now().UTC()); row.SavedCostMicroUSD != nil {
+		t.Fatalf("unknown saved cost must remain null, got %d", *row.SavedCostMicroUSD)
 	}
 }
 
@@ -132,24 +164,32 @@ func TestNewTerminalLogWriterRejectsUnsafeConfiguration(t *testing.T) {
 func testTerminalLog(requestID string, endUserID string) invocationlog.TerminalLog {
 	createdAt := time.Date(2026, 7, 21, 1, 2, 3, 456000000, time.UTC)
 	return invocationlog.TerminalLog{
-		RequestID:        requestID,
-		TenantID:         "00000000-0000-4000-8000-000000000100",
-		ProjectID:        "00000000-0000-4000-8000-000000000200",
-		ApplicationID:    "00000000-0000-4000-8000-000000000300",
-		EndUserID:        endUserID,
-		Provider:         "mock",
-		Model:            "mock-balanced",
-		Status:           invocationlog.StatusSuccess,
-		HTTPStatus:       200,
-		PromptTokens:     10,
-		CompletionTokens: 20,
-		TotalTokens:      30,
-		CostMicroUSD:     42,
-		LatencyMs:        100,
-		CacheStatus:      "miss",
-		PromptCategory:   "general",
-		PromptDifficulty: "simple",
-		CreatedAt:        createdAt,
+		RequestID:         requestID,
+		TenantID:          "00000000-0000-4000-8000-000000000100",
+		ProjectID:         "00000000-0000-4000-8000-000000000200",
+		ApplicationID:     "00000000-0000-4000-8000-000000000300",
+		EndUserID:         endUserID,
+		Provider:          "mock",
+		Model:             "mock-balanced",
+		Status:            invocationlog.StatusSuccess,
+		HTTPStatus:        200,
+		PromptTokens:      10,
+		CompletionTokens:  20,
+		TotalTokens:       30,
+		CostMicroUSD:      42,
+		SavedCostMicroUSD: 7,
+		LatencyMs:         100,
+		CacheStatus:       "miss",
+		PromptCategory:    "general",
+		PromptDifficulty:  "simple",
+		ProviderCalled:    true,
+		MaskingAction:     "none",
+		BudgetScope: budget.Scope{
+			Type:       budget.ScopeTypeProject,
+			ID:         "00000000-0000-4000-8000-000000000200",
+			ResolvedBy: budget.ResolvedByRuntimeSnapshot,
+		},
+		CreatedAt: createdAt,
 		EmployeePolicyDecision: &employeepolicy.Decision{
 			EmployeeID: "employee-id-001",
 		},

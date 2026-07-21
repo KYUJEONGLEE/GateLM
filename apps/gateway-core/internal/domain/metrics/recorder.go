@@ -48,6 +48,21 @@ type LogWrite struct {
 	DurationSeconds float64
 }
 
+type ClickHouseAnalyticsRead struct {
+	Endpoint        string
+	Status          string
+	DurationSeconds float64
+}
+
+func (r *Registry) ClickHouseAnalyticsRead(read ClickHouseAnalyticsRead) {
+	labels := []Label{
+		{Name: "endpoint", Value: read.Endpoint},
+		{Name: "status", Value: read.Status},
+	}
+	r.AddCounter(ClickHouseAnalyticsReadsTotal, labels, 1)
+	r.ObserveHistogram(ClickHouseAnalyticsReadDurationSeconds, labels, read.DurationSeconds)
+}
+
 type StreamRelay struct {
 	Provider        string
 	Model           string

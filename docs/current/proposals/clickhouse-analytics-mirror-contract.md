@@ -2,10 +2,10 @@
 
 | Field | Value |
 |---|---|
-| Status | Phase 1 mirror and Phase 2 employee usage reader implementation companion |
-| Applies to | Gateway terminal log mirror, ClickHouse analytics storage, and employee usage reads |
+| Status | Phase 1 mirror, Phase 2 employee usage, and Phase 3 Performance reader implementation companion |
+| Applies to | Gateway terminal log mirror, ClickHouse analytics storage, employee usage reads, and Analytics Performance reads |
 | Canonical source during mirror phase | PostgreSQL `p0_llm_invocation_logs` |
-| Initial read cutover | Explicitly gated employee Project/Application usage only |
+| Initial read cutover | Explicitly gated employee usage and Analytics Performance Project/Application reads |
 
 ## Problem
 
@@ -43,8 +43,12 @@ idempotency.
 - `request_id`, `tenant_id`, `project_id`, `application_id`
 - `employee_identity_hash`
 - `provider`, `model`, `status`, `http_status`
-- `prompt_tokens`, `completion_tokens`, `total_tokens`, `cost_micro_usd`
+- `prompt_tokens`, `completion_tokens`, `total_tokens`, `cost_micro_usd`,
+  nullable `saved_cost_micro_usd`
 - `latency_ms`, `cache_status`, `routing_category`, `routing_difficulty`
+- `terminal_status`, `fallback_outcome`, `safety_outcome`, `budget_outcome`
+- `masking_action`, `provider_called`
+- `budget_scope_type`, `budget_scope_id`, `budget_scope_resolved_by`
 - `created_at`, `ingested_at`, `ingest_version`
 
 `employee_identity_hash` is HMAC-SHA256 over the normalized resolved employee
@@ -71,6 +75,8 @@ or an equivalent latest-version query.
 
 - `gatelm_clickhouse_log_writes_total{operation="terminal_mirror",status}`
 - `gatelm_clickhouse_log_write_duration_seconds{operation="terminal_mirror",status}`
+- `gatelm_clickhouse_analytics_reads_total{endpoint="performance",status}`
+- `gatelm_clickhouse_analytics_read_duration_seconds{endpoint="performance",status}`
 
 Allowed status values are `success`, `timeout`, and `error`. Tenant, project,
 employee, and request identifiers are forbidden metric labels.
@@ -118,3 +124,34 @@ response, cursor, and provenance contract. When
 The feature remains disabled by default. Read enablement is permitted only
 after interval reconciliation passes and the mirror has no unexplained error,
 timeout, or duplicate gap.
+
+## Phase 3 Analytics Performance read boundary
+
+`GET /api/analytics/performance` keeps its existing request and response
+contract. When
+`GATEWAY_CLICKHOUSE_ANALYTICS_PERFORMANCE_READ_ENABLED=true`:
+
+- Project/Application aggregates, provider/model aggregates, latency buckets,
+  and bounded slow-request fields are read from
+  `analytics.llm_invocations FINAL`.
+- Tenant Chat aggregates remain in PostgreSQL because Tenant Chat completion
+  records are not emitted by the Gateway terminal log mirror.
+- tenant-level reads execute both sources concurrently and merge the two
+  already-aggregated surface results. Project-scoped reads do not query the
+  Tenant Chat source.
+- combined cross-surface latency percentiles remain unavailable. Percentiles
+  are not averaged or otherwise reconstructed from two independently
+  aggregated surfaces.
+- the Gateway authenticates with the existing read-only `analytics_reader`
+  principal, separate from the mirror writer principal.
+- a ClickHouse timeout, invalid response, or non-2xx response returns the
+  bounded `ANALYTICS_DATA_UNAVAILABLE` 503 response. It must not silently fall
+  back to PostgreSQL `p0_llm_invocation_logs`.
+
+The cutover flag is independent from the mirror writer flag and is disabled by
+default. Before enabling it for an existing interval, operators must apply
+`002_expand_general_analytics.sql`, replay the interval with
+`clickhouse-backfill-general-analytics.sh`, and reconcile PostgreSQL and
+ClickHouse aggregates. The replay writes a higher `ingest_version`, so
+`ReplacingMergeTree ... FINAL` selects the expanded row without deleting the
+rollback source in PostgreSQL.
