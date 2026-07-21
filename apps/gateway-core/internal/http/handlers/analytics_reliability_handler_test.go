@@ -81,6 +81,7 @@ func TestAnalyticsReliabilityHandlerMapsContractErrors(t *testing.T) {
 		{name: "invalid scope", err: fmt.Errorf("%w: invalid combination", invocationlog.ErrReliabilityScopeInvalid), wantCode: http.StatusBadRequest, wantBody: "RELIABILITY_SCOPE_INVALID"},
 		{name: "range too broad", err: fmt.Errorf("%w: maximum range", invocationlog.ErrReliabilityRangeTooBroad), wantCode: http.StatusBadRequest, wantBody: "RELIABILITY_RANGE_TOO_BROAD"},
 		{name: "unavailable", err: fmt.Errorf("%w: database unavailable", invocationlog.ErrReliabilityDataUnavailable), wantCode: http.StatusServiceUnavailable, wantBody: "RELIABILITY_DATA_UNAVAILABLE"},
+		{name: "clickhouse unavailable", err: fmt.Errorf("%w: clickhouse unavailable", invocationlog.ErrAnalyticsDataUnavailable), wantCode: http.StatusServiceUnavailable, wantBody: "RELIABILITY_DATA_UNAVAILABLE"},
 	}
 
 	for _, tc := range cases {
