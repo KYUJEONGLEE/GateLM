@@ -145,6 +145,8 @@ grep -Fq 'pii_release_model_dir="/opt/gatelm/pii-v314/releases/8a5cb146/model"' 
 grep -Fq 'pii_release_artifact_key="pii/v36/v314-8a5cb146/model.tar.gz"' "${DEPLOY_ROLE_PATH}"
 grep -Fq 'pii_release_archive_sha256="fbecea25a4508696e42c36fa3b9f40cb3abd5be82f645860c011935d96df7f13"' "${DEPLOY_ROLE_PATH}"
 grep -Fq 'promote_pii_release_env' "${DEPLOY_ROLE_PATH}"
+grep -Fq 'source "${orchestration_dir}/scripts/perf-lib.sh"' "${DEPLOY_ROLE_PATH}"
+grep -Fq 'current_uri="$(perf_unquote_env_value "${current_uri}")"' "${DEPLOY_ROLE_PATH}"
 pii_uri="$(awk -F= '$1 == "GATELM_PRODUCTION_DISTRIBUTED_PII_ARTIFACT_S3_URI" {print $2}' "${ENV_PATH}")"
 [[ "${pii_uri}" == "s3://gatelm-production-pii-artifacts-000000000000-ap-northeast-2/pii/v36/v314-8a5cb146/model.tar.gz" ]]
 grep -Fq 'Read-only role check passed' "${DEPLOY_ROLE_PATH}"
