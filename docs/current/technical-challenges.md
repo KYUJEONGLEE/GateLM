@@ -280,7 +280,7 @@ The persistent worker was then re-enabled with a 60-second interval, discovery b
 
 ### Claim boundary
 
-The incident evidence was collected on 2026-07-20 with image tag `production-distributed-23c6e6d847de`; query-plan recovery used main SHA `d2a06ab3d9922028c21ac3155d172a628cd03e2c`, and cursor convergence plus conservative worker re-enablement used main SHA `6e28c03235fb9ba86a352ebecf11635168d140f0`. It proves the diagnosed failure, measured query-plan improvement, completion of the bounded backlog, exact cursor convergence, and stable first automatic worker interval. It does not prove concurrent Dashboard safety or unlimited-scale capacity. Minute aggregation and bounded Policy Impact fallback are implemented later in feature commit `c5a7246d1` and measured separately below; production activation, adaptive polling, normalized ingestion dimensions, partition cutover, retention, and query budgets remain follow-up work.
+The incident evidence was collected on 2026-07-20 with image tag `production-distributed-23c6e6d847de`; query-plan recovery used main SHA `d2a06ab3d9922028c21ac3155d172a628cd03e2c`, and cursor convergence plus conservative worker re-enablement used main SHA `6e28c03235fb9ba86a352ebecf11635168d140f0`. It proves the diagnosed failure, measured query-plan improvement, completion of the bounded backlog, exact cursor convergence, and stable first automatic worker interval. It does not prove concurrent Dashboard safety or unlimited-scale capacity. Minute aggregation and bounded Policy Impact fallback were implemented later in feature commit `c5a7246d1`, deployed through main SHA `b274dca9624a56488fbbb38853e43edd88d82be9`, and activated after the staged parity checks described below. A repeated dashboard-aware production load test, adaptive polling, normalized ingestion dimensions, partition cutover, retention, and query budgets remain follow-up work.
 
 ## 11. Bounding Rollup Work Instead of Making One Unbounded Query Faster
 
@@ -329,6 +329,24 @@ The first writer cutover still failed parent parity even though minute parity pa
 
 The rollout was extended with an explicit, approved one-hour parent rebuild. It includes existing legacy hour states and rows, clears the target parent before merging minute children, and then propagates the corrected result to day and month. The second rehearsal produced `raw = minute = hour = day = 70,252`, with no closed hour/day dirty bucket. This is why rollout parity must cover every active grain rather than only raw versus minute.
 
+### Production staged activation
+
+The production rollout then kept the writer in `shadow` while backfilling one UTC hour at a time. Before activation, the closed-minute totals were exact for both sources: 301,820 project/application requests and 791 Tenant Chat requests. Rebuilding 42 existing closed parent hours from minute children took 103.946 seconds; the highest sampled PostgreSQL CPU during that intentionally accelerated parent-only phase was 67.42%.
+
+| Production gate | Evidence | Result |
+|---|---:|---:|
+| Closed minute parity | P0 `301,820 = 301,820`; Tenant Chat `791 = 791` | PASS |
+| Closed hour parity | Raw = Minute = Hour for both surfaces | PASS |
+| Closed day parity | Raw = Minute = Hour = Day for both surfaces | PASS |
+| Tenant/day/surface mismatches | 0 | PASS |
+| Writer activation | `minute`, 60-second interval, batch 1 | ACTIVE |
+| Reader activation | two Gateways, `rollup`, 120-second bounded raw tail | ACTIVE |
+| Availability boundary | both 8080/8081 NLB target pairs healthy; Web and Chat HTTP 200 | PASS |
+
+The densest production minute backfill still sampled PostgreSQL CPU at 198.32% on the two-vCPU Data host. This is an important remaining limitation: minute replacement bounds transaction duration and creates recovery points, but does not eliminate peak CPU. During the paced rebuild, CPU recovered to about 0.05–0.22% between dense buckets. The next capacity test must therefore measure duty cycle, cursor lag, and authenticated Dashboard latency rather than claiming that peak saturation is solved.
+
+After activation, new Tenant Chat traffic also converged automatically on the next 60-second writer cycle from a temporary gap to `raw = minute = 795`. The remaining dirty hour, day, and month rows belonged to the still-open UTC periods, not to missed closed coverage.
+
 ### Evidence
 
 - [Minute Rollup writer and parent merge](../../apps/control-plane-api/src/modules/dashboard-rollup/dashboard-rollup.service.ts)
@@ -340,7 +358,7 @@ The rollout was extended with an explicit, approved one-hour parent rebuild. It 
 
 ### Claim boundary
 
-The local A/B proves the implementation delta in an isolated PostgreSQL environment. The production-clone rehearsal additionally proves exact reader and parent-grain parity for the copied 70,252-row dataset and the measured raw-versus-Rollup reader delta on an `m7i.large`. It still does not prove the same factor on live production while writes, Dashboard polling, and two Gateway readers run concurrently. Production activation remains gated by shadow parity, cursor catch-up, zero closed dirty buckets, canary reader activation, and a repeated `300 RPS × 10 minute` dashboard-aware test.
+The local A/B proves the implementation delta in an isolated PostgreSQL environment. The production-clone rehearsal additionally proves exact reader and parent-grain parity for the copied 70,252-row dataset and the measured raw-versus-Rollup reader delta on an `m7i.large`. Production activation proves staged migration, closed-grain parity, two-Gateway reader activation, and availability at the public boundary. It does not prove the same performance factor on live production while writes, authenticated Dashboard polling, and both Gateway readers run concurrently. A repeated `300 RPS × 10 minute` dashboard-aware test is still required before claiming that the production bottleneck is fully resolved.
 
 ## 12. Large-Scale Validation Still Required
 
