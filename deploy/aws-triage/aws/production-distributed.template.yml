@@ -1083,7 +1083,7 @@ Resources:
           systemctl enable --now docker
           usermod -aG docker ubuntu
           install -d -o ubuntu -g ubuntu -m 0755 /home/ubuntu/GateLM
-          install -d -o ubuntu -g ubuntu -m 0755 /opt/gatelm/pii-v36/releases/171bbde0
+          install -d -o ubuntu -g ubuntu -m 0755 /opt/gatelm/pii-v314/releases/8a5cb146
           printf '%s\n' pii > /etc/gatelm-production-role
       Tags:
         - Key: Name
@@ -1106,8 +1106,8 @@ Resources:
         commands:
           - |
             set -eu
-            install -d -o root -g root -m 0755 /opt/gatelm/pii-v36
-            install -d -o ubuntu -g ubuntu -m 0755 /opt/gatelm/pii-v36/releases
+            install -d -o root -g root -m 0755 /opt/gatelm/pii-v314
+            install -d -o ubuntu -g ubuntu -m 0755 /opt/gatelm/pii-v314/releases
       Targets:
         - Key: InstanceIds
           Values: [!Ref PiiInstance]

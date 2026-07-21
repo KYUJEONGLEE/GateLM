@@ -62,6 +62,9 @@ repo_dir="${GATELM_PRODUCTION_DISTRIBUTED_REPO_DIR:-/home/ubuntu/GateLM}"
 orchestration_dir="${GATELM_PRODUCTION_DISTRIBUTED_ORCHESTRATION_DIR:-/home/ubuntu/gatelm-production-orchestration}"
 env_file="${orchestration_dir}/.env.production-distributed"
 state_root="${orchestration_dir}/.production-distributed-state/deployments"
+pii_release_model_dir="/opt/gatelm/pii-v314/releases/8a5cb146/model"
+pii_release_artifact_key="pii/v36/v314-8a5cb146/model.tar.gz"
+pii_release_archive_sha256="fbecea25a4508696e42c36fa3b9f40cb3abd5be82f645860c011935d96df7f13"
 gateway_upstream_state_key="${gateway_upstream_host//./-}"
 state_dir="${state_root}/${target_sha}-${role}-upstream-${gateway_upstream_state_key}"
 lock_file="/tmp/gatelm-production-distributed-${role}.lock"
@@ -126,6 +129,19 @@ upsert_env_value() {
   mv "${temp}" "${env_file}"
 }
 
+promote_pii_release_env() {
+  local current_uri bucket_uri
+  current_uri="$(awk -F= '$1 == "GATELM_PRODUCTION_DISTRIBUTED_PII_ARTIFACT_S3_URI" {print $2}' "${env_file}")"
+  current_uri="$(perf_unquote_env_value "${current_uri}")"
+  [[ "${current_uri}" =~ ^s3://[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]/pii/v36/[A-Za-z0-9._/-]+\.tar\.gz$ ]] || \
+    deploy_fail "Current PII artifact URI is not in the approved private S3 namespace."
+  bucket_uri="${current_uri%%/pii/*}"
+  set_env_value GATELM_PRODUCTION_DISTRIBUTED_PII_MODEL_DIR "${pii_release_model_dir}"
+  set_env_value GATELM_PRODUCTION_DISTRIBUTED_PII_ARTIFACT_S3_URI "${bucket_uri}/${pii_release_artifact_key}"
+  set_env_value GATELM_PRODUCTION_DISTRIBUTED_PII_ARTIFACT_SHA256 "${pii_release_archive_sha256}"
+  deploy_log "Pinned the production PII release to v3.14."
+}
+
 artifact_paths=(
   docker-compose.production.distributed.yml
   docker-compose.production.pii.yml
@@ -134,7 +150,7 @@ artifact_paths=(
   scripts/perf-lib.sh
   scripts/prepare-gateway-e5-runtime-bundle.sh
   scripts/prepare-production-pii-model.sh
-  pii-v36-model-manifest.sha256
+  pii-v314-model-manifest.sha256
   scripts/production-distributed-lib.sh
   scripts/production-distributed-preflight.sh
   scripts/production-distributed-up.sh
@@ -291,9 +307,12 @@ available_kb="$(df -Pk "${repo_dir}" | awk 'NR == 2 {print $4}')"
 
 run_git checkout --detach "${target_sha}" >/dev/null
 sync_artifacts
+# shellcheck source=/dev/null
+source "${orchestration_dir}/scripts/perf-lib.sh"
 set_env_value GATELM_PRODUCTION_DISTRIBUTED_SOURCE_SHA "${target_sha}"
 set_env_value GATELM_PRODUCTION_DISTRIBUTED_IMAGE_TAG "${target_sha:0:12}"
 upsert_env_value GATELM_PRODUCTION_DISTRIBUTED_GATEWAY_UPSTREAM_HOST "${gateway_upstream_host}"
+promote_pii_release_env
 
 if [[ "${role}" == "gateway" || "${role}" == "ai" ]]; then
   # shellcheck source=/dev/null
