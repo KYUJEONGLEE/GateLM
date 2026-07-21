@@ -138,6 +138,7 @@ Policy Impact reader는 완료된 minute Rollup, 분 경계 앞의 작은 raw ed
 - Gateway observability read route는 별도 `X-GateLM-Observability-Token`으로 보호하고, Web server-only BFF만 해당 secret을 전송한다. 기존 Control Plane token, API Key, App Token은 재사용하지 않는다.
 - Web tenant layout과 polling BFF는 route/query `tenantId`가 현재 사용자의 active tenant-admin membership 또는 project-admin assignment에 속하는지 먼저 검사한다.
 - rollup writer는 Gateway request hot path 밖의 Control Plane background service가 소유한다.
+- Control Plane과 Gateway의 ClickHouse 분석 조회가 모두 전환된 환경에서 `DASHBOARD_ROLLUP_PROJECT_APPLICATION_ENABLED=false`로 설정하면 Control Plane worker가 Project/Application surface의 PostgreSQL source discovery, reconciliation, dirty-bucket rebuild를 실행하지 않는다. 이 flag의 기본값은 `true`다. 기존 Project/Application rollup row는 rollback을 위해 보존하고 Tenant Chat rollup만 계속 갱신한다.
 - background writer는 `legacy | shadow | minute` build mode로 점진 활성화한다. 기본값은 `legacy`다.
 - `shadow`는 기존 hour source rebuild를 유지하면서 minute 결과를 함께 만들어 정합성과 처리시간을 비교한다. shadow minute completion은 기존 hour parent를 덮어쓰지 않는다.
 - `minute`는 source에서 minute만 만들고 parent chain을 child merge로 전환한다.

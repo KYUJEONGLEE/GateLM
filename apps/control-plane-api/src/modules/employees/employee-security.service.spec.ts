@@ -2,6 +2,7 @@ import { BadRequestException } from '@nestjs/common';
 
 import { PrismaService } from '@/infrastructure/database/prisma/prisma.service';
 
+import type { ClickHouseEmployeeUsageReader } from './clickhouse-employee-usage.reader';
 import { EmployeeSecurityService } from './employee-security.service';
 
 const tenantId = '00000000-0000-4000-8000-000000000100';
@@ -89,16 +90,78 @@ describe('EmployeeSecurityService', () => {
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(queryRaw).not.toHaveBeenCalled();
   });
+
+  it('uses ClickHouse for Project/Application security without reading PostgreSQL logs', async () => {
+    const queryRaw = jest.fn().mockResolvedValue([
+      { employeeId, requestCount: 2n, blockedRequestCount: 1n },
+    ]);
+    const reader = {
+      isEnabled: jest.fn().mockReturnValue(true),
+      readProjectSecurity: jest.fn().mockResolvedValue({
+        byEmployeeId: new Map([
+          [
+            employeeId,
+            {
+              requestCount: 7n,
+              maskedRequestCount: 2n,
+              blockedRequestCount: 1n,
+            },
+          ],
+        ]),
+      }),
+    } as unknown as ClickHouseEmployeeUsageReader;
+    const service = createService(queryRaw, reader, [
+      {
+        id: employeeId,
+        userId: null,
+        email: 'employee@example.invalid',
+        name: 'Employee',
+        status: 'active',
+      },
+    ]);
+
+    const result = await service.listEmployeeSecurity(tenantId, {
+      from: '2026-07-13T00:00:00.000Z',
+      to: '2026-07-14T00:00:00.000Z',
+    });
+
+    expect(result.data[0]).toMatchObject({
+      employeeId,
+      sources: {
+        projectApplication: {
+          requestCount: 7,
+          maskedRequestCount: 2,
+          blockedRequestCount: 1,
+        },
+        tenantChat: { requestCount: 2, blockedRequestCount: 1 },
+      },
+    });
+    expect(reader.readProjectSecurity).toHaveBeenCalledTimes(1);
+    expect(queryRaw).toHaveBeenCalledTimes(1);
+    expect(rawQuery(queryRaw.mock.calls[0]?.[0]).sql).toContain(
+      'FROM tenant_chat_invocation_logs',
+    );
+    expect(rawQuery(queryRaw.mock.calls[0]?.[0]).sql).not.toContain(
+      'p0_llm_invocation_logs',
+    );
+  });
 });
 
-function createService(queryRaw: jest.Mock) {
+function createService(
+  queryRaw: jest.Mock,
+  reader?: ClickHouseEmployeeUsageReader,
+  employees: Array<Record<string, unknown>> = [],
+) {
   const prisma = {
     $queryRaw: queryRaw,
+    employee: {
+      findMany: jest.fn().mockResolvedValue(employees),
+    },
     tenant: {
       findUnique: jest.fn().mockResolvedValue({ id: tenantId }),
     },
   } as unknown as PrismaService;
-  return new EmployeeSecurityService(prisma);
+  return new EmployeeSecurityService(prisma, reader);
 }
 
 function rawQuery(value: unknown): { sql: string; values: unknown[] } {

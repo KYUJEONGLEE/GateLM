@@ -184,6 +184,37 @@ describe('DashboardRollupService', () => {
     await expect(first).resolves.toEqual({ discovered: 0, aggregated: 0 });
   });
 
+  it('skips Project/Application discovery and dirty buckets when ClickHouse reads are enabled', async () => {
+    const queryRaw = jest.fn().mockResolvedValue([]);
+    const prisma = {
+      $transaction: jest.fn(
+        async (callback: (client: { $queryRaw: typeof queryRaw }) => unknown) =>
+          callback({ $queryRaw: queryRaw }),
+      ),
+    } as unknown as PrismaService;
+    const service = createService(prisma, {
+      DASHBOARD_ROLLUP_PROJECT_APPLICATION_ENABLED: 'false',
+    });
+    const internals = service as unknown as {
+      discoverSource: (source: string) => Promise<number>;
+      processNextDirtyBucket: () => Promise<boolean>;
+    };
+    const discover = jest
+      .spyOn(internals, 'discoverSource')
+      .mockResolvedValue(0);
+
+    await expect(service.runOnce()).resolves.toEqual({
+      discovered: 0,
+      aggregated: 0,
+    });
+
+    expect(discover).toHaveBeenCalledTimes(1);
+    expect(discover).toHaveBeenCalledWith('tenant_chat');
+    const claim = rawQuery(queryRaw.mock.calls[0]?.[0]);
+    expect(claim.sql).toContain("dirty.surface <> 'project_application'");
+    expect(claim.values).toContain(false);
+  });
+
   it('waits for source coverage and child completion before minute parents', async () => {
     const queryRaw = jest.fn().mockResolvedValue([]);
     const prisma = {

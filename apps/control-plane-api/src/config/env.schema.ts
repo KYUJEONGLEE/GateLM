@@ -41,6 +41,7 @@ interface ControlPlaneEnv extends RagRuntimeConfig {
   DASHBOARD_ROLLUP_DISCOVERY_LAG_MS?: number;
   DASHBOARD_ROLLUP_ENABLED?: string;
   DASHBOARD_ROLLUP_INTERVAL_MS?: number;
+  DASHBOARD_ROLLUP_PROJECT_APPLICATION_ENABLED?: string;
   DASHBOARD_ROLLUP_RECONCILIATION_INTERVAL_MS?: number;
   DASHBOARD_ROLLUP_RECONCILIATION_LOOKBACK_MS?: number;
   TENANT_CHAT_PROJECTOR_BATCH_SIZE?: number;
@@ -448,6 +449,9 @@ export function validateEnv(config: RawEnv): ValidatedControlPlaneEnv {
     DASHBOARD_ROLLUP_INTERVAL_MS:
       readOptionalInteger(config, 'DASHBOARD_ROLLUP_INTERVAL_MS', 100, 60000) ??
       1000,
+    DASHBOARD_ROLLUP_PROJECT_APPLICATION_ENABLED:
+      readBooleanString(config, 'DASHBOARD_ROLLUP_PROJECT_APPLICATION_ENABLED') ??
+      'true',
     DASHBOARD_ROLLUP_RECONCILIATION_INTERVAL_MS:
       readOptionalInteger(
         config,

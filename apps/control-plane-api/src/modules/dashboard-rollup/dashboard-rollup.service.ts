@@ -115,7 +115,9 @@ export class DashboardRollupService
     this.running = true;
     try {
       const discovered =
-        (await this.discoverSource('project_application')) +
+        (this.projectApplicationRollupEnabled()
+          ? await this.discoverSource('project_application')
+          : 0) +
         (await this.discoverSource('tenant_chat'));
       const bucketBatchSize =
         this.config.get<number>('DASHBOARD_ROLLUP_BUCKET_BATCH_SIZE') ?? 8;
@@ -137,6 +139,13 @@ export class DashboardRollupService
     return (
       this.config.get<DashboardRollupBuildMode>('DASHBOARD_ROLLUP_BUILD_MODE') ??
       'legacy'
+    );
+  }
+
+  private projectApplicationRollupEnabled(): boolean {
+    return (
+      this.config.get<string>('DASHBOARD_ROLLUP_PROJECT_APPLICATION_ENABLED') !==
+      'false'
     );
   }
 
@@ -392,6 +401,8 @@ export class DashboardRollupService
 
   private async processNextDirtyBucket(): Promise<boolean> {
     const buildMode = this.buildMode();
+    const projectApplicationRollupEnabled =
+      this.projectApplicationRollupEnabled();
     try {
       return await this.prisma.$transaction(
         async (tx) => {
@@ -400,6 +411,10 @@ export class DashboardRollupService
                  dirty.bucket_start
           FROM dashboard_rollup_dirty_buckets dirty
           WHERE dirty.available_at <= now()
+            AND (
+              ${projectApplicationRollupEnabled}
+              OR dirty.surface <> 'project_application'
+            )
             AND (
               dirty.grain <> 'minute'
               OR EXISTS (
