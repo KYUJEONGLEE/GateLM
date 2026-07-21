@@ -13,7 +13,7 @@ PRODUCTION_DISTRIBUTED_BASE_ENV_FILE="${GATELM_PRODUCTION_DISTRIBUTED_BASE_ENV_F
 PRODUCTION_DISTRIBUTED_ENV_FILE="${GATELM_PRODUCTION_DISTRIBUTED_ENV_FILE:-${AWS_TRIAGE_DIR}/.env.production-distributed}"
 PRODUCTION_DISTRIBUTED_COMPOSE_FILE="${AWS_TRIAGE_DIR}/docker-compose.production.distributed.yml"
 PRODUCTION_DISTRIBUTED_PII_COMPOSE_FILE="${AWS_TRIAGE_DIR}/docker-compose.production.pii.yml"
-PRODUCTION_DISTRIBUTED_PII_MANIFEST="${AWS_TRIAGE_DIR}/pii-v36-model-manifest.sha256"
+PRODUCTION_DISTRIBUTED_PII_MANIFEST="${AWS_TRIAGE_DIR}/pii-v314-model-manifest.sha256"
 PRODUCTION_DISTRIBUTED_PROJECT_NAME="gatelm-production-distributed"
 PRODUCTION_DISTRIBUTED_STATE_DIR="${GATELM_PRODUCTION_DISTRIBUTED_STATE_DIR:-${AWS_TRIAGE_DIR}/.production-distributed-state}"
 PRODUCTION_DISTRIBUTED_DB_ATTESTATION=""
@@ -127,12 +127,12 @@ production_validate_env() {
   [[ "${GATELM_PRODUCTION_DISTRIBUTED_DATA_PRIVATE_IP}" == "10.78.2.30" ]] || production_fail "Unexpected Data IP."
   [[ "${GATELM_PRODUCTION_DISTRIBUTED_AI_PRIVATE_IP}" == "10.78.2.40" ]] || production_fail "Unexpected AI IP."
   [[ "${GATELM_PRODUCTION_DISTRIBUTED_PII_PRIVATE_IP}" == "10.78.2.50" ]] || production_fail "Unexpected PII IP."
-  [[ "${GATELM_PRODUCTION_DISTRIBUTED_PII_MODEL_DIR}" == "/opt/gatelm/pii-v36/releases/171bbde0/model" ]] || \
+  [[ "${GATELM_PRODUCTION_DISTRIBUTED_PII_MODEL_DIR}" == "/opt/gatelm/pii-v314/releases/8a5cb146/model" ]] || \
     production_fail "Unexpected pinned PII model directory."
-  [[ "${GATELM_PRODUCTION_DISTRIBUTED_PII_ARTIFACT_S3_URI}" =~ ^s3://[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]/pii/v36/[A-Za-z0-9._/-]+\.tar\.gz$ ]] || \
-    production_fail "PII artifact URI must be a private s3:// bucket path under pii/v36/."
-  [[ "${GATELM_PRODUCTION_DISTRIBUTED_PII_ARTIFACT_SHA256}" =~ ^[a-f0-9]{64}$ ]] || \
-    production_fail "PII artifact SHA-256 must be lowercase hexadecimal."
+  [[ "${GATELM_PRODUCTION_DISTRIBUTED_PII_ARTIFACT_S3_URI}" =~ ^s3://[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]/pii/v36/v314-8a5cb146/model\.tar\.gz$ ]] || \
+    production_fail "PII artifact URI must reference the immutable v3.14 object in the legacy least-privilege prefix."
+  [[ "${GATELM_PRODUCTION_DISTRIBUTED_PII_ARTIFACT_SHA256}" == "fbecea25a4508696e42c36fa3b9f40cb3abd5be82f645860c011935d96df7f13" ]] || \
+    production_fail "PII artifact SHA-256 must match the pinned v3.14 archive."
   [[ "${GATELM_ROUTING_DIFFICULTY_SERVICE_TOKEN_PARAMETER_NAME}" =~ ^/[A-Za-z0-9_./-]+$ ]] || \
     production_fail "Routing difficulty service token parameter name is invalid."
 

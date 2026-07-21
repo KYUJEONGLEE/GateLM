@@ -181,6 +181,50 @@ class AiSafetyDetectorServiceTests(unittest.TestCase):
         self.assertNotIn("김민수", response.redacted_prompt)
         self.assertNotIn("person-model-only@example.test", response.redacted_prompt)
 
+    def test_person_name_model_only_keeps_non_person_ml_types_enabled(self) -> None:
+        prompt = "Contact Minseo Kim at BlueStone Synthetic."
+        person_name = "Minseo Kim"
+        organization_name = "BlueStone Synthetic"
+        thresholds = {"person_name": 0.9, "organization_name": 0.9}
+        service = AiSafetyDetectorService(
+            adapter=PrivacyFilterAdapter(
+                classifier=lambda _text: [
+                    {
+                        "entity_group": "PER",
+                        "score": 0.95,
+                        "start": prompt.index(person_name),
+                        "end": prompt.index(person_name) + len(person_name),
+                    },
+                    {
+                        "entity_group": "ORG",
+                        "score": 0.96,
+                        "start": prompt.index(organization_name),
+                        "end": prompt.index(organization_name) + len(organization_name),
+                    },
+                ],
+                model_name=GATELM_KOELECTRA_PII_NER_MODEL,
+                min_confidence_by_detector_type=thresholds,
+                allowed_detector_types=frozenset(
+                    {"person_name", "organization_name"}
+                ),
+            ),
+            ml_allowed_detector_types=("person_name", "organization_name"),
+            ml_min_confidence_by_detector_type=thresholds,
+            person_name_model_only=True,
+        )
+
+        response = service.detect(detect_request(prompt))
+
+        self.assertEqual(
+            service.configured_ml_detector_types(),
+            ["organization_name", "person_name"],
+        )
+        self.assertEqual(
+            response.detector_summary.detector_categories,
+            ["organization_name", "person_name"],
+        )
+        self.assertEqual(response.execution_summary.accepted_model_detection_count, 2)
+
     def test_person_name_model_only_handles_full_batch_without_duplicate_candidates(self) -> None:
         classifier = RecordingBatchClassifier()
         service = AiSafetyDetectorService(

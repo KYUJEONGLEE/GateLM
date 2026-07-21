@@ -20,11 +20,11 @@ services:
       AI_SERVICE_AI_SAFETY_DETECTOR_RUNTIME: onnx
       AI_SERVICE_AI_SAFETY_DETECTOR_MODEL_ID: /models/gatelm--koelectra-small-v3-pii-ner-quantized
       AI_SERVICE_AI_SAFETY_ADDITIONAL_DETECTOR_MODEL_IDS: ""
-      AI_SERVICE_AI_SAFETY_ML_ALLOWED_DETECTOR_TYPES: person_name
-      AI_SERVICE_AI_SAFETY_ML_DETECTOR_THRESHOLDS: person_name=0.9
+      AI_SERVICE_AI_SAFETY_ML_ALLOWED_DETECTOR_TYPES: email,organization_name,person_name,phone_number,postal_address,resident_registration_number
+      AI_SERVICE_AI_SAFETY_ML_DETECTOR_THRESHOLDS: email=0.99,organization_name=0.90,person_name=0.90,phone_number=0.99,postal_address=0.90,resident_registration_number=0.99
       AI_SERVICE_AI_SAFETY_PERSON_NAME_MODEL_ONLY: "true"
       AI_SERVICE_AI_SAFETY_PRELOAD_ENABLED: "true"
-      AI_SERVICE_AI_SAFETY_MICRO_BATCH_SIZE: "4"
+      AI_SERVICE_AI_SAFETY_MICRO_BATCH_SIZE: "1"
       AI_SERVICE_ONNX_INTRA_OP_THREADS: "4"
       AI_SERVICE_ONNX_INTER_OP_THREADS: "1"
       AI_SERVICE_ONNX_ALLOW_SPINNING: "false"
