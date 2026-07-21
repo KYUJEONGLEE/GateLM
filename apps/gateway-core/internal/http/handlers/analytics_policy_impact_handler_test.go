@@ -3,8 +3,10 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -14,6 +16,7 @@ import (
 type recordingPolicyImpactReader struct {
 	filter invocationlog.AnalyticsPolicyImpactFilter
 	fields invocationlog.AnalyticsPolicyImpactFields
+	err    error
 }
 
 func (r *recordingPolicyImpactReader) GetAnalyticsPolicyImpact(
@@ -21,7 +24,23 @@ func (r *recordingPolicyImpactReader) GetAnalyticsPolicyImpact(
 	filter invocationlog.AnalyticsPolicyImpactFilter,
 ) (invocationlog.AnalyticsPolicyImpactFields, error) {
 	r.filter = filter
-	return r.fields, nil
+	return r.fields, r.err
+}
+
+func TestAnalyticsPolicyImpactHandlerMapsClickHouseUnavailableTo503(t *testing.T) {
+	handler := AnalyticsPolicyImpactHandler{
+		Reader:   &recordingPolicyImpactReader{err: fmt.Errorf("%w: clickhouse failed", invocationlog.ErrAnalyticsDataUnavailable)},
+		TenantID: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+	}
+	req := httptest.NewRequest(http.MethodGet,
+		"/api/analytics/policy-impact?period=hour&from=2026-07-18T00:00:00Z&to=2026-07-18T01:00:00Z", nil)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusServiceUnavailable || !strings.Contains(rr.Body.String(), "ANALYTICS_DATA_UNAVAILABLE") {
+		t.Fatalf("expected bounded 503 response, got %d: %s", rr.Code, rr.Body.String())
+	}
 }
 
 func TestAnalyticsPolicyImpactHandlerReturnsUnifiedAggregate(t *testing.T) {

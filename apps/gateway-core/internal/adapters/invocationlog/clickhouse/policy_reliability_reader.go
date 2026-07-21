@@ -65,7 +65,7 @@ UNION ALL SELECT 'outcome','rate_limited','',0,countIf(rate_limited),0,0,0,0,0,0
 UNION ALL SELECT 'outcome','fallback_success','',0,countIf(fallback_success),0,0,0,0,0,0,0,0,0,0,0,NULL FROM filtered
 UNION ALL SELECT 'outcome','budget_blocked','',0,countIf(budget_blocked),0,0,0,0,0,0,0,0,0,0,0,NULL FROM filtered
 UNION ALL SELECT 'routing','difficulty',routing_difficulty,0,count(),0,0,0,0,0,0,0,0,0,0,0,NULL FROM filtered WHERE routing_difficulty IN ('simple','complex') GROUP BY routing_difficulty
-UNION ALL SELECT 'model',provider,model,toUnixTimestamp64Milli(%s),count(),0,0,0,0,0,0,0,0,0,0,0,NULL FROM filtered WHERE provider!='' AND model!='' GROUP BY %s,provider,model
+UNION ALL SELECT 'model',provider,model,toUnixTimestamp(%s)*1000,count(),0,0,0,0,0,0,0,0,0,0,0,NULL FROM filtered WHERE provider!='' AND model!='' GROUP BY %s,provider,model
 UNION ALL SELECT 'usage',toString(project_id),'',0,count(),sum(cost_micro_usd),0,0,0,0,0,0,0,0,0,0,NULL FROM filtered GROUP BY project_id
 FORMAT JSONEachRow`, bucket, bucket)
 	rows, err := queryJSONEachRow[policyRow](ctx, r.client, query, params)
