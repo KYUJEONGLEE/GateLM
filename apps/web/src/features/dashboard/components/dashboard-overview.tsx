@@ -347,7 +347,7 @@ export function DashboardOverviewView({
     {
       icon: <WalletCards aria-hidden="true" size={22} strokeWidth={2.2} />,
       label: text.kpi.monthCost,
-      tone: "orange",
+      tone: "accent",
       value: snapshot
         ? formatMicroUsd(snapshot.monthToDateCostMicroUsd)
         : monthToDateSpendValue ?? formatMicroUsd(monthToDate.totalCostMicroUsd)

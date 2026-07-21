@@ -2536,7 +2536,7 @@ html[data-theme="dark"] .dashboard-cost-over-time-metrics > div[data-kind="avera
   display: block;
   width: var(--project-spend-width);
   height: 100%;
-  background: linear-gradient(90deg, var(--brand-blue), #60a5fa);
+  background: linear-gradient(90deg, var(--brand-blue), var(--brand-blue-strong));
   border-radius: inherit;
 }
 
@@ -3275,9 +3275,9 @@ html[data-theme="dark"] .request-log-provider-icon[data-family="openai"] img {
   color: #7c3aed;
 }
 
-.dashboard-kpi-card[data-tone="orange"] .dashboard-kpi-icon {
-  background: color-mix(in srgb, #f97316 16%, var(--surface));
-  color: #ea580c;
+.dashboard-kpi-card[data-tone="accent"] .dashboard-kpi-icon {
+  background: color-mix(in srgb, var(--brand-blue) 16%, var(--surface));
+  color: var(--brand-blue-strong);
 }
 
 .dashboard-tab-row {
@@ -15682,6 +15682,10 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
   background: var(--brand-blue-strong);
 }
 
+html[data-theme="dark"] .landing-google-button:hover {
+  color: var(--primary-foreground);
+}
+
 .landing-google-mark {
   display: grid;
   width: 24px;
@@ -25584,18 +25588,18 @@ html:not([data-theme="dark"])
   color: var(--brand-blue-strong);
 }
 
-html .dashboard-overview-workspace .dashboard-kpi-card[data-tone="orange"] {
+html .dashboard-overview-workspace .dashboard-kpi-card[data-tone="accent"] {
   background: linear-gradient(135deg, #2c5f9f 0%, #1e3a5f 100%);
 }
 
 .dashboard-overview-workspace
-  .dashboard-kpi-card[data-tone="orange"]
+  .dashboard-kpi-card[data-tone="accent"]
   :is(.dashboard-kpi-label, strong) {
   color: #ffffff;
 }
 
 .dashboard-overview-workspace
-  .dashboard-kpi-card[data-tone="orange"]
+  .dashboard-kpi-card[data-tone="accent"]
   .dashboard-kpi-icon {
   background: rgba(255, 255, 255, 0.14);
   color: #ffffff;
