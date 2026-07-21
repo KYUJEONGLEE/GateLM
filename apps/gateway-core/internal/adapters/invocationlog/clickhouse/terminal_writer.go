@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"gatelm/apps/gateway-core/internal/domain/budget"
 	"gatelm/apps/gateway-core/internal/domain/invocationlog"
 )
 
@@ -41,26 +42,36 @@ type TerminalLogWriter struct {
 }
 
 type analyticsRow struct {
-	RequestID            string `json:"request_id"`
-	TenantID             string `json:"tenant_id"`
-	ProjectID            string `json:"project_id"`
-	ApplicationID        string `json:"application_id"`
-	EmployeeIdentityHash string `json:"employee_identity_hash"`
-	Provider             string `json:"provider"`
-	Model                string `json:"model"`
-	Status               string `json:"status"`
-	HTTPStatus           uint16 `json:"http_status"`
-	PromptTokens         uint32 `json:"prompt_tokens"`
-	CompletionTokens     uint32 `json:"completion_tokens"`
-	TotalTokens          uint32 `json:"total_tokens"`
-	CostMicroUSD         int64  `json:"cost_micro_usd"`
-	LatencyMs            uint64 `json:"latency_ms"`
-	CacheStatus          string `json:"cache_status"`
-	RoutingCategory      string `json:"routing_category"`
-	RoutingDifficulty    string `json:"routing_difficulty"`
-	CreatedAt            string `json:"created_at"`
-	IngestedAt           string `json:"ingested_at"`
-	IngestVersion        uint64 `json:"ingest_version"`
+	RequestID             string `json:"request_id"`
+	TenantID              string `json:"tenant_id"`
+	ProjectID             string `json:"project_id"`
+	ApplicationID         string `json:"application_id"`
+	EmployeeIdentityHash  string `json:"employee_identity_hash"`
+	Provider              string `json:"provider"`
+	Model                 string `json:"model"`
+	Status                string `json:"status"`
+	HTTPStatus            uint16 `json:"http_status"`
+	PromptTokens          uint32 `json:"prompt_tokens"`
+	CompletionTokens      uint32 `json:"completion_tokens"`
+	TotalTokens           uint32 `json:"total_tokens"`
+	CostMicroUSD          int64  `json:"cost_micro_usd"`
+	SavedCostMicroUSD     *int64 `json:"saved_cost_micro_usd"`
+	LatencyMs             uint64 `json:"latency_ms"`
+	CacheStatus           string `json:"cache_status"`
+	RoutingCategory       string `json:"routing_category"`
+	RoutingDifficulty     string `json:"routing_difficulty"`
+	TerminalStatus        string `json:"terminal_status"`
+	FallbackOutcome       string `json:"fallback_outcome"`
+	SafetyOutcome         string `json:"safety_outcome"`
+	BudgetOutcome         string `json:"budget_outcome"`
+	MaskingAction         string `json:"masking_action"`
+	ProviderCalled        uint8  `json:"provider_called"`
+	BudgetScopeType       string `json:"budget_scope_type"`
+	BudgetScopeID         string `json:"budget_scope_id"`
+	BudgetScopeResolvedBy string `json:"budget_scope_resolved_by"`
+	CreatedAt             string `json:"created_at"`
+	IngestedAt            string `json:"ingested_at"`
+	IngestVersion         uint64 `json:"ingest_version"`
 }
 
 func NewTerminalLogWriter(cfg Config) (*TerminalLogWriter, error) {
@@ -155,28 +166,67 @@ func (w *TerminalLogWriter) row(entry invocationlog.TerminalLog, ingestedAt time
 	if entry.EmployeePolicyDecision != nil && strings.TrimSpace(entry.EmployeePolicyDecision.EmployeeID) != "" {
 		employeeIdentity = strings.TrimSpace(entry.EmployeePolicyDecision.EmployeeID)
 	}
-	return analyticsRow{
-		RequestID:            strings.TrimSpace(entry.RequestID),
-		TenantID:             strings.TrimSpace(entry.TenantID),
-		ProjectID:            strings.TrimSpace(entry.ProjectID),
-		ApplicationID:        strings.TrimSpace(entry.ApplicationID),
-		EmployeeIdentityHash: hmacIdentity(w.identityKey, employeeIdentity),
-		Provider:             strings.TrimSpace(entry.Provider),
-		Model:                strings.TrimSpace(entry.Model),
-		Status:               strings.TrimSpace(entry.Status),
-		HTTPStatus:           boundedUint16(entry.HTTPStatus),
-		PromptTokens:         boundedUint32(entry.PromptTokens),
-		CompletionTokens:     boundedUint32(entry.CompletionTokens),
-		TotalTokens:          boundedUint32(entry.TotalTokens),
-		CostMicroUSD:         maxInt64(entry.CostMicroUSD, 0),
-		LatencyMs:            boundedUint64(entry.LatencyMs),
-		CacheStatus:          strings.TrimSpace(entry.CacheStatus),
-		RoutingCategory:      strings.TrimSpace(entry.PromptCategory),
-		RoutingDifficulty:    strings.TrimSpace(entry.PromptDifficulty),
-		CreatedAt:            formatDateTime64(createdAt),
-		IngestedAt:           formatDateTime64(ingestedAt),
-		IngestVersion:        uint64(ingestedAt.UnixNano()),
+	domainOutcomes := entry.DomainOutcomes
+	if domainOutcomes.IsZero() {
+		domainOutcomes = invocationlog.BuildDomainOutcomes(entry)
 	}
+	terminalStatus := invocationlog.BuildGatewayStageOutcomes(entry).TerminalStatus
+	budgetScope := budget.NormalizeScope(entry.BudgetScope, entry.ApplicationID)
+	return analyticsRow{
+		RequestID:             strings.TrimSpace(entry.RequestID),
+		TenantID:              strings.TrimSpace(entry.TenantID),
+		ProjectID:             strings.TrimSpace(entry.ProjectID),
+		ApplicationID:         strings.TrimSpace(entry.ApplicationID),
+		EmployeeIdentityHash:  hmacIdentity(w.identityKey, employeeIdentity),
+		Provider:              strings.TrimSpace(entry.Provider),
+		Model:                 strings.TrimSpace(entry.Model),
+		Status:                strings.TrimSpace(entry.Status),
+		HTTPStatus:            boundedUint16(entry.HTTPStatus),
+		PromptTokens:          boundedUint32(entry.PromptTokens),
+		CompletionTokens:      boundedUint32(entry.CompletionTokens),
+		TotalTokens:           boundedUint32(entry.TotalTokens),
+		CostMicroUSD:          maxInt64(entry.CostMicroUSD, 0),
+		SavedCostMicroUSD:     nullableNonNegativeInt64(entry.SavedCostMicroUSD),
+		LatencyMs:             boundedUint64(entry.LatencyMs),
+		CacheStatus:           strings.TrimSpace(entry.CacheStatus),
+		RoutingCategory:       strings.TrimSpace(entry.PromptCategory),
+		RoutingDifficulty:     strings.TrimSpace(entry.PromptDifficulty),
+		TerminalStatus:        strings.TrimSpace(terminalStatus),
+		FallbackOutcome:       strings.TrimSpace(domainOutcomes.Fallback.Outcome),
+		SafetyOutcome:         strings.TrimSpace(domainOutcomes.Safety.Outcome),
+		BudgetOutcome:         strings.TrimSpace(domainOutcomes.Budget.Outcome),
+		MaskingAction:         firstNonEmpty(strings.TrimSpace(entry.MaskingAction), strings.TrimSpace(domainOutcomes.Safety.MaskingAction), "none"),
+		ProviderCalled:        boolUint8(entry.ProviderCalled),
+		BudgetScopeType:       budgetScope.Type,
+		BudgetScopeID:         budgetScope.ID,
+		BudgetScopeResolvedBy: budgetScope.ResolvedBy,
+		CreatedAt:             formatDateTime64(createdAt),
+		IngestedAt:            formatDateTime64(ingestedAt),
+		IngestVersion:         uint64(ingestedAt.UnixNano()),
+	}
+}
+
+func nullableNonNegativeInt64(value int64) *int64 {
+	if value < 0 {
+		return nil
+	}
+	return &value
+}
+
+func boolUint8(value bool) uint8 {
+	if value {
+		return 1
+	}
+	return 0
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if normalized := strings.TrimSpace(value); normalized != "" {
+			return normalized
+		}
+	}
+	return ""
 }
 
 func hmacIdentity(key []byte, value string) string {
