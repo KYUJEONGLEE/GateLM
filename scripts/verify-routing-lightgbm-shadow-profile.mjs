@@ -5,7 +5,19 @@ import { fileURLToPath } from "node:url";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const schemaPath = "docs/routing/schemas/difficulty-lightgbm-shadow-profile.schema.json";
 const fixturePath = "docs/routing/fixtures/difficulty-lightgbm-shadow-profile.fixture.json";
-const expectedCandidates = ["tabular_only", "raw_768", "pca_128", "pca_256"];
+const expectedCandidates = [
+  "tabular_only",
+  "embedding_only_768",
+  "raw_768",
+  "pca_128",
+  "pca_256",
+];
+const expectedFourWayCandidates = [
+  "rule_42_plus_e5_small_pca_64",
+  "rule_42_plus_semantic_heads_12",
+  "e5_base_raw_768",
+  "rule_42_plus_e5_base_raw_768",
+];
 const expectedFeatureNames = [
   "payloadEmpty", "payloadSmall", "payloadMedium", "payloadLarge",
   "taskCount", "constraintCount", "scopeCount", "dependencyDepth",
@@ -55,11 +67,28 @@ if (
 ) {
   failures.push(`${schemaPath}: pinned 768D encoder identity drifted`);
 }
-if (!same(defs.featureShape?.properties?.tabularFeatureNames?.const, expectedFeatureNames)) {
+const tabularFeatureShapes =
+  defs.featureShape?.properties?.tabularFeatureNames?.oneOf?.map((entry) => entry.const) ?? [];
+if (
+  !tabularFeatureShapes.some((value) => same(value, [])) ||
+  !tabularFeatureShapes.some((value) => same(value, expectedFeatureNames))
+) {
   failures.push(`${schemaPath}: exact ruleVectorV1 feature order drifted`);
 }
-if (!same(defs.trainingProvenance?.properties?.selectedFrom?.const, expectedCandidates)) {
-  failures.push(`${schemaPath}: fixed offline candidate set drifted`);
+if (
+  !same(defs.featureShape?.properties?.ruleDimension?.enum, [0, 42]) ||
+  !defs.featureShape?.properties?.totalDimension?.enum?.includes(768) ||
+  !defs.model?.properties?.numFeatures?.enum?.includes(768)
+) {
+  failures.push(`${schemaPath}: embedding-only 768D runtime shape is missing`);
+}
+const allowedCandidateSets =
+  defs.trainingProvenance?.properties?.selectedFrom?.oneOf?.map((entry) => entry.const) ?? [];
+if (
+  !allowedCandidateSets.some((value) => same(value, expectedCandidates)) ||
+  !allowedCandidateSets.some((value) => same(value, expectedFourWayCandidates))
+) {
+  failures.push(`${schemaPath}: allowed offline candidate sets drifted`);
 }
 
 if (

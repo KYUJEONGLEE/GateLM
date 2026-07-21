@@ -23,6 +23,10 @@
 - 현재 B/C 비교 기준 사람 adjudication queue는 2,249건이다. 라벨을 GPT 답으로 바꾼 3,215건 중에서도 1,814건은 이 queue에 남는다.
 - 기존 정책의 B/C queue, 모든 boundary record, 모든 Test record를 합친 최소 사람 검수 집합은 중복 제거 후 5,854건이다. 언어·작업·도메인·source별 무작위 품질 표본은 아직 더 정해야 한다.
 - 전체 15,000건의 `human_reviewed`는 여전히 0건이며 dataset-owner 승격도 없다.
+- 현재 라벨은 Simple 9,729건(64.9%) / Complex 5,271건(35.1%)으로 class 재균형이 필요하다. 최초 `automatic_label`은 7,500/7,500으로 별도 보존된다.
+- 길이 단독 ROC-AUC는 0.6517로 0.60 상한을 다시 초과했다.
+- 35~65% 라벨 비율을 벗어난 작업 유형은 9개, 서비스 도메인은 17개다.
+- 영어는 Simple 1,988 / Complex 262, 한영 혼합은 Simple 646 / Complex 104로 GPT 판정의 언어별 편향을 별도 교정해야 한다.
 - 직접 사람 작성 공개 Prompt는 2,674건으로 60% 목표보다 1,526건 부족하고, 승인된 실제 서비스 사용자 Prompt는 0건이다.
 - 수정 라벨 기준 embedding 의미 중복 재검사는 아직 통과하지 않았다 (후보 7쌍).
 - 따라서 수정본도 `training_eligible=false`이며 gold label이나 운영 승격 근거가 아니다.

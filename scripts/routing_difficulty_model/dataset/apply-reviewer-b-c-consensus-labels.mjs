@@ -105,6 +105,15 @@ function everySliceWithinShare(records, field, minimum = 0.35, maximum = 0.65) {
   });
 }
 
+function violatingSlices(records, field, minimum = 0.35, maximum = 0.65) {
+  const counts = nestedCounts(records, field, "label");
+  return Object.entries(counts).filter(([, labels]) => {
+    const total = (labels.simple ?? 0) + (labels.complex ?? 0);
+    const share = (labels.complex ?? 0) / total;
+    return share < minimum || share > maximum;
+  }).map(([name]) => name).sort();
+}
+
 function labelConfidence(comparison) {
   if (!comparison.human_adjudication_required
       && comparison.reviewer_b.confidence === "high"
@@ -231,8 +240,12 @@ function buildManifest({ base, baseRecords, records, datasetPath, datasetVersion
     record.label_source === "llm_same_family_consensus_candidate" && record.label_confidence === 0.9
   )).length;
   const needsAdjudicationRecords = records.filter((record) => record.review_status === "needs_adjudication").length;
+  const lengthAuc = lengthOnlyRocAuc(records);
+  const taskBalanceMet = everySliceWithinShare(records, "task_type");
+  const domainBalanceMet = everySliceWithinShare(records, "service_domain");
+  const labelShare = labelCounts.simple / records.length;
   const blockers = [
-    "same_family_llm_labels_not_independent_or_human_reviewed",
+    "candidate_labels_not_human_reviewed",
     "independent_reviewer_a_not_completed",
     "human_adjudication_not_completed",
   ];
@@ -242,6 +255,9 @@ function buildManifest({ base, baseRecords, records, datasetPath, datasetVersion
       "anonymous_real_user_source_unavailable_without_additional_approval",
     );
   }
+  if (Math.abs(labelShare - 0.5) > 0.05) blockers.push("current_label_class_imbalance_after_same_family_override");
+  if (lengthAuc > 0.6) blockers.push("length_label_proxy_above_0_60_guardrail");
+  if (!taskBalanceMet || !domainBalanceMet) blockers.push("task_or_domain_label_balance_guardrail_failed");
   if (audit.blocker) blockers.push(audit.blocker);
   const manifest = structuredClone(base);
   manifest.dataset_version = datasetVersion;
@@ -259,11 +275,13 @@ function buildManifest({ base, baseRecords, records, datasetPath, datasetVersion
     automatic_label_ratio: `${automaticLabelCounts.simple}:${automaticLabelCounts.complex}`,
     current_label_distribution_by_language: nestedCounts(records, "language", "label"),
     length_label_distribution: lengthLabelDistribution(records),
-    length_only_roc_auc: lengthOnlyRocAuc(records),
+    length_only_roc_auc: lengthAuc,
     klue_label_distribution: countBy(klueRecords, "label"),
     klue_length_only_roc_auc: lengthOnlyRocAuc(klueRecords),
-    every_task_type_label_share_between_35_and_65_percent: everySliceWithinShare(records, "task_type"),
-    every_service_domain_label_share_between_35_and_65_percent: everySliceWithinShare(records, "service_domain"),
+    every_task_type_label_share_between_35_and_65_percent: taskBalanceMet,
+    every_service_domain_label_share_between_35_and_65_percent: domainBalanceMet,
+    task_type_label_share_guardrail_violations: violatingSlices(records, "task_type"),
+    service_domain_label_share_guardrail_violations: violatingSlices(records, "service_domain"),
     reviewer_b_c_same_family_label_overrides: labelOverrideRecords,
     reviewer_b_c_high_confidence_consensus_overrides: highConfidenceOverrides,
     reviewer_b_c_human_adjudication_queue_records_in_dataset: needsAdjudicationRecords,
@@ -313,6 +331,10 @@ function buildReport({ publicRecords, bundleRecords, overrides, humanQueueIds, a
   const labelCounts = countBy(bundleRecords, "label");
   const publicLabelCounts = countBy(publicRecords, "label");
   const transitions = countBy(overrides, (row) => `${row.prior_candidate_label}_to_${row.revised_label}`);
+  const languageLabels = nestedCounts(bundleRecords, "language", "label");
+  const taskViolations = violatingSlices(bundleRecords, "task_type");
+  const domainViolations = violatingSlices(bundleRecords, "service_domain");
+  const lengthAuc = lengthOnlyRocAuc(bundleRecords);
   const humanMinimum = new Set(humanQueueIds);
   for (const record of bundleRecords) {
     if (record.source === "boundary" || record.split === "test") humanMinimum.add(record.sample_id);
@@ -343,6 +365,10 @@ function buildReport({ publicRecords, bundleRecords, overrides, humanQueueIds, a
     "- 현재 B/C 비교 기준 사람 adjudication queue는 2,249건이다. 라벨을 GPT 답으로 바꾼 3,215건 중에서도 1,814건은 이 queue에 남는다.",
     `- 기존 정책의 B/C queue, 모든 boundary record, 모든 Test record를 합친 최소 사람 검수 집합은 중복 제거 후 ${humanMinimum.size.toLocaleString("en-US")}건이다. 언어·작업·도메인·source별 무작위 품질 표본은 아직 더 정해야 한다.`,
     "- 전체 15,000건의 `human_reviewed`는 여전히 0건이며 dataset-owner 승격도 없다.",
+    `- 현재 라벨은 Simple ${labelCounts.simple.toLocaleString("en-US")}건(${(labelCounts.simple / bundleRecords.length * 100).toFixed(1)}%) / Complex ${labelCounts.complex.toLocaleString("en-US")}건(${(labelCounts.complex / bundleRecords.length * 100).toFixed(1)}%)으로 class 재균형이 필요하다. 최초 \`automatic_label\`은 7,500/7,500으로 별도 보존된다.`,
+    `- 길이 단독 ROC-AUC는 ${lengthAuc.toFixed(4)}로 0.60 상한을 다시 초과했다.`,
+    `- 35~65% 라벨 비율을 벗어난 작업 유형은 ${taskViolations.length}개, 서비스 도메인은 ${domainViolations.length}개다.`,
+    `- 영어는 Simple ${(languageLabels.en?.simple ?? 0).toLocaleString("en-US")} / Complex ${(languageLabels.en?.complex ?? 0).toLocaleString("en-US")}, 한영 혼합은 Simple ${(languageLabels.mixed?.simple ?? 0).toLocaleString("en-US")} / Complex ${(languageLabels.mixed?.complex ?? 0).toLocaleString("en-US")}로 GPT 판정의 언어별 편향을 별도 교정해야 한다.`,
     "- 직접 사람 작성 공개 Prompt는 2,674건으로 60% 목표보다 1,526건 부족하고, 승인된 실제 서비스 사용자 Prompt는 0건이다.",
     `- 수정 라벨 기준 embedding 의미 중복 재검사는 ${audit.verified ? "통과했다" : "아직 통과하지 않았다"}${audit.candidatePairs === null ? "" : ` (후보 ${audit.candidatePairs}쌍)`}.`,
     "- 따라서 수정본도 `training_eligible=false`이며 gold label이나 운영 승격 근거가 아니다.",
@@ -463,6 +489,27 @@ export function verifyArtifacts(artifacts) {
   if (countBy(bundleRevisedRecords, "review_status").needs_adjudication !== 2249) failures.push("bundle needs_adjudication must be 2249");
   if (countBy(bundleRevisedRecords, "label_source").llm_same_family_consensus_candidate !== 3215) {
     failures.push("LLM same-family label source count must be 3215");
+  }
+  const schema = JSON.parse(read("docs/routing/datasets/difficulty/schemas/difficulty-dataset-record.schema.json"));
+  const allowedFields = new Set(Object.keys(schema.properties));
+  const requiredFields = new Set(schema.required);
+  const enumFields = Object.fromEntries(Object.entries(schema.properties)
+    .filter(([, definition]) => Array.isArray(definition.enum))
+    .map(([field, definition]) => [field, new Set(definition.enum)]));
+  for (const record of bundleRevisedRecords) {
+    const missing = [...requiredFields].filter((field) => !Object.hasOwn(record, field));
+    const unexpected = Object.keys(record).filter((field) => !allowedFields.has(field));
+    if (missing.length) failures.push(`${record.sample_id}: missing schema fields ${missing.join(",")}`);
+    if (unexpected.length) failures.push(`${record.sample_id}: unexpected schema fields ${unexpected.join(",")}`);
+    for (const [field, values] of Object.entries(enumFields)) {
+      if (Object.hasOwn(record, field) && !values.has(record[field])) failures.push(`${record.sample_id}: invalid ${field}`);
+    }
+    if (record.label_source === "llm_same_family_consensus_candidate"
+        && (record.source !== "public" || record.human_reviewed !== false
+          || !["pending", "needs_adjudication"].includes(record.review_status))) {
+      failures.push(`${record.sample_id}: invalid same-family LLM review state`);
+    }
+    if (failures.length > 100) break;
   }
   return failures;
 }

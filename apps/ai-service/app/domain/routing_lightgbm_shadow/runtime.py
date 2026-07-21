@@ -20,11 +20,27 @@ PROFILE_VERSION = "difficulty-lightgbm-shadow.e5-base-768.v1"
 MODEL_ID = "intfloat/multilingual-e5-base"
 MODEL_SOURCE_REVISION = "d13f1b27baf31030b7fd040960d60d909913633f"
 NATIVE_DIMENSION = 768
+ALLOWED_RULE_DIMENSIONS = frozenset({0, RULE_VECTOR_DIMENSION})
 ALLOWED_SEMANTIC_DIMENSIONS = frozenset({128, 256, 768})
 ALLOWED_SEMANTIC_MODES = frozenset({"raw", "pca"})
 MAXIMUM_MANIFEST_BYTES = 128 * 1024
 MAXIMUM_PROJECTION_BYTES = 8 * 1024 * 1024
 MAXIMUM_MODEL_BYTES = 64 * 1024 * 1024
+ALLOWED_TRAINING_CANDIDATE_SETS = {
+    (
+        "tabular_only",
+        "embedding_only_768",
+        "raw_768",
+        "pca_128",
+        "pca_256",
+    ),
+    (
+        "rule_42_plus_e5_small_pca_64",
+        "rule_42_plus_semantic_heads_12",
+        "e5_base_raw_768",
+        "rule_42_plus_e5_base_raw_768",
+    ),
+}
 
 
 class RoutingLightGBMShadowRuntimeError(RuntimeError):
@@ -72,6 +88,7 @@ class _Projection:
 class _ModelMaterial:
     booster: Any
     threshold: float
+    rule_dimension: int
     semantic_mode: str
     semantic_dimension: int
     total_dimension: int
@@ -107,8 +124,11 @@ class _ModelMaterial:
             semantic = self.projection.apply(pooled_array)
         if semantic.shape != (len(rule_vectors), self.semantic_dimension):
             raise RoutingLightGBMShadowRuntimeError("semantic feature shape is invalid")
-        combined = np.concatenate(
-            (rules, np.asarray(semantic, dtype=np.float64)), axis=1
+        semantic_features = np.asarray(semantic, dtype=np.float64)
+        combined = (
+            semantic_features
+            if self.rule_dimension == 0
+            else np.concatenate((rules, semantic_features), axis=1)
         )
         if combined.shape != (len(rule_vectors), self.total_dimension):
             raise RoutingLightGBMShadowRuntimeError("combined feature shape is invalid")
@@ -328,8 +348,8 @@ def _validate_manifest(
         or training.get("selectionSplit") != "validation"
         or training.get("testAccess") != "after_selection_freeze"
         or training.get("seed") != 20260721
-        or training.get("selectedFrom")
-        != ["tabular_only", "raw_768", "pca_128", "pca_256"]
+        or tuple(training.get("selectedFrom", ()))
+        not in ALLOWED_TRAINING_CANDIDATE_SETS
         or not isinstance(split_counts, dict)
         or not isinstance(split_counts.get("train"), int)
         or split_counts["train"] < 256
@@ -359,16 +379,26 @@ def _validate_manifest(
     projection_descriptor = feature_shape.get("projection")
     if (
         feature_shape.get("ruleVectorVersion") != RULE_VECTOR_VERSION
-        or feature_shape.get("ruleDimension") != RULE_VECTOR_DIMENSION
+        or feature_shape.get("ruleDimension") not in ALLOWED_RULE_DIMENSIONS
         or semantic_mode not in ALLOWED_SEMANTIC_MODES
         or semantic_dimension not in ALLOWED_SEMANTIC_DIMENSIONS
         or semantic_mode == "raw" and semantic_dimension != NATIVE_DIMENSION
         or semantic_mode == "pca" and semantic_dimension not in {128, 256}
-        or total_dimension != RULE_VECTOR_DIMENSION + int(semantic_dimension or 0)
-        or feature_names
-        != [f"ruleVectorV1.{name}" for name in RULE_VECTOR_FEATURE_NAMES]
+        or total_dimension
+        != int(feature_shape.get("ruleDimension") or 0)
+        + int(semantic_dimension or 0)
     ):
         raise RoutingLightGBMShadowRuntimeError("feature shape is invalid")
+    rule_dimension = int(feature_shape["ruleDimension"])
+    expected_feature_names = (
+        []
+        if rule_dimension == 0
+        else [f"ruleVectorV1.{name}" for name in RULE_VECTOR_FEATURE_NAMES]
+    )
+    if feature_names != expected_feature_names:
+        raise RoutingLightGBMShadowRuntimeError("feature shape is invalid")
+    if semantic_mode == "pca" and rule_dimension != RULE_VECTOR_DIMENSION:
+        raise RoutingLightGBMShadowRuntimeError("PCA profile requires the rule vector")
     if semantic_mode == "raw" and projection_descriptor is not None:
         raise RoutingLightGBMShadowRuntimeError("raw semantic mode has projection")
     if semantic_mode == "pca" and (
@@ -442,6 +472,7 @@ def _load_model_material(
     return _ModelMaterial(
         booster=booster,
         threshold=float(model["threshold"]),
+        rule_dimension=int(feature_shape["ruleDimension"]),
         semantic_mode=semantic_mode,
         semantic_dimension=semantic_dimension,
         total_dimension=total_dimension,

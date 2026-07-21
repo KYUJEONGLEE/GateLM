@@ -1,0 +1,37 @@
+{
+  "encoderLock": {
+    "relativePath": "e5-base-runtime-lock.v1.json",
+    "sha256": "6952dfd89dcf25757732d52c274182a7359c7678f8a4bba03ec21ce1b9b6e1c5",
+    "sizeBytes": 2620
+  },
+  "profiles": [
+    {
+      "candidate": "e5_base_raw_768",
+      "model": {
+        "relativePath": "e5_base_raw_768.lightgbm.txt",
+        "sha256": "1fa96022edad57b8191b74dd815eb70ee67b53403411af4827e095da0ea0bc0d",
+        "sizeBytes": 282843
+      },
+      "profile": {
+        "relativePath": "e5_base_raw_768.shadow-profile.v1.json",
+        "sha256": "26f562d3b26d4662a6aec90e5da945371dfe8670d6766cd2dda540b5edb721f9",
+        "sizeBytes": 4487
+      }
+    },
+    {
+      "candidate": "rule_42_plus_e5_base_raw_768",
+      "model": {
+        "relativePath": "rule_42_plus_e5_base_raw_768.lightgbm.txt",
+        "sha256": "1922839f3630cc2c16114dac4d3a688ca338e55b7219385d0816cbf206b69a77",
+        "sizeBytes": 212508
+      },
+      "profile": {
+        "relativePath": "rule_42_plus_e5_base_raw_768.shadow-profile.v1.json",
+        "sha256": "a09e6d96749810cb75e053636dce004c96208aa2bb284d9ccf0d5abc26934be3",
+        "sizeBytes": 6389
+      }
+    }
+  ],
+  "promotionState": "offline_shadow_only",
+  "schemaVersion": "gatelm.routing-difficulty-lightgbm-runtime-bundles.v1"
+}

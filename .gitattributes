@@ -8,6 +8,8 @@ scripts/routing_difficulty_model/artifacts/difficulty-e5-gateway-runtime-lock.li
 scripts/routing_difficulty_model/artifacts/difficulty-e5-gateway-image.linux-amd64.v2.sha256 text eol=lf
 scripts/routing_difficulty_model/artifacts/difficulty-e5-gateway-image.linux-amd64.v1.sha256 text eol=lf
 scripts/routing_difficulty_model/artifacts/candidates/*.json text eol=lf
+scripts/routing_difficulty_model/artifacts/lightgbm-four-way-owner-approved-500/*.json text eol=lf
+scripts/routing_difficulty_model/artifacts/lightgbm-four-way-owner-approved-500/*.txt text eol=lf
 docs/v2.1.0/reviews/difficulty-evaluation-training-pilot-500.gpt-adjudicated-labels.jsonl text eol=lf
 docs/v2.1.0/training/difficulty-training-candidate-500.owner-approved.jsonl text eol=lf
 docs/v2.1.0/training/difficulty-training-candidate-500.owner-approved.manifest.json text eol=lf

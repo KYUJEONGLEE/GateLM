@@ -1,0 +1,119 @@
+{
+  "candidateOrder": [
+    "rule_42_plus_e5_small_pca_64",
+    "rule_42_plus_semantic_heads_12",
+    "e5_base_raw_768",
+    "rule_42_plus_e5_base_raw_768"
+  ],
+  "candidates": [
+    {
+      "bestIteration": 126,
+      "candidate": "rule_42_plus_e5_small_pca_64",
+      "dimension": 106,
+      "model": {
+        "relativePath": "rule_42_plus_e5_small_pca_64.lightgbm.txt",
+        "sha256": "387607fb3ef0b1438c5f249e54e14f9fea48cc3699c787c5071e91f38eb85934",
+        "sizeBytes": 130871
+      },
+      "test": {
+        "accuracy": 0.96,
+        "complexToSimple": 2,
+        "logLoss": 0.14781189
+      },
+      "threshold": 0.5,
+      "validation": {
+        "accuracy": 0.95,
+        "complexToSimple": 5,
+        "logLoss": 0.22570546
+      }
+    },
+    {
+      "bestIteration": 135,
+      "candidate": "rule_42_plus_semantic_heads_12",
+      "dimension": 54,
+      "model": {
+        "relativePath": "rule_42_plus_semantic_heads_12.lightgbm.txt",
+        "sha256": "3f872c73b08b1764519cbbaba6e1258e331a793538afb73a880ff3c4e8452c6c",
+        "sizeBytes": 78147
+      },
+      "test": {
+        "accuracy": 0.97,
+        "complexToSimple": 1,
+        "logLoss": 0.17598287
+      },
+      "threshold": 0.746,
+      "validation": {
+        "accuracy": 0.96,
+        "complexToSimple": 4,
+        "logLoss": 0.17328696
+      }
+    },
+    {
+      "bestIteration": 259,
+      "candidate": "e5_base_raw_768",
+      "dimension": 768,
+      "model": {
+        "relativePath": "e5_base_raw_768.lightgbm.txt",
+        "sha256": "1fa96022edad57b8191b74dd815eb70ee67b53403411af4827e095da0ea0bc0d",
+        "sizeBytes": 282843
+      },
+      "test": {
+        "accuracy": 0.87,
+        "complexToSimple": 6,
+        "logLoss": 0.34270543
+      },
+      "threshold": 0.5,
+      "validation": {
+        "accuracy": 0.87,
+        "complexToSimple": 7,
+        "logLoss": 0.32518492
+      }
+    },
+    {
+      "bestIteration": 181,
+      "candidate": "rule_42_plus_e5_base_raw_768",
+      "dimension": 810,
+      "model": {
+        "relativePath": "rule_42_plus_e5_base_raw_768.lightgbm.txt",
+        "sha256": "1922839f3630cc2c16114dac4d3a688ca338e55b7219385d0816cbf206b69a77",
+        "sizeBytes": 212508
+      },
+      "test": {
+        "accuracy": 0.87,
+        "complexToSimple": 6,
+        "logLoss": 0.33261762
+      },
+      "threshold": 0.521,
+      "validation": {
+        "accuracy": 0.89,
+        "complexToSimple": 7,
+        "logLoss": 0.32230366
+      }
+    }
+  ],
+  "containsPromptOrEmbeddingMaterial": false,
+  "datasetProvenance": {
+    "datasetSha256": "4f4b00a783ef6372a2d23baf77b0c793670a72f03f4636c6674c8e911662189f",
+    "datasetVersion": "difficulty_training_2026_07_15_owner_approved_500_v2",
+    "manifestSha256": "7e6e81a79741eb5f1b1aeec33dcd7cb92621bc2832feb57414e425157b51a6f3",
+    "splitPolicyVersion": "difficulty-family-constrained-split.2026-07-15.v1"
+  },
+  "encoderProvenance": {
+    "e5BaseModelId": "intfloat/multilingual-e5-base",
+    "e5BaseQInt8Sha256": "96877976f53fd0fbc7b803e792ef9d6d5c80898e26ff0541b3a976e134832a61",
+    "e5BaseSourceRevision": "d13f1b27baf31030b7fd040960d60d909913633f",
+    "e5SmallBundleSha256": "0f828d6a93f5600dff529e4194736fe79d43c04fa4ec9257374f1e092126f76e",
+    "e5SmallBundleVersion": "difficulty-e5-encoder-pca64-single-request.2026-07-15.v2",
+    "semanticHeadsSha256": "531bb72d1d22f134a11da76649cfde9102af5c116cf46765e03b8f2550d27386",
+    "semanticHeadsVersion": "difficulty-semantic-heads.owner-approved-500.single-request.2026-07-15.v2"
+  },
+  "experimentVersion": "difficulty-lightgbm-four-way.owner-approved-500.2026-07-22.v1",
+  "promotionState": "offline_shadow_only",
+  "schemaVersion": "gatelm.routing-difficulty-lightgbm-four-way.v1",
+  "selectedCandidate": "rule_42_plus_semantic_heads_12",
+  "splitCounts": {
+    "test": 100,
+    "train": 300,
+    "validation": 100
+  }
+}

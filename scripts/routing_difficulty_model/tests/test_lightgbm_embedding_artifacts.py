@@ -235,6 +235,43 @@ class FreezeAndAccessGuardTests(unittest.TestCase):
             with self.assertRaisesRegex(ExperimentError, "ARTIFACT_INTEGRITY_MISMATCH"):
                 verify_freeze_record(freeze, artifact_root=root)
 
+    def test_freeze_scope_tampering_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            candidate, _, _ = create_candidate(root)
+            freeze = freeze_candidate(candidate)
+            freeze["runtimeProfileGenerated"] = True
+            material = dict(freeze)
+            material.pop("freezeSha256")
+            freeze["freezeSha256"] = canonical_sha256(material)
+            with self.assertRaisesRegex(ExperimentError, "PRETEST_FREEZE_SCOPE_INVALID"):
+                verify_freeze_record(freeze, artifact_root=root)
+
+    def test_test_authorization_cannot_predate_owner_freeze_decision(self) -> None:
+        called = False
+
+        def loader():
+            nonlocal called
+            called = True
+            raise AssertionError
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            candidate, _, _ = create_candidate(root)
+            freeze = freeze_candidate(candidate)
+            with self.assertRaisesRegex(
+                ExperimentError, "TEST_AUTHORIZATION_PREDATES_FREEZE_DECISION"
+            ):
+                evaluate_frozen_test_once(
+                    artifact_root=root,
+                    freeze=freeze,
+                    authorization_reference="approval-before-freeze",
+                    authorization_timestamp="2026-07-20T23:59:59Z",
+                    test_loader=loader,
+                )
+            self.assertFalse(called)
+            self.assertFalse((root / "test-access-consumed.json").exists())
+
     def test_test_access_is_consumed_before_loader_and_second_attempt_is_rejected(self) -> None:
         calls = 0
 

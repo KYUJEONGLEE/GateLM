@@ -103,7 +103,7 @@
       "maxLength": 80
     },
     "label_source": {
-      "enum": ["synthetic_design", "public_rule_candidate", "llm_same_family_consensus_candidate"]
+      "enum": ["synthetic_design", "public_rule_candidate", "llm_same_family_consensus_candidate", "llm_codex_advisory_candidate"]
     },
     "label_confidence": {
       "type": "number",
@@ -325,7 +325,7 @@
           "boundary_case": { "const": false },
           "counterexample_type": { "type": "null" },
           "label_source": {
-            "enum": ["public_rule_candidate", "llm_same_family_consensus_candidate"]
+            "enum": ["public_rule_candidate", "llm_same_family_consensus_candidate", "llm_codex_advisory_candidate"]
           }
         },
         "required": [
@@ -367,6 +367,20 @@
           "source": { "const": "public" },
           "human_reviewed": { "const": false },
           "review_status": { "enum": ["pending", "needs_adjudication"] }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "label_source": { "const": "llm_codex_advisory_candidate" }
+        },
+        "required": ["label_source"]
+      },
+      "then": {
+        "properties": {
+          "human_reviewed": { "const": false },
+          "review_status": { "const": "needs_adjudication" }
         }
       }
     }

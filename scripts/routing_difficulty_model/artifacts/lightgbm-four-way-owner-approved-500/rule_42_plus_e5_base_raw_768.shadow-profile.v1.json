@@ -1,0 +1,174 @@
+{
+  "contractVersion": "gatelm.internal.routing-difficulty-lightgbm-shadow.v1",
+  "encoder": {
+    "artifactDirectory": "multilingual-e5-base/d13f1b27baf31030b7fd040960d60d909913633f",
+    "inputPrefix": "query: ",
+    "maximumTokenLength": 128,
+    "modelId": "intfloat/multilingual-e5-base",
+    "outputDimension": 768,
+    "pooling": "attention_mask_weighted_mean_excluding_padding",
+    "runtimeArtifacts": [
+      {
+        "relativePath": "config.json",
+        "role": "model_config",
+        "sha256": "9dab198f24c8c0879e481cf7822005d5ecbceedbacb390ffafa594e28d31bac4",
+        "sizeBytes": 694
+      },
+      {
+        "relativePath": "sentence_bert_config.json",
+        "role": "sentence_transformer_config",
+        "sha256": "948201d8329907aae938fa62f9ceeed53f5694dacc2b87b9f3b78b37ee986529",
+        "sizeBytes": 57
+      },
+      {
+        "relativePath": "1_Pooling/config.json",
+        "role": "pooling_config",
+        "sha256": "f586ab6c734af7b8d14d898bfa7faa886f23b46f86dd1730514309893af13d75",
+        "sizeBytes": 200
+      },
+      {
+        "relativePath": "special_tokens_map.json",
+        "role": "special_tokens",
+        "sha256": "06e405a36dfe4b9604f484f6a1e619af1a7f7d09e34a8555eb0b77b66318067f",
+        "sizeBytes": 280
+      },
+      {
+        "relativePath": "tokenizer.json",
+        "role": "tokenizer_json",
+        "sha256": "62c24cdc13d4c9952d63718d6c9fa4c287974249e16b7ade6d5a85e7bbb75626",
+        "sizeBytes": 17082660
+      },
+      {
+        "relativePath": "tokenizer_config.json",
+        "role": "tokenizer_config",
+        "sha256": "efb5c0d09722e5fe59a462cd2a9976ee216d55b037597d997cd3fe833216da15",
+        "sizeBytes": 418
+      },
+      {
+        "relativePath": "sentencepiece.bpe.model",
+        "role": "tokenizer_model",
+        "sha256": "cfc8146abe2a0488e9e2a0c56de7952f7c11ab059eca145a0a727afce0db2865",
+        "sizeBytes": 5069051
+      },
+      {
+        "relativePath": "generated/model.dynamic-qint8-matmul.onnx",
+        "role": "encoder_onnx_dynamic_qint8",
+        "sha256": "96877976f53fd0fbc7b803e792ef9d6d5c80898e26ff0541b3a976e134832a61",
+        "sizeBytes": 855423210
+      }
+    ],
+    "sourceRevision": "d13f1b27baf31030b7fd040960d60d909913633f"
+  },
+  "executionShape": {
+    "batchSize": 1,
+    "paddingScope": "within_request_only",
+    "unit": "single_request"
+  },
+  "featureShape": {
+    "projection": null,
+    "ruleDimension": 42,
+    "ruleVectorVersion": "difficulty-feature-vector.v1",
+    "semanticDimension": 768,
+    "semanticMode": "raw",
+    "tabularFeatureNames": [
+      "ruleVectorV1.payloadEmpty",
+      "ruleVectorV1.payloadSmall",
+      "ruleVectorV1.payloadMedium",
+      "ruleVectorV1.payloadLarge",
+      "ruleVectorV1.taskCount",
+      "ruleVectorV1.constraintCount",
+      "ruleVectorV1.scopeCount",
+      "ruleVectorV1.dependencyDepth",
+      "ruleVectorV1.categoryGeneral",
+      "ruleVectorV1.categoryCode",
+      "ruleVectorV1.categoryTranslation",
+      "ruleVectorV1.categorySummarization",
+      "ruleVectorV1.categoryReasoning",
+      "ruleVectorV1.generalWorkflowDepth",
+      "ruleVectorV1.generalBranchOrExceptionCount",
+      "ruleVectorV1.generalExtractionBreadth",
+      "ruleVectorV1.generalHasCrossSourceSynthesis",
+      "ruleVectorV1.codeOperationUnknown",
+      "ruleVectorV1.codeOperationSyntax",
+      "ruleVectorV1.codeOperationExample",
+      "ruleVectorV1.codeOperationSmallEdit",
+      "ruleVectorV1.codeOperationDebug",
+      "ruleVectorV1.codeOperationRefactor",
+      "ruleVectorV1.codeOperationDesign",
+      "ruleVectorV1.codeOperationMigration",
+      "ruleVectorV1.codeOperationConcurrency",
+      "ruleVectorV1.codeOperationPerformance",
+      "ruleVectorV1.codeScopeBreadth",
+      "ruleVectorV1.codeCausalComplexity",
+      "ruleVectorV1.codeEngineeringConstraintCount",
+      "ruleVectorV1.translationScopeCount",
+      "ruleVectorV1.translationPreservationConstraintCount",
+      "ruleVectorV1.translationDomainTerminologyLevel",
+      "ruleVectorV1.translationLocalizationDegree",
+      "ruleVectorV1.summarizationSourceBreadth",
+      "ruleVectorV1.summarizationSynthesisLevel",
+      "ruleVectorV1.summarizationFacetCount",
+      "ruleVectorV1.summarizationHasTraceabilityConstraints",
+      "ruleVectorV1.reasoningAlternativeCount",
+      "ruleVectorV1.reasoningCriteriaAndConstraintCount",
+      "ruleVectorV1.reasoningDepth",
+      "ruleVectorV1.reasoningUncertaintyScenarioCount"
+    ],
+    "totalDimension": 810
+  },
+  "model": {
+    "contentHash": "sha256:1922839f3630cc2c16114dac4d3a688ca338e55b7219385d0816cbf206b69a77",
+    "format": "lightgbm_text",
+    "numFeatures": 810,
+    "objective": "binary",
+    "parameters": {
+      "bagging_fraction": 1.0,
+      "bagging_freq": 0,
+      "bagging_seed": 20260721,
+      "data_random_seed": 20260721,
+      "deterministic": true,
+      "feature_fraction": 1.0,
+      "feature_fraction_seed": 20260721,
+      "force_col_wise": true,
+      "lambda_l1": 0.0,
+      "lambda_l2": 0.1,
+      "learning_rate": 0.03,
+      "max_depth": -1,
+      "metric": "binary_logloss",
+      "min_data_in_leaf": 20,
+      "num_leaves": 31,
+      "num_threads": 1,
+      "objective": "binary",
+      "seed": 20260721,
+      "verbosity": -1
+    },
+    "relativePath": "rule_42_plus_e5_base_raw_768.lightgbm.txt",
+    "sha256": "1922839f3630cc2c16114dac4d3a688ca338e55b7219385d0816cbf206b69a77",
+    "sizeBytes": 212508,
+    "threshold": 0.521,
+    "version": "difficulty-lightgbm-four-way.owner-approved-500.2026-07-22.v1.rule_42_plus_e5_base_raw_768"
+  },
+  "profileVersion": "difficulty-lightgbm-shadow.e5-base-768.v1",
+  "promotionState": "offline_shadow_only",
+  "schemaVersion": "gatelm.routing-difficulty-lightgbm-shadow-profile.v1",
+  "trainingProvenance": {
+    "datasetSha256": "sha256:4f4b00a783ef6372a2d23baf77b0c793670a72f03f4636c6674c8e911662189f",
+    "datasetVersion": "difficulty_training_2026_07_15_owner_approved_500_v2",
+    "familyDisjoint": true,
+    "seed": 20260721,
+    "selectedFrom": [
+      "rule_42_plus_e5_small_pca_64",
+      "rule_42_plus_semantic_heads_12",
+      "e5_base_raw_768",
+      "rule_42_plus_e5_base_raw_768"
+    ],
+    "selectionSplit": "validation",
+    "splitCounts": {
+      "test": 100,
+      "train": 300,
+      "validation": 100
+    },
+    "splitPolicyVersion": "difficulty-family-constrained-split.2026-07-15.v1",
+    "testAccess": "after_selection_freeze"
+  }
+}

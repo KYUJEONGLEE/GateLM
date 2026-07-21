@@ -44,6 +44,7 @@ class RoutingLightGBMShadowRuntimeTests(unittest.TestCase):
         material = _ModelMaterial(
             booster=booster,
             threshold=0.5,
+            rule_dimension=RULE_VECTOR_DIMENSION,
             semantic_mode="raw",
             semantic_dimension=768,
             total_dimension=810,
@@ -56,6 +57,24 @@ class RoutingLightGBMShadowRuntimeTests(unittest.TestCase):
         self.assertEqual(predictions[0].difficulty, "complex")
         self.assertEqual(booster.last_shape, (1, 810))
 
+    def test_embedding_only_profile_builds_exact_768d_input(self) -> None:
+        booster = _FakeBooster([0.8])
+        material = _ModelMaterial(
+            booster=booster,
+            threshold=0.5,
+            rule_dimension=0,
+            semantic_mode="raw",
+            semantic_dimension=768,
+            total_dimension=768,
+            projection=None,
+        )
+        predictions = material.classify_many(
+            np.ones((1, 768), dtype=np.float32),
+            [[0.0] * RULE_VECTOR_DIMENSION],
+        )
+        self.assertEqual(predictions[0].difficulty, "complex")
+        self.assertEqual(booster.last_shape, (1, 768))
+
     def test_pca_profile_builds_exact_rule_plus_projection_input(self) -> None:
         booster = _FakeBooster([0.2])
         components = np.zeros((128, 768), dtype=np.float32)
@@ -63,6 +82,7 @@ class RoutingLightGBMShadowRuntimeTests(unittest.TestCase):
         material = _ModelMaterial(
             booster=booster,
             threshold=0.5,
+            rule_dimension=RULE_VECTOR_DIMENSION,
             semantic_mode="pca",
             semantic_dimension=128,
             total_dimension=170,

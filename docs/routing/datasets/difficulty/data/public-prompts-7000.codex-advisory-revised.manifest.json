@@ -1,0 +1,443 @@
+{
+  "schema_version": "gatelm.routing-difficulty-dataset-manifest.v1",
+  "dataset_version": "routing_difficulty_public_prompts_7000_codex_advisory_2026_07_22",
+  "record_schema_version": "gatelm.routing-difficulty-dataset-record.v1",
+  "record_schema_path": "docs/routing/datasets/difficulty/schemas/difficulty-dataset-record.schema.json",
+  "dataset_path": "docs/routing/datasets/difficulty/data/public-prompts-7000.codex-advisory-revised.jsonl",
+  "dataset_sha256": "9ea59caaf9efd2c7f4ea66f3e9446fc865017364013ecd910262d71192e1365b",
+  "generated_at": "2026-07-22T00:00:00Z",
+  "generation_seed": 20260721,
+  "scope": {
+    "initial_target_records": 15000,
+    "generated_records": 7000,
+    "deferred_public_records": 0,
+    "public_records": 7000,
+    "training_eligible": false,
+    "training_blockers": [
+      "codex_advisory_labels_not_human_reviewed",
+      "independent_reviewer_a_not_completed",
+      "human_adjudication_not_completed",
+      "direct_human_authored_share_below_60_percent",
+      "anonymous_real_user_source_unavailable_without_additional_approval",
+      "current_label_class_imbalance_after_codex_advisory_relabel",
+      "task_or_domain_label_balance_guardrail_failed",
+      "semantic_embedding_duplicate_candidates_remain_for_codex_advisory_labels"
+    ]
+  },
+  "counts": {
+    "records": 7000,
+    "groups": 7000,
+    "public_records": 7000,
+    "synthetic_records": 0,
+    "boundary_records": 0,
+    "human_reviewed_records": 0,
+    "human_origin_records": 6873,
+    "direct_human_authored_records": 2674,
+    "real_user_records": 0
+  },
+  "distributions": {
+    "label": {
+      "complex": 1642,
+      "simple": 5358
+    },
+    "language": {
+      "en": 2250,
+      "ko": 4200,
+      "mixed": 550
+    },
+    "source": {
+      "public": 7000
+    },
+    "source_dataset": {
+      "aya_dataset": 387,
+      "databricks_dolly_15k": 607,
+      "haerae_bench_2": 127,
+      "hrm8k_ksm": 979,
+      "k2_eval": 55,
+      "kite": 154,
+      "klue_mrc": 142,
+      "kullm_v2_dolly": 3100,
+      "openassistant_oasst1": 1449
+    },
+    "split": {
+      "test": 1050,
+      "train": 4900,
+      "validation": 1050
+    },
+    "task_type": {
+      "business_report": 12,
+      "code_explanation": 37,
+      "code_generation": 580,
+      "code_modification": 6,
+      "code_review": 1,
+      "comparison_evaluation": 408,
+      "data_analysis": 180,
+      "debugging": 117,
+      "document_writing": 580,
+      "fact_explanation": 698,
+      "file_processing": 42,
+      "general_query": 808,
+      "internal_document_query": 3,
+      "json_conversion": 47,
+      "math_problem": 744,
+      "planning": 744,
+      "rag_query": 7,
+      "search": 260,
+      "structured_data_processing": 812,
+      "summarization": 320,
+      "table_conversion": 472,
+      "translation": 122
+    },
+    "service_domain": {
+      "business_format_conversion": 426,
+      "business_reporting": 364,
+      "business_strategy": 505,
+      "compliance": 42,
+      "corporate_operations": 312,
+      "customer_support": 306,
+      "data_analysis": 686,
+      "document_management": 193,
+      "finance_accounting": 202,
+      "hr_recruiting": 205,
+      "internal_policy": 132,
+      "legal": 125,
+      "marketing": 268,
+      "meeting_minutes": 184,
+      "privacy": 44,
+      "product_planning": 476,
+      "project_management": 309,
+      "rag_internal_knowledge": 7,
+      "research": 1249,
+      "sales": 231,
+      "security": 216,
+      "software_development": 226,
+      "training_onboarding": 292
+    },
+    "length_bucket": {
+      "long": 120,
+      "medium": 2880,
+      "short": 4000
+    },
+    "source_prompt_kind": {
+      "benchmark_instruction": 154,
+      "benchmark_question": 269,
+      "employee_authored_instruction": 607,
+      "handwritten_benchmark_instruction": 55,
+      "human_authored_instruction": 387,
+      "human_authored_prompter": 1449,
+      "human_reviewed_math_question": 979,
+      "machine_translated_human_instruction": 3100
+    },
+    "source_transform": {
+      "as_published_field": 3604,
+      "machine_translated_published_field": 3100,
+      "prompt_serialization": 296
+    },
+    "automatic_label": {
+      "complex": 3500,
+      "simple": 3500
+    },
+    "label_source": {
+      "llm_codex_advisory_candidate": 2230,
+      "llm_same_family_consensus_candidate": 1401,
+      "public_rule_candidate": 3369
+    },
+    "review_status": {
+      "needs_adjudication": 2230,
+      "pending": 4770
+    }
+  },
+  "coverage": {
+    "task_types_present": 22,
+    "service_domains_present": 23,
+    "every_language_has_both_labels": true,
+    "exact_language_target_for_initial_15000": true,
+    "public_human_origin_share": 0.9818571428571429,
+    "public_direct_human_authored_share": 0.382,
+    "public_real_user_share": 0,
+    "direct_human_authored_target_records": 4200,
+    "direct_human_authored_gap_records": 1526,
+    "direct_human_authored_60_percent_met": false,
+    "single_public_source_cap": 0.45,
+    "full_dataset_single_task_enforced_cap": 0.06,
+    "public_top_five_task_records": 3806,
+    "public_top_five_task_share": 0.5437142857142857,
+    "public_top_five_task_strict_55_percent_met": true,
+    "public_top_five_task_enforced_cap": 0.55,
+    "length_label_distribution": {
+      "short": {
+        "complex": 801,
+        "simple": 3199
+      },
+      "medium": {
+        "complex": 839,
+        "simple": 2041
+      },
+      "long": {
+        "complex": 2,
+        "simple": 118
+      }
+    },
+    "length_only_roc_auc": 0.5870492471103121,
+    "klue_records": 142,
+    "klue_label_distribution": {
+      "complex": 1,
+      "simple": 141
+    },
+    "klue_length_only_roc_auc": 0.8652482269503546,
+    "klue_context_serialization_records": 0,
+    "klue_rag_query_records": 0,
+    "semantic_embedding_dedup_audit_path": "docs/routing/datasets/difficulty/data/initial-routing-difficulty-15000.codex-advisory-revised.semantic-dedup.json",
+    "semantic_embedding_dedup_threshold": 0.985,
+    "semantic_embedding_dedup_verified": false,
+    "label_ratio": "5358:1642",
+    "automatic_label_ratio": "3500:3500",
+    "current_label_distribution_by_language": {
+      "en": {
+        "simple": 1771,
+        "complex": 479
+      },
+      "ko": {
+        "simple": 3060,
+        "complex": 1140
+      },
+      "mixed": {
+        "simple": 527,
+        "complex": 23
+      }
+    },
+    "every_task_type_label_share_between_35_and_65_percent": false,
+    "every_service_domain_label_share_between_35_and_65_percent": false,
+    "task_type_label_share_guardrail_violations": [
+      "business_report",
+      "code_explanation",
+      "code_modification",
+      "code_review",
+      "data_analysis",
+      "debugging",
+      "document_writing",
+      "fact_explanation",
+      "file_processing",
+      "general_query",
+      "internal_document_query",
+      "json_conversion",
+      "math_problem",
+      "planning",
+      "rag_query",
+      "search",
+      "structured_data_processing",
+      "summarization",
+      "table_conversion",
+      "translation"
+    ],
+    "service_domain_label_share_guardrail_violations": [
+      "business_format_conversion",
+      "business_reporting",
+      "business_strategy",
+      "compliance",
+      "corporate_operations",
+      "customer_support",
+      "data_analysis",
+      "document_management",
+      "finance_accounting",
+      "hr_recruiting",
+      "internal_policy",
+      "legal",
+      "marketing",
+      "meeting_minutes",
+      "privacy",
+      "product_planning",
+      "project_management",
+      "rag_internal_knowledge",
+      "research",
+      "sales",
+      "security",
+      "software_development",
+      "training_onboarding"
+    ],
+    "reviewer_b_c_same_family_label_overrides": 3215,
+    "reviewer_b_c_high_confidence_consensus_overrides": 1401,
+    "reviewer_b_c_human_adjudication_queue_records_in_dataset": 2230,
+    "independent_reviewer_a_complete": false,
+    "base_prompt_projection_sha256": "30117e4408132e01bbd3570ef0d2681302a5c22e257dea8792d35c487747b522",
+    "revised_prompt_projection_sha256": "30117e4408132e01bbd3570ef0d2681302a5c22e257dea8792d35c487747b522",
+    "codex_advisory_relabel_records": 2230,
+    "codex_advisory_simple_records": 1724,
+    "codex_advisory_complex_records": 506
+  },
+  "deduplication": {
+    "exact_duplicate_records": 0,
+    "normalized_duplicate_records": 0,
+    "accepted_near_duplicate_pairs": 0,
+    "removed_exact_candidates": 260,
+    "removed_near_duplicate_candidates": 131,
+    "method": "normalized exact match plus 48-value MinHash LSH and token-unigram/bigram Jaccard",
+    "near_duplicate_threshold": 0.9,
+    "compared_against_enterprise_8000": true,
+    "semantic_duplicate_candidate_pairs": 6,
+    "semantic_duplicate_method": "pinned multilingual-E5 native 384D cosine plus same-label/task/domain candidate policy on Codex advisory labels",
+    "semantic_duplicate_threshold": 0.985
+  },
+  "review": {
+    "label_source_distribution": {
+      "llm_codex_advisory_candidate": 2230,
+      "llm_same_family_consensus_candidate": 1401,
+      "public_rule_candidate": 3369
+    },
+    "review_status_distribution": {
+      "needs_adjudication": 2230,
+      "pending": 4770
+    },
+    "codex_advisory_relabel_records": 2230,
+    "advisory_method": "deterministic seven-axis policy over blind Reviewer C structured assessments",
+    "independent_reviewer_a_complete": false,
+    "human_reviewed": false,
+    "production_gold": false
+  },
+  "sources": {
+    "klue_mrc": {
+      "url": "https://huggingface.co/datasets/klue/klue",
+      "license": "CC-BY-SA-4.0",
+      "revision": "349481ec73fff722f88e0453ca05c77a447d967c",
+      "anonymous_public_access": true,
+      "prompt_kind": "benchmark_question",
+      "authorship": "human_authored",
+      "human_origin": true,
+      "direct_human_authored": true,
+      "real_user": false
+    },
+    "kite": {
+      "url": "https://huggingface.co/datasets/junkim100/KITE",
+      "license": "Apache-2.0",
+      "revision": "b02c5cf191a1fd2691b7154875fef46e2aeedc95",
+      "anonymous_public_access": true,
+      "prompt_kind": "benchmark_instruction",
+      "authorship": "human_curated_translation",
+      "human_origin": true,
+      "direct_human_authored": false,
+      "real_user": false
+    },
+    "aya_dataset": {
+      "url": "https://huggingface.co/datasets/CohereLabs/aya_dataset",
+      "license": "Apache-2.0",
+      "revision": "f9ea04583f02a8f86404ff6c58bf75fe637df8a2",
+      "anonymous_public_access": true,
+      "prompt_kind": "human_authored_instruction",
+      "authorship": "human_authored",
+      "human_origin": true,
+      "direct_human_authored": true,
+      "real_user": false
+    },
+    "k2_eval": {
+      "url": "https://huggingface.co/datasets/HAERAE-HUB/K2-Eval",
+      "license": "MIT",
+      "revision": "14bbbc9ee6eef17368508735700465eedc9ec4c5",
+      "anonymous_public_access": true,
+      "prompt_kind": "handwritten_benchmark_instruction",
+      "authorship": "human_authored",
+      "human_origin": true,
+      "direct_human_authored": true,
+      "real_user": false
+    },
+    "hrm8k_ksm": {
+      "url": "https://huggingface.co/datasets/HAERAE-HUB/HRM8K",
+      "license": "MIT",
+      "revision": "c360cabf8d733a82455565358b3dc965aab9ba8d",
+      "anonymous_public_access": true,
+      "prompt_kind": "human_reviewed_math_question",
+      "authorship": "human_origin_machine_translated",
+      "human_origin": true,
+      "direct_human_authored": false,
+      "real_user": false
+    },
+    "haerae_bench_2": {
+      "url": "https://huggingface.co/datasets/HAERAE-HUB/HAE_RAE_BENCH_2.0",
+      "license": "MIT",
+      "revision": "87bf691006fbd6c3440238802fd8cb4e9bdbcffe",
+      "anonymous_public_access": true,
+      "prompt_kind": "benchmark_question",
+      "authorship": "benchmark_derived",
+      "human_origin": false,
+      "direct_human_authored": false,
+      "real_user": false
+    },
+    "openassistant_oasst1": {
+      "url": "https://huggingface.co/datasets/OpenAssistant/oasst1",
+      "license": "Apache-2.0",
+      "revision": "fdf72ae0827c1cda404aff25b6603abec9e3399b",
+      "anonymous_public_access": true,
+      "prompt_kind": "human_authored_prompter",
+      "authorship": "human_authored",
+      "human_origin": true,
+      "direct_human_authored": true,
+      "real_user": false
+    },
+    "databricks_dolly_15k": {
+      "url": "https://huggingface.co/datasets/databricks/databricks-dolly-15k",
+      "license": "CC-BY-SA-3.0",
+      "revision": "bdd27f4d94b9c1f951818a7da7fd7aeea5dbff1a",
+      "anonymous_public_access": true,
+      "prompt_kind": "employee_authored_instruction",
+      "authorship": "human_authored",
+      "human_origin": true,
+      "direct_human_authored": true,
+      "real_user": false
+    },
+    "kullm_v2_dolly": {
+      "url": "https://huggingface.co/datasets/nlpai-lab/kullm-v2",
+      "license": "CC-BY-SA-3.0",
+      "revision": "cddcb73c259269928e974e0ce141f123eb068030",
+      "anonymous_public_access": true,
+      "prompt_kind": "machine_translated_human_instruction",
+      "authorship": "human_origin_machine_translated",
+      "human_origin": true,
+      "direct_human_authored": false,
+      "real_user": false
+    }
+  },
+  "filtering": {
+    "examined_records": {
+      "klue_mrc": 17554,
+      "kite": 527,
+      "aya_dataset": 4305,
+      "k2_eval": 90,
+      "hrm8k_ksm": 1428,
+      "haerae_bench_2": 3586,
+      "openassistant_oasst1": 55507,
+      "databricks_dolly_15k": 15011,
+      "kullm_v2_dolly": 15011
+    },
+    "rejected_candidates": {
+      "unanswerable_benchmark_item": 5517,
+      "url": 167,
+      "email": 26,
+      "invalid_length": 1139,
+      "repetition": 19,
+      "control_character": 4,
+      "phone": 6,
+      "source_quality_or_safety_label": 2276,
+      "credit_card": 8,
+      "personal_context": 2,
+      "system_message": 1,
+      "secret": 1,
+      "low_information": 2
+    },
+    "selection_rejected_candidates": {
+      "used_source_or_semantic_origin": 11660,
+      "duplicate": 391,
+      "semantic_duplicate_exclusion": 98,
+      "task_cap:general_query": 46662,
+      "task_cap:structured_data_processing": 9153,
+      "task_cap:math_problem": 3231,
+      "task_cap:table_conversion": 273,
+      "task_cap:fact_explanation": 10854,
+      "task_cap:planning": 4251,
+      "task_cap:document_writing": 3407,
+      "task_cap:code_generation": 1850,
+      "source_cap:kullm_v2_dolly": 1696
+    },
+    "system_assistant_tool_messages_included": 0,
+    "source_answers_included": 0,
+    "raw_source_user_identifiers_included": 0
+  }
+}

@@ -156,6 +156,7 @@ class LightGBMShadowTrainingTests(unittest.TestCase):
             report = json.loads(result.aggregate_report_path.read_text(encoding="utf-8"))
             self.assertEqual(profile["schemaVersion"], PROFILE_SCHEMA)
             self.assertEqual(profile["promotionState"], "offline_shadow_only")
+            self.assertIn("embedding_only_768", profile["trainingProvenance"]["selectedFrom"])
             self.assertTrue(profile["trainingProvenance"]["familyDisjoint"])
             self.assertEqual(profile["trainingProvenance"]["selectionSplit"], "validation")
             self.assertEqual(profile["trainingProvenance"]["testAccess"], "after_selection_freeze")

@@ -18,6 +18,7 @@ gatelm-difficulty-calibration-feasibility = "gatelm_difficulty_model.calibration
 gatelm-difficulty-threshold-candidate = "gatelm_difficulty_model.threshold_candidate_cli:main"
 gatelm-train-difficulty-model-path-5000 = "gatelm_difficulty_model.model_path_5000:main"
 gatelm-lightgbm-embedding-experiment = "gatelm_difficulty_model.lightgbm_embedding_experiment_cli:main"
+gatelm-lightgbm-four-way = "gatelm_difficulty_model.lightgbm_four_way_cli:main"
 
 [project.optional-dependencies]
 lightgbm-shadow = [

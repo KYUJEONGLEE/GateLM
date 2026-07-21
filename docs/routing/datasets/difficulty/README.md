@@ -2,7 +2,7 @@
 
 | 항목 | 값 |
 |---|---|
-| 상태 | 버전 독립 routing 데이터 작업 영역; 초기 15,000개와 Reviewer B/C 라벨 수정본 구축 완료 |
+| 상태 | 버전 독립 routing 데이터 작업 영역; 초기 15,000개, Reviewer B/C 수정본, Codex advisory 수정본 구축 완료 |
 | 전체 초기 목표 | 15,000개 (`simple` 7,500 / `complex` 7,500) |
 | 현재 생성 범위 | 공개 7,000 + 서비스 맞춤형 합성 6,000 + 경계 사례 2,000 |
 | 공개 소스 조사 | [`public-source-review.md`](public-source-review.md) |
@@ -308,7 +308,7 @@ Canonical record schema는 [`schemas/difficulty-dataset-record.schema.json`](sch
 | `source` | `synthetic | boundary | public` |
 | `boundary_case` | 경계·반례 여부 |
 | `counterexample_type` | 경계 유형; 일반 합성은 `null` |
-| `label_source` | `synthetic_design | public_rule_candidate | llm_same_family_consensus_candidate` |
+| `label_source` | `synthetic_design | public_rule_candidate | llm_same_family_consensus_candidate | llm_codex_advisory_candidate` |
 | `label_confidence` | 검수 우선순위용 confidence; 학습 확률 target 아님 |
 | `label_reason` | prompt fragment 없는 안전한 판정 근거 |
 | `human_reviewed` | 사람 검수 완료 여부 |
@@ -400,6 +400,10 @@ lexical heuristic 뒤 pinned multilingual-E5 전수 감사를 수행한다. cosi
 | [`data/public-prompts-7000.reviewer-b-c-revised.manifest.json`](data/public-prompts-7000.reviewer-b-c-revised.manifest.json) | 공개 수정본 hash, 라벨·검수 상태와 blocker |
 | [`data/initial-routing-difficulty-15000.reviewer-b-c-revised.jsonl`](data/initial-routing-difficulty-15000.reviewer-b-c-revised.jsonl) | 현재 라벨 검토용 15,000건 통합 수정본; 원본은 리뷰 증거로 보존 |
 | [`data/initial-routing-difficulty-15000.reviewer-b-c-revised.manifest.json`](data/initial-routing-difficulty-15000.reviewer-b-c-revised.manifest.json) | 통합 수정본 hash, 분포, 의미 중복 재검사와 training blocker |
+| [`data/enterprise-synthetic-8000.codex-advisory-revised.jsonl`](data/enterprise-synthetic-8000.codex-advisory-revised.jsonl) | Codex advisory 대상 19건을 반영한 합성·경계 component |
+| [`data/public-prompts-7000.codex-advisory-revised.jsonl`](data/public-prompts-7000.codex-advisory-revised.jsonl) | Codex advisory 대상 2,230건을 반영한 공개 component |
+| [`data/initial-routing-difficulty-15000.codex-advisory-revised.jsonl`](data/initial-routing-difficulty-15000.codex-advisory-revised.jsonl) | Codex 7축 advisory 2,249건을 적용한 현재 검토용 통합 revision |
+| [`data/initial-routing-difficulty-15000.codex-advisory-revised.manifest.json`](data/initial-routing-difficulty-15000.codex-advisory-revised.manifest.json) | Codex 수정본 hash, 분포, 검수·중복·training blocker |
 | [`schemas/difficulty-dataset-record.schema.json`](schemas/difficulty-dataset-record.schema.json) | 독립 record schema |
 | [`schemas/difficulty-dataset-manifest.schema.json`](schemas/difficulty-dataset-manifest.schema.json) | manifest schema |
 | [`../../../../scripts/routing_difficulty_model/dataset/generate-enterprise-synthetic-8000.mjs`](../../../../scripts/routing_difficulty_model/dataset/generate-enterprise-synthetic-8000.mjs) | seed 기반 결정론적 생성기 |
@@ -411,6 +415,7 @@ lexical heuristic 뒤 pinned multilingual-E5 전수 감사를 수행한다. cosi
 | [`../../../../scripts/routing_difficulty_model/dataset/semantic-dedup.py`](../../../../scripts/routing_difficulty_model/dataset/semantic-dedup.py) | pinned multilingual-E5 전수 감사와 remediation 생성기 |
 | [`../../../../scripts/routing_difficulty_model/dataset/verify-semantic-dedup.mjs`](../../../../scripts/routing_difficulty_model/dataset/verify-semantic-dedup.mjs) | 감사의 데이터·모델 hash, 보정 정밀도, 후보 0쌍 빠른 검증기 |
 | [`../../../../scripts/routing_difficulty_model/dataset/apply-reviewer-b-c-consensus-labels.mjs`](../../../../scripts/routing_difficulty_model/dataset/apply-reviewer-b-c-consensus-labels.mjs) | B/C 비교 증거에서 3,215건 라벨 수정본과 Prompt 없는 override 이력을 생성·검증 |
+| [`../../../../scripts/routing_difficulty_model/dataset/apply-codex-advisory-labels.mjs`](../../../../scripts/routing_difficulty_model/dataset/apply-codex-advisory-labels.mjs) | 사람 queue 2,249건의 7축 Codex advisory 라벨을 별도 revision에 적용·검증 |
 
 ```powershell
 corepack pnpm run routing:difficulty:generate-enterprise-8000
@@ -422,6 +427,8 @@ corepack pnpm run verify:routing-difficulty-public-7000
 corepack pnpm run verify:routing-difficulty-semantic-dedup
 corepack pnpm run routing:difficulty:apply-reviewer-b-c-labels
 corepack pnpm run verify:routing-difficulty-reviewer-b-c-labels
+corepack pnpm run routing:difficulty:apply-codex-advisory-labels
+corepack pnpm run verify:routing-difficulty-codex-advisory-labels
 ```
 
 통합 manifest의 핵심 값은 다음과 같다.
@@ -443,6 +450,8 @@ test          2,250
 ```
 
 위 수치는 보존된 원본 후보의 50:50 분포다. Reviewer B/C 수정본은 요청된 3,215건을 모두 반영하여 `simple=9,729`, `complex=5,271`이며 더 이상 50:50이 아니다. 상세 적용·잔여 작업은 [`reviews/independent-llm/reviewer-c-gpt/reviewer-b-c-label-application-report.md`](reviews/independent-llm/reviewer-c-gpt/reviewer-b-c-label-application-report.md)에서 확인한다.
+
+Codex advisory 수정본은 B/C 사람 queue 2,249건을 `simple=1,727`, `complex=522`로 다시 판정해 적용한 별도 revision이다. 전체 현재 라벨은 `simple=9,358`, `complex=5,642`다. 이는 사람 adjudication을 대체하지 않으며 상세 근거와 blocker는 [`reviews/independent-llm/reviewer-d-codex/codex-advisory-label-application-report.md`](reviews/independent-llm/reviewer-d-codex/codex-advisory-label-application-report.md)에 기록한다.
 
 ## 12. 프로젝트 규모별 권장 데이터
 

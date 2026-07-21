@@ -14,11 +14,14 @@
     "public_records": 7000,
     "training_eligible": false,
     "training_blockers": [
-      "same_family_llm_labels_not_independent_or_human_reviewed",
+      "candidate_labels_not_human_reviewed",
       "independent_reviewer_a_not_completed",
       "human_adjudication_not_completed",
       "direct_human_authored_share_below_60_percent",
       "anonymous_real_user_source_unavailable_without_additional_approval",
+      "current_label_class_imbalance_after_same_family_override",
+      "length_label_proxy_above_0_60_guardrail",
+      "task_or_domain_label_balance_guardrail_failed",
       "semantic_embedding_duplicate_candidates_remain_for_revised_labels"
     ]
   },
@@ -216,6 +219,36 @@
         "complex": 104
       }
     },
+    "task_type_label_share_guardrail_violations": [
+      "document_writing",
+      "fact_explanation",
+      "general_query",
+      "math_problem",
+      "planning",
+      "search",
+      "structured_data_processing",
+      "summarization",
+      "table_conversion"
+    ],
+    "service_domain_label_share_guardrail_violations": [
+      "business_format_conversion",
+      "business_reporting",
+      "business_strategy",
+      "corporate_operations",
+      "customer_support",
+      "data_analysis",
+      "document_management",
+      "finance_accounting",
+      "hr_recruiting",
+      "marketing",
+      "meeting_minutes",
+      "product_planning",
+      "project_management",
+      "research",
+      "sales",
+      "security",
+      "training_onboarding"
+    ],
     "reviewer_b_c_same_family_label_overrides": 3215,
     "reviewer_b_c_high_confidence_consensus_overrides": 1401,
     "reviewer_b_c_human_adjudication_queue_records_in_dataset": 2249,

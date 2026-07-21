@@ -14,9 +14,11 @@
     "public_records": 0,
     "training_eligible": false,
     "training_blockers": [
-      "same_family_llm_labels_not_independent_or_human_reviewed",
+      "candidate_labels_not_human_reviewed",
       "independent_reviewer_a_not_completed",
       "human_adjudication_not_completed",
+      "length_label_proxy_above_0_60_guardrail",
+      "task_or_domain_label_balance_guardrail_failed",
       "semantic_embedding_duplicate_candidates_remain_for_revised_labels"
     ]
   },
@@ -199,6 +201,13 @@
     "klue_length_only_roc_auc": 0.5,
     "every_task_type_label_share_between_35_and_65_percent": false,
     "every_service_domain_label_share_between_35_and_65_percent": true,
+    "task_type_label_share_guardrail_violations": [
+      "general_query",
+      "math_problem",
+      "planning",
+      "structured_data_processing"
+    ],
+    "service_domain_label_share_guardrail_violations": [],
     "reviewer_b_c_same_family_label_overrides": 0,
     "reviewer_b_c_high_confidence_consensus_overrides": 0,
     "reviewer_b_c_human_adjudication_queue_records_in_dataset": 19,

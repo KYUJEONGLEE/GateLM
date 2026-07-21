@@ -535,6 +535,48 @@ def verify_freeze_record(freeze: Mapping[str, Any], *, artifact_root: Path) -> N
             ExperimentStatus.INVALID_TEST_CONTAMINATION,
             "PRETEST_FREEZE_HASH_MISMATCH",
         )
+    if (
+        freeze.get("promotionState") != "exploratory_only"
+        or freeze.get("runtimeProfileGenerated") is not False
+    ):
+        raise ExperimentError(
+            ExperimentStatus.INVALID_TEST_CONTAMINATION,
+            "PRETEST_FREEZE_SCOPE_INVALID",
+        )
+    for field, reason in (
+        ("candidateIdentity", "FREEZE_CANDIDATE_IDENTITY_INVALID"),
+        ("candidateSetSha256", "CANDIDATE_SET_SHA256_INVALID"),
+        ("foldMembershipSha256", "FOLD_MEMBERSHIP_SHA256_INVALID"),
+        ("codeConfigSha256", "CODE_CONFIG_SHA256_INVALID"),
+    ):
+        require_bare_sha256(freeze.get(field), reason_code=reason)
+    dataset = freeze.get("dataset")
+    if not isinstance(dataset, Mapping):
+        raise ExperimentError(
+            ExperimentStatus.INVALID_TEST_CONTAMINATION,
+            "FROZEN_DATASET_IDENTITY_MISSING",
+        )
+    for field in (
+        "sha256",
+        "manifestSha256",
+        "splitMembershipSha256",
+        "testDataSha256",
+    ):
+        require_bare_sha256(
+            dataset.get(field),
+            reason_code="FROZEN_DATASET_IDENTITY_INVALID",
+        )
+    for field in ("champion", "slicePolicy"):
+        identity = freeze.get(field)
+        if not isinstance(identity, Mapping):
+            raise ExperimentError(
+                ExperimentStatus.INVALID_TEST_CONTAMINATION,
+                "FROZEN_POLICY_IDENTITY_MISSING",
+            )
+        require_bare_sha256(
+            identity.get("sha256"),
+            reason_code="FROZEN_POLICY_IDENTITY_INVALID",
+        )
     candidates = freeze.get("frozenCandidates")
     if not isinstance(candidates, list) or len(candidates) != 1:
         raise ExperimentError(
@@ -546,6 +588,30 @@ def verify_freeze_record(freeze: Mapping[str, Any], *, artifact_root: Path) -> N
         raise ExperimentError(
             ExperimentStatus.INVALID_TEST_CONTAMINATION,
             "FROZEN_CANDIDATE_INVALID",
+        )
+    encoder = freeze.get("encoder")
+    if not isinstance(encoder, Mapping):
+        raise ExperimentError(
+            ExperimentStatus.INVALID_TEST_CONTAMINATION,
+            "FROZEN_ENCODER_IDENTITY_MISSING",
+        )
+    owner = freeze.get("ownerDecision")
+    if not isinstance(owner, Mapping):
+        raise ExperimentError(
+            ExperimentStatus.INVALID_TEST_CONTAMINATION,
+            "OWNER_DECISION_MISSING",
+        )
+    _rfc3339(str(owner.get("timestamp", "")))
+    if (
+        owner.get("selectedCFn") not in C_FN_SCENARIOS
+        or owner.get("selectedCFn") != candidate.get("selectedCFn")
+        or owner.get("selectedThreshold") != candidate.get("threshold")
+        or candidate.get("candidateSha256") != freeze.get("candidateIdentity")
+        or candidate.get("embeddingDimension") != encoder.get("outputDimension")
+    ):
+        raise ExperimentError(
+            ExperimentStatus.INVALID_TEST_CONTAMINATION,
+            "FROZEN_SELECTION_IDENTITY_MISMATCH",
         )
     model_identity = candidate.get("model")
     calibrator = candidate.get("calibrator")
@@ -582,6 +648,17 @@ def consume_test_access(
             "TEST_EXECUTION_AUTHORIZATION_REQUIRED",
         )
     _rfc3339(authorization_timestamp)
+    owner_timestamp = str(freeze.get("ownerDecision", {}).get("timestamp", ""))
+    _rfc3339(owner_timestamp)
+    authorization_time = datetime.fromisoformat(
+        authorization_timestamp.removesuffix("Z") + "+00:00"
+    )
+    owner_time = datetime.fromisoformat(owner_timestamp.removesuffix("Z") + "+00:00")
+    if authorization_time < owner_time:
+        raise ExperimentError(
+            ExperimentStatus.INVALID_TEST_CONTAMINATION,
+            "TEST_AUTHORIZATION_PREDATES_FREEZE_DECISION",
+        )
     record = {
         "schemaVersion": TEST_ACCESS_SCHEMA,
         "freezeSha256": freeze["freezeSha256"],

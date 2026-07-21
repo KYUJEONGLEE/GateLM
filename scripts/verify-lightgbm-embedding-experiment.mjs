@@ -8,6 +8,8 @@ const configSchemaPath =
 const evidenceSchemaPath =
   "docs/testing/routing/difficulty/schemas/lightgbm-embedding-aggregate-evidence.schema.json";
 const pyprojectPath = "scripts/routing_difficulty_model/pyproject.toml";
+const runbookPath =
+  "docs/testing/routing/difficulty/lightgbm-embedding-experiment-runbook.md";
 const moduleRoot =
   "scripts/routing_difficulty_model/gatelm_difficulty_model";
 const requiredModules = [
@@ -71,6 +73,12 @@ if (
 }
 
 const pyproject = read(pyprojectPath);
+const runbook = read(runbookPath);
+for (const command of requiredCommands) {
+  if (!runbook.includes(`\`${command}\``)) {
+    failures.push(`${runbookPath}: ${command} stage is undocumented`);
+  }
+}
 if (
   !pyproject.includes(
     'gatelm-lightgbm-embedding-experiment = "gatelm_difficulty_model.lightgbm_embedding_experiment_cli:main"',

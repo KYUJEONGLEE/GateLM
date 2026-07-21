@@ -1,0 +1,251 @@
+{
+  "schema_version": "gatelm.routing-difficulty-dataset-manifest.v1",
+  "dataset_version": "routing_difficulty_enterprise_synthetic_8000_codex_advisory_2026_07_22",
+  "record_schema_version": "gatelm.routing-difficulty-dataset-record.v1",
+  "record_schema_path": "docs/routing/datasets/difficulty/schemas/difficulty-dataset-record.schema.json",
+  "dataset_path": "docs/routing/datasets/difficulty/data/enterprise-synthetic-8000.codex-advisory-revised.jsonl",
+  "dataset_sha256": "3c15de8c40b095e06cac823217887443f8f440f77e96a47e92a7546bd3d27011",
+  "generated_at": "2026-07-22T00:00:00Z",
+  "generation_seed": 20260720,
+  "scope": {
+    "initial_target_records": 15000,
+    "generated_records": 8000,
+    "deferred_public_records": 0,
+    "public_records": 0,
+    "training_eligible": false,
+    "training_blockers": [
+      "codex_advisory_labels_not_human_reviewed",
+      "independent_reviewer_a_not_completed",
+      "human_adjudication_not_completed",
+      "length_label_proxy_above_0_60_guardrail",
+      "task_or_domain_label_balance_guardrail_failed",
+      "semantic_embedding_duplicate_candidates_remain_for_codex_advisory_labels"
+    ]
+  },
+  "counts": {
+    "records": 8000,
+    "groups": 1752,
+    "synthetic_records": 6000,
+    "boundary_records": 2000,
+    "human_reviewed_records": 0
+  },
+  "distributions": {
+    "label": {
+      "complex": 4000,
+      "simple": 4000
+    },
+    "language": {
+      "ko": 7800,
+      "mixed": 200
+    },
+    "source": {
+      "boundary": 2000,
+      "synthetic": 6000
+    },
+    "split": {
+      "test": 1200,
+      "train": 5600,
+      "validation": 1200
+    },
+    "task_type": {
+      "business_report": 432,
+      "code_explanation": 428,
+      "code_generation": 320,
+      "code_modification": 432,
+      "code_review": 428,
+      "comparison_evaluation": 416,
+      "data_analysis": 426,
+      "debugging": 428,
+      "document_writing": 320,
+      "fact_explanation": 202,
+      "file_processing": 428,
+      "general_query": 92,
+      "internal_document_query": 468,
+      "json_conversion": 430,
+      "math_problem": 156,
+      "multi_document_comparison": 424,
+      "planning": 156,
+      "rag_query": 428,
+      "search": 320,
+      "structured_data_processing": 88,
+      "summarization": 322,
+      "table_conversion": 428,
+      "translation": 428
+    },
+    "service_domain": {
+      "business_format_conversion": 360,
+      "business_reporting": 360,
+      "business_strategy": 360,
+      "compliance": 360,
+      "corporate_operations": 88,
+      "customer_support": 356,
+      "data_analysis": 360,
+      "document_management": 360,
+      "finance_accounting": 360,
+      "hr_recruiting": 360,
+      "internal_policy": 360,
+      "legal": 360,
+      "marketing": 364,
+      "meeting_minutes": 360,
+      "privacy": 360,
+      "product_planning": 364,
+      "project_management": 356,
+      "rag_internal_knowledge": 356,
+      "research": 360,
+      "sales": 360,
+      "security": 360,
+      "software_development": 360,
+      "training_onboarding": 356
+    },
+    "expression_style": {
+      "abbreviated": 499,
+      "compound_command": 499,
+      "conversational": 500,
+      "imperative": 502,
+      "incomplete": 500,
+      "informal": 500,
+      "interrogative": 501,
+      "keyword_list": 501,
+      "long_explanation": 500,
+      "messenger": 500,
+      "polite": 500,
+      "request_form": 499,
+      "spacing_error": 499,
+      "standard": 500,
+      "technical": 499,
+      "typo": 501
+    },
+    "prompt_structure": {
+      "keyword_list": 401,
+      "multi_paragraph": 2001,
+      "multi_sentence": 799,
+      "single_sentence": 4799
+    },
+    "length_bucket": {
+      "long": 1600,
+      "medium": 3374,
+      "short": 3026
+    },
+    "counterexample_type": {
+      "code_present_simple": 80,
+      "everyday_language_complex": 126,
+      "few_constraints_deep_complex": 126,
+      "file_simple_extraction": 76,
+      "implicit_multistep_complex": 126,
+      "independent_steps_simple": 76,
+      "json_output_simple": 76,
+      "long_answer_simple": 76,
+      "long_document_format_simple": 72,
+      "long_document_translation_simple": 76,
+      "long_input_copy_simple": 76,
+      "long_simple": 80,
+      "many_constraints_mechanical_simple": 82,
+      "no_code_complex": 128,
+      "no_file_expert_analysis": 122,
+      "no_output_format_complex": 122,
+      "no_search_logical_complex": 122,
+      "search_simple_fact": 76,
+      "short_complex": 128,
+      "single_task_long_context_simple": 74,
+      "technical_terms_simple": 80
+    },
+    "automatic_label": {
+      "complex": 4000,
+      "simple": 4000
+    },
+    "label_source": {
+      "llm_codex_advisory_candidate": 19,
+      "synthetic_design": 7981
+    },
+    "review_status": {
+      "needs_adjudication": 19,
+      "pending": 7981
+    }
+  },
+  "coverage": {
+    "task_types": 23,
+    "service_domains": 23,
+    "boundary_types": 21,
+    "every_task_type_has_both_labels": true,
+    "every_service_domain_has_both_labels": true,
+    "every_language_has_both_labels": true,
+    "long_simple_records": 800,
+    "long_complex_records": 800,
+    "label_ratio": "4000:4000",
+    "automatic_label_ratio": "4000:4000",
+    "current_label_distribution_by_language": {
+      "ko": {
+        "simple": 3900,
+        "complex": 3900
+      },
+      "mixed": {
+        "simple": 100,
+        "complex": 100
+      }
+    },
+    "length_label_distribution": {
+      "short": {
+        "complex": 842,
+        "simple": 2184
+      },
+      "medium": {
+        "complex": 2358,
+        "simple": 1016
+      },
+      "long": {
+        "complex": 800,
+        "simple": 800
+      }
+    },
+    "length_only_roc_auc": 0.64965971875,
+    "klue_label_distribution": {},
+    "klue_length_only_roc_auc": 0.5,
+    "every_task_type_label_share_between_35_and_65_percent": false,
+    "every_service_domain_label_share_between_35_and_65_percent": true,
+    "task_type_label_share_guardrail_violations": [
+      "general_query",
+      "math_problem",
+      "planning",
+      "structured_data_processing"
+    ],
+    "service_domain_label_share_guardrail_violations": [],
+    "reviewer_b_c_same_family_label_overrides": 0,
+    "reviewer_b_c_high_confidence_consensus_overrides": 0,
+    "reviewer_b_c_human_adjudication_queue_records_in_dataset": 19,
+    "independent_reviewer_a_complete": false,
+    "base_prompt_projection_sha256": "0df72ee6e2ddbe349f8f3393b7c79600eff6eb239a71fb95b6a22146688a69d3",
+    "revised_prompt_projection_sha256": "0df72ee6e2ddbe349f8f3393b7c79600eff6eb239a71fb95b6a22146688a69d3",
+    "semantic_embedding_dedup_audit_path": "docs/routing/datasets/difficulty/data/initial-routing-difficulty-15000.codex-advisory-revised.semantic-dedup.json",
+    "semantic_embedding_dedup_threshold": 0.985,
+    "semantic_embedding_dedup_verified": false,
+    "codex_advisory_relabel_records": 19,
+    "codex_advisory_simple_records": 3,
+    "codex_advisory_complex_records": 16
+  },
+  "deduplication": {
+    "exact_duplicate_records": 0,
+    "normalized_duplicate_records": 0,
+    "cross_group_near_duplicate_pairs": 0,
+    "near_duplicate_method": "task-language-label bucketed normalized token Jaccard",
+    "near_duplicate_threshold": 0.94,
+    "within_group_variants_allowed": true,
+    "semantic_duplicate_candidate_pairs": 6,
+    "semantic_duplicate_method": "pinned multilingual-E5 native 384D cosine plus same-label/task/domain candidate policy on Codex advisory labels",
+    "semantic_duplicate_threshold": 0.985
+  },
+  "review": {
+    "label_source_distribution": {
+      "llm_codex_advisory_candidate": 19,
+      "synthetic_design": 7981
+    },
+    "review_status_distribution": {
+      "needs_adjudication": 19,
+      "pending": 7981
+    },
+    "codex_advisory_relabel_records": 19,
+    "advisory_method": "deterministic seven-axis policy over blind Reviewer C structured assessments",
+    "independent_reviewer_a_complete": false,
+    "human_reviewed": false,
+    "production_gold": false
+  }
+}

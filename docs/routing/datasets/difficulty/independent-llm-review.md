@@ -93,3 +93,12 @@ B/C가 일치하고 모두 high confidence인 항목은 LLM 합의 후보로만 
 Reviewer C 결과 3,650건의 수신·복구·7축 schema 검증과 B/C 비교 결과는 [`reviews/independent-llm/reviewer-c-gpt/reviewer-c-report.md`](reviews/independent-llm/reviewer-c-gpt/reviewer-c-report.md)에 기록한다. C는 B와 같은 GPT 계열이므로 import가 완료돼도 독립 리뷰어 A 완료로 표시하지 않는다.
 
 Dataset owner 요청에 따라 B/C가 같은 라벨을 냈고 기존 후보와 달랐던 3,215건은 별도 수정본에 반영한다. 원본 dataset은 B/C 리뷰 입력의 재현 가능한 증거로 보존한다. 수정본도 `human_reviewed=false`, `training_eligible=false`이며 B/C 사람 adjudication queue 2,249건을 제거하지 않는다. 적용 결과와 남은 blocker는 [`reviews/independent-llm/reviewer-c-gpt/reviewer-b-c-label-application-report.md`](reviews/independent-llm/reviewer-c-gpt/reviewer-b-c-label-application-report.md)에 기록한다.
+
+Dataset owner의 추가 요청으로 사람 queue 2,249건에 Codex 7축 advisory 정책을 적용한 별도 revision도 생성한다. 결과는 Simple 1,727건, Complex 522건이며 기존 B/C 수정본 대비 실제 라벨 변화는 375건이다. 이 단계는 저장된 Reviewer C의 블라인드 7축 구조화 판정을 Codex 정책으로 다시 결합한 같은 GPT 계열 보조 판단이다. 독립 사람 판정으로 계산하지 않고 2,249건 모두 `needs_adjudication`, `human_reviewed=false`를 유지한다.
+
+표면 속성과 라벨의 결합을 다시 검사하기 위해 Reviewer E(GPT) 위험 회피형 패키지를 별도로 생성한다. 현재 Codex 수정본에서 `Simple`이면서 구조화 처리·일반 질의·영어·한영 혼합·짧은 Prompt에 해당하는 6,697건과, `Complex`이면서 수학·연구에 해당하는 1,277건의 합집합 7,974건이 대상이다. Reviewer 전송본은 현재 라벨, task, 언어, 길이, source, 원본 ID와 항목별 선정 사유를 포함하지 않는다. Simple은 high confidence로 명백히 bounded한 경우만 허용하고, medium/low confidence 또는 사람 판정 요청은 Complex로 고정한다. 이는 False Simple 비용을 우선한 비대칭 정책 리뷰이며 의미론적 gold label이나 독립 reviewer credit이 아니다.
+
+```powershell
+corepack pnpm run routing:difficulty:generate-gpt-risk-sensitive-review-packet
+corepack pnpm run verify:routing-difficulty-gpt-risk-sensitive-review-packet
+```

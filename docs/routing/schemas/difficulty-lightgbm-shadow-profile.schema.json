@@ -143,9 +143,11 @@
       ],
       "properties": {
         "ruleVectorVersion": { "const": "difficulty-feature-vector.v1" },
-        "ruleDimension": { "const": 42 },
+        "ruleDimension": { "enum": [0, 42] },
         "tabularFeatureNames": {
-          "const": [
+          "oneOf": [
+            { "const": [] },
+            { "const": [
             "ruleVectorV1.payloadEmpty",
             "ruleVectorV1.payloadSmall",
             "ruleVectorV1.payloadMedium",
@@ -188,11 +190,12 @@
             "ruleVectorV1.reasoningCriteriaAndConstraintCount",
             "ruleVectorV1.reasoningDepth",
             "ruleVectorV1.reasoningUncertaintyScenarioCount"
+            ] }
           ]
         },
         "semanticMode": { "enum": ["raw", "pca"] },
         "semanticDimension": { "enum": [128, 256, 768] },
-        "totalDimension": { "enum": [170, 298, 810] },
+        "totalDimension": { "enum": [170, 298, 768, 810] },
         "projection": {
           "oneOf": [
             { "type": "null" },
@@ -206,7 +209,7 @@
           "then": {
             "properties": {
               "semanticDimension": { "const": 768 },
-              "totalDimension": { "const": 810 },
+              "totalDimension": { "enum": [768, 810] },
               "projection": { "type": "null" }
             }
           }
@@ -217,7 +220,32 @@
             "properties": {
               "semanticDimension": { "enum": [128, 256] },
               "totalDimension": { "enum": [170, 298] },
+              "ruleDimension": { "const": 42 },
               "projection": { "$ref": "#/$defs/projection" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "ruleDimension": { "const": 0 } } },
+          "then": {
+            "properties": {
+              "tabularFeatureNames": { "const": [] },
+              "semanticMode": { "const": "raw" },
+              "semanticDimension": { "const": 768 },
+              "totalDimension": { "const": 768 },
+              "projection": { "type": "null" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "ruleDimension": { "const": 42 } } },
+          "then": {
+            "properties": {
+              "tabularFeatureNames": {
+                "const": [
+                  "ruleVectorV1.payloadEmpty", "ruleVectorV1.payloadSmall", "ruleVectorV1.payloadMedium", "ruleVectorV1.payloadLarge", "ruleVectorV1.taskCount", "ruleVectorV1.constraintCount", "ruleVectorV1.scopeCount", "ruleVectorV1.dependencyDepth", "ruleVectorV1.categoryGeneral", "ruleVectorV1.categoryCode", "ruleVectorV1.categoryTranslation", "ruleVectorV1.categorySummarization", "ruleVectorV1.categoryReasoning", "ruleVectorV1.generalWorkflowDepth", "ruleVectorV1.generalBranchOrExceptionCount", "ruleVectorV1.generalExtractionBreadth", "ruleVectorV1.generalHasCrossSourceSynthesis", "ruleVectorV1.codeOperationUnknown", "ruleVectorV1.codeOperationSyntax", "ruleVectorV1.codeOperationExample", "ruleVectorV1.codeOperationSmallEdit", "ruleVectorV1.codeOperationDebug", "ruleVectorV1.codeOperationRefactor", "ruleVectorV1.codeOperationDesign", "ruleVectorV1.codeOperationMigration", "ruleVectorV1.codeOperationConcurrency", "ruleVectorV1.codeOperationPerformance", "ruleVectorV1.codeScopeBreadth", "ruleVectorV1.codeCausalComplexity", "ruleVectorV1.codeEngineeringConstraintCount", "ruleVectorV1.translationScopeCount", "ruleVectorV1.translationPreservationConstraintCount", "ruleVectorV1.translationDomainTerminologyLevel", "ruleVectorV1.translationLocalizationDegree", "ruleVectorV1.summarizationSourceBreadth", "ruleVectorV1.summarizationSynthesisLevel", "ruleVectorV1.summarizationFacetCount", "ruleVectorV1.summarizationHasTraceabilityConstraints", "ruleVectorV1.reasoningAlternativeCount", "ruleVectorV1.reasoningCriteriaAndConstraintCount", "ruleVectorV1.reasoningDepth", "ruleVectorV1.reasoningUncertaintyScenarioCount"
+                ]
+              }
             }
           }
         }
@@ -246,7 +274,7 @@
         "relativePath": { "$ref": "#/$defs/safeRelativePath" },
         "sizeBytes": { "type": "integer", "minimum": 1, "maximum": 67108864 },
         "sha256": { "$ref": "#/$defs/sha256" },
-        "numFeatures": { "enum": [170, 298, 810] },
+        "numFeatures": { "enum": [170, 298, 768, 810] },
         "threshold": { "type": "number", "minimum": 0, "maximum": 1 },
         "parameters": { "type": "object" }
       }
@@ -282,7 +310,19 @@
         },
         "familyDisjoint": { "const": true },
         "selectedFrom": {
-          "const": ["tabular_only", "raw_768", "pca_128", "pca_256"]
+          "oneOf": [
+            {
+              "const": ["tabular_only", "embedding_only_768", "raw_768", "pca_128", "pca_256"]
+            },
+            {
+              "const": [
+                "rule_42_plus_e5_small_pca_64",
+                "rule_42_plus_semantic_heads_12",
+                "e5_base_raw_768",
+                "rule_42_plus_e5_base_raw_768"
+              ]
+            }
+          ]
         },
         "selectionSplit": { "const": "validation" },
         "testAccess": { "const": "after_selection_freeze" }

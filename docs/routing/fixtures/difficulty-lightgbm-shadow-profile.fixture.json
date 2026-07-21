@@ -60,7 +60,7 @@
     "seed": 20260721,
     "splitCounts": { "train": 256, "validation": 1, "test": 1 },
     "familyDisjoint": true,
-    "selectedFrom": ["tabular_only", "raw_768", "pca_128", "pca_256"],
+    "selectedFrom": ["tabular_only", "embedding_only_768", "raw_768", "pca_128", "pca_256"],
     "selectionSplit": "validation",
     "testAccess": "after_selection_freeze"
   }

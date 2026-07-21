@@ -30,8 +30,16 @@ CONTRACT_VERSION = "gatelm.internal.routing-difficulty-lightgbm-shadow.v1"
 MODEL_ID = "intfloat/multilingual-e5-base"
 MODEL_SOURCE_REVISION = "d13f1b27baf31030b7fd040960d60d909913633f"
 NATIVE_DIMENSION = 768
-CANDIDATES = ("tabular_only", "raw_768", "pca_128", "pca_256")
-SEMANTIC_RUNTIME_CANDIDATES = frozenset({"raw_768", "pca_128", "pca_256"})
+CANDIDATES = (
+    "tabular_only",
+    "embedding_only_768",
+    "raw_768",
+    "pca_128",
+    "pca_256",
+)
+SEMANTIC_RUNTIME_CANDIDATES = frozenset(
+    {"embedding_only_768", "raw_768", "pca_128", "pca_256"}
+)
 SPLITS = ("train", "validation", "test")
 TRAINING_SEED = 20260721
 ENCODER_ARTIFACT_ROLES = frozenset(
@@ -148,6 +156,7 @@ def train_lightgbm_shadow_candidates(
     pca_by_candidate: dict[str, PCA] = {}
     matrices: dict[str, np.ndarray] = {
         "tabular_only": rules,
+        "embedding_only_768": pooled,
         "raw_768": np.concatenate((rules, pooled), axis=1),
     }
     for projection_dimension in (128, 256):
@@ -271,7 +280,10 @@ def train_lightgbm_shadow_candidates(
             "l2Epsilon": 1e-12,
         }
 
-    total_dimension = RULE_VECTOR_V1_DIMENSION + semantic_dimension
+    rule_dimension = (
+        0 if selected.candidate == "embedding_only_768" else RULE_VECTOR_V1_DIMENSION
+    )
+    total_dimension = rule_dimension + semantic_dimension
     manifest = {
         "schemaVersion": PROFILE_SCHEMA,
         "profileVersion": PROFILE_VERSION,
@@ -285,10 +297,14 @@ def train_lightgbm_shadow_candidates(
         "encoder": dict(encoder_descriptor),
         "featureShape": {
             "ruleVectorVersion": RULE_VECTOR_V1_VERSION,
-            "ruleDimension": RULE_VECTOR_V1_DIMENSION,
-            "tabularFeatureNames": [
-                f"ruleVectorV1.{name}" for name in RULE_VECTOR_V1_FEATURE_NAMES
-            ],
+            "ruleDimension": rule_dimension,
+            "tabularFeatureNames": (
+                []
+                if rule_dimension == 0
+                else [
+                    f"ruleVectorV1.{name}" for name in RULE_VECTOR_V1_FEATURE_NAMES
+                ]
+            ),
             "semanticMode": semantic_mode,
             "semanticDimension": semantic_dimension,
             "totalDimension": total_dimension,

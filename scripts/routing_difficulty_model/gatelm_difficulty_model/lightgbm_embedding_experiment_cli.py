@@ -225,6 +225,22 @@ def load_config(path: Path) -> ExperimentConfig:
         _object(descriptor, reason_code="ENCODER_DESCRIPTOR_INCOMPLETE")
     )
     dataset = _object(value.get("dataset"), reason_code="DATASET_CONFIG_INVALID")
+    if set(dataset) != {
+        "version",
+        "datasetSha256",
+        "manifestPath",
+        "manifestSha256",
+        "splitPolicyVersion",
+        "train",
+        "validation",
+        "test",
+        "testMembership",
+        "testAggregate",
+    }:
+        raise ExperimentError(
+            ExperimentStatus.INVALID_PROTOCOL_DEVIATION,
+            "DATASET_CONFIG_FIELDS_INVALID",
+        )
     for split in ("train", "validation", "test", "testMembership"):
         split_descriptor = _object(
             dataset.get(split),
@@ -254,6 +270,22 @@ def load_config(path: Path) -> ExperimentConfig:
             ExperimentStatus.BLOCKED_INVALID_SPLIT,
             "TEST_AGGREGATE_INVALID",
         )
+    for identity_name in ("champion", "slicePolicy"):
+        identity = _object(
+            value.get(identity_name),
+            reason_code="IMMUTABLE_IDENTITY_INVALID",
+        )
+        if (
+            set(identity) != {"version", "sha256"}
+            or not isinstance(identity.get("version"), str)
+            or not identity["version"]
+            or not isinstance(identity.get("sha256"), str)
+            or len(identity["sha256"]) != 64
+        ):
+            raise ExperimentError(
+                ExperimentStatus.INVALID_PROTOCOL_DEVIATION,
+                "IMMUTABLE_IDENTITY_INVALID",
+            )
     bootstrap = _object(value.get("bootstrap"), reason_code="BOOTSTRAP_CONFIG_INVALID")
     if set(bootstrap) != {"thresholdRepeats", "testRepeats"} or any(
         isinstance(bootstrap.get(field), bool)
@@ -451,7 +483,13 @@ def _validate_safe_test_membership(
         or not isinstance(records, list)
         or len(records) != dataset["testAggregate"]["records"]
         or len(set(records)) != len(records)
-        or any(not isinstance(value, str) or len(value) != 64 for value in [*families, *records])
+        or len(set(families)) != dataset["testAggregate"]["families"]
+        or any(
+            not isinstance(value, str)
+            or len(value) != 64
+            or any(character not in "0123456789abcdef" for character in value)
+            for value in [*families, *records]
+        )
     ):
         raise ExperimentError(
             ExperimentStatus.BLOCKED_INVALID_SPLIT,
@@ -504,6 +542,17 @@ def run_validate(config: ExperimentConfig) -> dict[str, Any]:
     validation = _load_records(config, "validation")
     development = _combine_development_records(train, validation)
     test_membership_sha256 = _validate_safe_test_membership(config, development)
+    test_records = int(config.value["dataset"]["testAggregate"]["records"])
+    total_records = train.arrays.count + validation.arrays.count + test_records
+    if not (
+        train.arrays.count * 100 == total_records * 70
+        and validation.arrays.count * 100 == total_records * 15
+        and test_records * 100 == total_records * 15
+    ):
+        raise ExperimentError(
+            ExperimentStatus.BLOCKED_INVALID_SPLIT,
+            "SPLIT_RATIO_NOT_70_15_15",
+        )
     folds = make_stratified_group_folds(
         labels=train.arrays.labels,
         family_ids=train.arrays.family_ids,
@@ -867,6 +916,17 @@ def run_freeze(
 ) -> dict[str, Any]:
     candidate = read_json_object(
         resolve_output_path(config.output_root, "pretest-freeze-candidate.json")
+    )
+    if candidate.get("codeConfigSha256") != config.config_sha256:
+        raise ExperimentError(
+            ExperimentStatus.INVALID_PROTOCOL_DEVIATION,
+            "FREEZE_CONFIG_IDENTITY_MISMATCH",
+        )
+    verify_artifact_identity(config.output_root, candidate["model"])
+    calibrator = candidate["calibrator"]
+    verify_artifact_identity(
+        config.output_root,
+        {key: calibrator[key] for key in ("relativePath", "sizeBytes", "sha256")},
     )
     record = freeze_owner_selection(
         candidate,
