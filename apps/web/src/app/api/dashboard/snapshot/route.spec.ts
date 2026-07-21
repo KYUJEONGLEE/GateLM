@@ -9,33 +9,31 @@ test("snapshot route authorizes tenant and project access before observability r
   const authenticationIndex = routeSource.indexOf("if (!auth.isAuthenticated)");
   const tenantAccessIndex = routeSource.indexOf("if (!hasConsoleTenantAccess(auth, tenantId))");
   const projectAccessIndex = routeSource.indexOf("if (effectiveProjectId === null)");
-  const providerDirectoryReadIndex = routeSource.indexOf(
-    "const providerDirectoryPromise = getLiveRequestProviderDirectory(tenantId)"
-  );
   const observabilityReadIndex = routeSource.indexOf("] = await Promise.all([");
 
   expect(authenticationIndex).toBeGreaterThan(-1);
   expect(tenantAccessIndex).toBeGreaterThan(authenticationIndex);
   expect(projectAccessIndex).toBeGreaterThan(tenantAccessIndex);
-  expect(providerDirectoryReadIndex).toBeGreaterThan(projectAccessIndex);
-  expect(observabilityReadIndex).toBeGreaterThan(providerDirectoryReadIndex);
+  expect(observabilityReadIndex).toBeGreaterThan(projectAccessIndex);
 });
 
-test("snapshot route shares one provider directory across both live-request surfaces", async () => {
+test("snapshot route excludes live-request reads and filters", async () => {
   const routeSource = await readFile(routeSourceUrl, "utf8");
 
-  expect(routeSource.match(/providerDirectoryPromise\.then/g)).toHaveLength(2);
-  expect(routeSource).toMatch(/projects,\s+providerDirectory/);
-  expect(routeSource).toContain("{ providerDirectory }");
+  expect(routeSource).not.toContain("getLiveOverviewRequests");
+  expect(routeSource).not.toContain("getTenantChatLiveRequests");
+  expect(routeSource).not.toContain("getLiveRequestProviderDirectory");
+  expect(routeSource).not.toContain('query.get("status")');
+  expect(routeSource).not.toContain('query.get("model")');
+  expect(routeSource).not.toContain("liveRequests,");
 });
 
-test("snapshot route returns the whole dashboard payload without caching", async () => {
+test("snapshot route returns the aggregate dashboard payload without caching", async () => {
   const routeSource = (await readFile(routeSourceUrl, "utf8")).replaceAll("\r\n", "\n");
 
   expect(routeSource).toContain('const noStoreHeaders = { "Cache-Control": "no-store" }');
   expect(routeSource).toContain("costOverTime,");
   expect(routeSource).toContain("generatedAt: new Date().toISOString()");
-  expect(routeSource).toContain("liveRequests,");
   expect(routeSource).toContain("monthToDateCostMicroUsd:");
   expect(routeSource).toContain("overview\n  }");
   expect(routeSource).toContain("isProjectScopedForTenant(auth, tenantId)");

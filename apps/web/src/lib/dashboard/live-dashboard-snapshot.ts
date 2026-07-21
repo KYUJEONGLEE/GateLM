@@ -1,16 +1,11 @@
 import type { CostOverTimeSummary } from "@/lib/gateway/cost-over-time-types";
 import type { LiveDashboardOverview } from "@/lib/gateway/live-dashboard-overview";
-import type {
-  LiveRequestsPayload,
-  LiveRequestStatusFilter
-} from "@/lib/gateway/live-requests-types";
 
-export const DASHBOARD_SNAPSHOT_POLL_INTERVAL_MS = 1000;
+export const DASHBOARD_SNAPSHOT_POLL_INTERVAL_MS = 30_000;
 
 export type LiveDashboardSnapshot = {
   costOverTime: CostOverTimeSummary;
   generatedAt: string;
-  liveRequests: LiveRequestsPayload;
   monthToDateCostMicroUsd: number;
   overview: LiveDashboardOverview;
 };
@@ -18,8 +13,6 @@ export type LiveDashboardSnapshot = {
 export type LiveDashboardSnapshotFilters = {
   budgetScopeId: string;
   budgetScopeType: string;
-  liveModel: string;
-  liveStatus: LiveRequestStatusFilter;
   projectId: string;
   range: string;
   resolvedBy: string;
@@ -37,8 +30,6 @@ export function buildLiveDashboardSnapshotQuery(filters: LiveDashboardSnapshotFi
   appendQuery(query, "budgetScopeType", filters.budgetScopeType);
   appendQuery(query, "projectId", filters.projectId);
   appendQuery(query, "resolvedBy", filters.resolvedBy);
-  appendQuery(query, "status", filters.liveStatus);
-  appendQuery(query, "model", filters.liveModel);
   return query.toString();
 }
 

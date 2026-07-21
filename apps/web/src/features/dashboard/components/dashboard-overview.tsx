@@ -31,10 +31,7 @@ import {
 import type { CostOverTimeSummary } from "@/lib/gateway/cost-over-time-types";
 import type { LiveDashboardOverview as DashboardOverview } from "@/lib/gateway/live-dashboard-overview";
 import type { LiveInvocationLogRecord as InvocationLogRecord } from "@/lib/gateway/live-observability-contract";
-import type {
-  LiveRequestsPayload,
-  LiveRequestStatusFilter
-} from "@/lib/gateway/live-requests-types";
+import type { LiveRequestsPayload } from "@/lib/gateway/live-requests-types";
 import {
   formatBudgetScopeDisplayName,
   formatBudgetScopeTypeDisplayName,
@@ -307,22 +304,17 @@ export function DashboardOverviewView({
 }: DashboardOverviewProps) {
   const [snapshot, setSnapshot] = useState<LiveDashboardSnapshot | null>(null);
   const [snapshotError, setSnapshotError] = useState(false);
-  const [liveStatusFilter, setLiveStatusFilter] = useState<LiveRequestStatusFilter>("");
-  const [liveModelFilter, setLiveModelFilter] = useState("");
   const latestGeneratedAtRef = useRef<string | null>(null);
   const snapshotQueryString = useMemo(
     () =>
       buildLiveDashboardSnapshotQuery({
         ...filters,
-        liveModel: liveModelFilter,
-        liveStatus: liveStatusFilter,
         tenantId: initialOverview.filters.tenantId
       }),
-    [filters, initialOverview.filters.tenantId, liveModelFilter, liveStatusFilter]
+    [filters, initialOverview.filters.tenantId]
   );
   const overview = snapshot?.overview ?? initialOverview;
   const costOverTime = snapshot?.costOverTime ?? initialCostOverTime;
-  const liveRequests = snapshot?.liveRequests ?? initialLiveRequests;
   const text = dashboardText[locale];
   const monthToDate = monthToDateOverview ?? overview;
   const kpiCards = [
@@ -513,13 +505,8 @@ export function DashboardOverviewView({
               ...filters,
               tenantId: overview.filters.tenantId
             }}
-            initialPayload={liveRequests}
+            initialPayload={initialLiveRequests}
             locale={locale}
-            onFiltersChange={({ model, status }) => {
-              setLiveModelFilter(model);
-              setLiveStatusFilter(status);
-            }}
-            pollingEnabled={false}
           />
         </div>
       </section>

@@ -14,8 +14,9 @@ const tenantChatLiveRequestsSourceUrl = new URL(
   import.meta.url
 );
 
-test("dashboard replaces all cards from one visibility-aware snapshot poll", async () => {
+test("dashboard separates aggregate and live-request polling", async () => {
   const source = await readFile(overviewSourceUrl, "utf8");
+  const liveRequestsSource = await readFile(liveRequestsSourceUrl, "utf8");
 
   expect(source).toContain("/api/dashboard/snapshot?${snapshotQueryString}");
   expect(source).toContain("DASHBOARD_SNAPSHOT_POLL_INTERVAL_MS");
@@ -23,10 +24,15 @@ test("dashboard replaces all cards from one visibility-aware snapshot poll", asy
   expect(source).toContain('document.addEventListener("visibilitychange"');
   expect(source).toContain("controller?.abort()");
   expect(source).toContain("setSnapshot(payload.data)");
-  expect(source.match(/pollingEnabled=\{false\}/g)).toHaveLength(2);
+  expect(source.match(/pollingEnabled=\{false\}/g)).toHaveLength(1);
+  expect(source).toContain("initialPayload={initialLiveRequests}");
+  expect(source).not.toContain("setLiveStatusFilter");
+  expect(source).not.toContain("setLiveModelFilter");
+  expect(liveRequestsSource).toContain("LIVE_REQUESTS_POLL_INTERVAL_MS = 2000");
+  expect(liveRequestsSource).toContain("pollingEnabled = true");
 });
 
-test("snapshot-managed cards render their incoming payload without an effect-delayed copy", async () => {
+test("dashboard cards render their incoming payload without an effect-delayed copy", async () => {
   const [costSource, liveRequestsSource] = await Promise.all([
     readFile(costSourceUrl, "utf8"),
     readFile(liveRequestsSourceUrl, "utf8")

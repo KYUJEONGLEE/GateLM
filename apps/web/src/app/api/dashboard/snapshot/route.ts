@@ -17,10 +17,6 @@ import {
   toTenantChatCostOverTime,
   toTenantChatDashboardOverview
 } from "@/lib/dashboard/unified-dashboard";
-import {
-  getTenantChatLiveRequests,
-  mergeLiveRequestPayloads
-} from "@/lib/dashboard/tenant-chat-live-requests";
 import type { LiveDashboardSnapshot } from "@/lib/dashboard/live-dashboard-snapshot";
 import { getLiveCostOverTime } from "@/lib/gateway/live-cost-report";
 import {
@@ -29,11 +25,6 @@ import {
   type LiveDashboardOverviewFilters,
   type LiveDashboardRange
 } from "@/lib/gateway/live-dashboard-overview";
-import {
-  getLiveOverviewRequests,
-  getLiveRequestProviderDirectory
-} from "@/lib/gateway/live-overview-requests";
-import type { LiveRequestStatusFilter } from "@/lib/gateway/live-requests-types";
 
 const noStoreHeaders = { "Cache-Control": "no-store" };
 
@@ -69,8 +60,6 @@ export async function GET(request: NextRequest) {
   }
 
   const range = normalizeRange(query.get("range"));
-  const liveStatus = normalizeStatus(query.get("status"));
-  const liveModel = optionalQueryValue(query, "model");
   const projectFilters: LiveDashboardOverviewFilters = {
     budgetScopeId: optionalQueryValue(query, "budgetScopeId"),
     budgetScopeType: optionalQueryValue(query, "budgetScopeType"),
@@ -90,16 +79,12 @@ export async function GET(request: NextRequest) {
       : normalizeSurface(query.get("surface"));
   const liveRange = getDashboardLiveRange(range);
   const monthToDateRange = getMonthToDateRange();
-  const projects = projectsModel.projects;
-  const providerDirectoryPromise = getLiveRequestProviderDirectory(tenantId);
 
   const [
     projectApplicationOverview,
     tenantChatDashboard,
     projectApplicationCost,
     tenantChatCostSeries,
-    projectApplicationLiveRequests,
-    tenantChatLiveRequests,
     projectApplicationMonthToDate,
     tenantChatMonthToDate
   ] = await Promise.all([
@@ -119,33 +104,6 @@ export async function GET(request: NextRequest) {
           liveRange.from,
           liveRange.to,
           costBucketForRange(range)
-        ),
-    surface === "tenant_chat"
-      ? Promise.resolve(undefined)
-      : providerDirectoryPromise.then((providerDirectory) =>
-          getLiveOverviewRequests(
-            tenantId,
-            { ...projectFilters, model: liveModel, status: liveStatus },
-            {
-              projectIds: projects.map((project) => project.id).filter(Boolean),
-              projectNameSource: projectsModel.source,
-              projects,
-              providerDirectory
-            }
-          )
-        ),
-    surface === "project_application"
-      ? Promise.resolve(undefined)
-      : providerDirectoryPromise.then((providerDirectory) =>
-          getTenantChatLiveRequests(
-            tenantId,
-            {
-              model: liveModel,
-              range,
-              status: liveStatus
-            },
-            { providerDirectory }
-          )
         ),
     surface === "tenant_chat"
       ? Promise.resolve(undefined)
@@ -182,14 +140,8 @@ export async function GET(request: NextRequest) {
     tenantChatCost,
     mergeCostOverTime
   );
-  const liveRequests = selectSurfaceValue(
-    surface,
-    projectApplicationLiveRequests,
-    tenantChatLiveRequests,
-    mergeLiveRequestPayloads
-  );
 
-  if (!overview || !costOverTime || !liveRequests) {
+  if (!overview || !costOverTime) {
     return jsonError("Failed to load dashboard snapshot", 502);
   }
 
@@ -206,7 +158,6 @@ export async function GET(request: NextRequest) {
   const snapshot: LiveDashboardSnapshot = {
     costOverTime,
     generatedAt: new Date().toISOString(),
-    liveRequests,
     monthToDateCostMicroUsd: hasMonthToDateData
       ? projectMonthCostMicroUsd + tenantChatMonthCostMicroUsd
       : overview.totalCostMicroUsd,
@@ -257,13 +208,6 @@ function normalizeRange(value: string | null): LiveDashboardRange {
     return value;
   }
   return "15m";
-}
-
-function normalizeStatus(value: string | null): LiveRequestStatusFilter {
-  if (value === "success" || value === "failed" || value === "blocked" || value === "rate_limited") {
-    return value;
-  }
-  return "";
 }
 
 function getMonthToDateRange() {

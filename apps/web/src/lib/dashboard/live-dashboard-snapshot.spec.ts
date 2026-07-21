@@ -6,13 +6,11 @@ import {
   isNewerDashboardSnapshot
 } from "./live-dashboard-snapshot";
 
-test("builds one snapshot query for dashboard and live-request filters", () => {
+test("builds an aggregate snapshot query without live-request filters", () => {
   const query = new URLSearchParams(
     buildLiveDashboardSnapshotQuery({
       budgetScopeId: "budget-1",
       budgetScopeType: "project",
-      liveModel: "gpt-5",
-      liveStatus: "success",
       projectId: "project-1",
       range: "1h",
       resolvedBy: "routing-policy",
@@ -24,11 +22,9 @@ test("builds one snapshot query for dashboard and live-request filters", () => {
   expect(Object.fromEntries(query.entries())).toEqual({
     budgetScopeId: "budget-1",
     budgetScopeType: "project",
-    model: "gpt-5",
     projectId: "project-1",
     range: "1h",
     resolvedBy: "routing-policy",
-    status: "success",
     surface: "project_application",
     tenantId: "tenant-1"
   });
@@ -39,8 +35,6 @@ test("omits empty optional snapshot filters", () => {
     buildLiveDashboardSnapshotQuery({
       budgetScopeId: " ",
       budgetScopeType: "",
-      liveModel: "",
-      liveStatus: "",
       projectId: "",
       range: "15m",
       resolvedBy: "",
@@ -56,8 +50,8 @@ test("omits empty optional snapshot filters", () => {
   });
 });
 
-test("uses a one-second interval and ignores duplicate or older snapshots", () => {
-  expect(DASHBOARD_SNAPSHOT_POLL_INTERVAL_MS).toBe(1000);
+test("uses a thirty-second interval and ignores duplicate or older snapshots", () => {
+  expect(DASHBOARD_SNAPSHOT_POLL_INTERVAL_MS).toBe(30_000);
   expect(isNewerDashboardSnapshot({ generatedAt: "2026-07-15T00:00:01Z" }, null)).toBe(true);
   expect(
     isNewerDashboardSnapshot(
