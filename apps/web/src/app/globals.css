@@ -3169,11 +3169,10 @@ html[data-theme="dark"] .request-log-provider-icon[data-family="openai"] img {
 
 .dashboard-kpi-card {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: center;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: center;
   min-width: 0;
   min-height: 142px;
-  gap: var(--space-4);
   padding: 20px;
   background: var(--surface);
   border: 1px solid var(--border);
@@ -3183,17 +3182,29 @@ html[data-theme="dark"] .request-log-provider-icon[data-family="openai"] img {
 
 .dashboard-kpi-copy {
   display: grid;
-  gap: 3px;
+  gap: 8px;
   min-width: 0;
+}
+
+.dashboard-kpi-heading {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
 }
 
 .dashboard-kpi-icon {
   display: inline-grid;
-  width: 50px;
-  height: 50px;
+  width: 32px;
+  height: 32px;
   flex: 0 0 auto;
   place-items: center;
   border-radius: 999px;
+}
+
+.dashboard-kpi-icon svg {
+  width: 17px;
+  height: 17px;
 }
 
 .dashboard-kpi-label {
@@ -9126,9 +9137,8 @@ html[data-theme="dark"] .request-log-screen {
 }
 
 .request-log-summary-item {
-  display: flex;
-  align-items: center;
-  gap: 11.2px;
+  display: grid;
+  align-content: center;
   min-width: 0;
   padding: 0 19.2px;
   border-left: 1px solid var(--request-log-border);
@@ -9169,10 +9179,17 @@ html[data-theme="dark"] .request-log-screen {
   color: var(--request-log-cost-icon-text);
 }
 
-.request-log-summary-item div {
+.request-log-summary-copy {
   display: grid;
-  gap: 3.2px;
+  gap: 7.2px;
   min-width: 0;
+}
+
+.request-log-summary-heading {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7.2px;
 }
 
 .request-log-summary-item span:not(.request-log-summary-icon) {
@@ -22315,7 +22332,7 @@ html[data-theme="dark"] .dashboard-live-project-pill[data-project-tone="5"] {
 }
 
 .dashboard-overview-content .dashboard-kpi-card strong {
-  font-size: calc(32px + var(--global-font-lift));
+  font-size: calc(40px + var(--global-font-lift));
 }
 
 .dashboard-overview-content .dashboard-cost-over-time-header h2,
@@ -22394,7 +22411,17 @@ html[data-theme="dark"] .dashboard-live-project-pill[data-project-tone="5"] {
   }
 
   html[data-presentation-mode="true"] .dashboard-overview-content .dashboard-kpi-card strong {
-    font-size: calc(42px + var(--global-font-lift));
+    font-size: calc(52px + var(--global-font-lift));
+  }
+
+  html[data-presentation-mode="true"] .dashboard-overview-content .dashboard-kpi-icon {
+    width: 36px;
+    height: 36px;
+  }
+
+  html[data-presentation-mode="true"] .dashboard-overview-content .dashboard-kpi-icon svg {
+    width: 19px;
+    height: 19px;
   }
 
   html[data-presentation-mode="true"] .dashboard-overview-content .dashboard-cost-over-time-header h2,
@@ -25383,5 +25410,231 @@ html[data-theme="dark"] .request-detail-provider-icon[data-family="openai"] img 
   .tenant-monthly-token-controls {
     grid-template-columns: minmax(0, 1fr);
     gap: 22px;
+  }
+}
+
+/* Admin information hierarchy
+   Canvas -> section surface -> primary card. Keep color for actions, charts,
+   and semantic status instead of using it to separate every block. */
+html:not([data-theme="dark"]) .console-shell {
+  --background: #e3e6e9;
+  --surface-subtle: #eef0f2;
+  --surface: #f7f8f9;
+  --card: #ffffff;
+  --popover: #ffffff;
+  --muted: #eceff2;
+  --input: #cfd4da;
+  --border: #c5cbd2;
+  --border-subtle: #d7dbe0;
+  --border-strong: #b4bcc5;
+  --neutral-soft: #f0f2f4;
+  --neutral-border: #d3d8de;
+  --shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --shadow-sm: 0 2px 6px rgba(15, 23, 42, 0.055);
+  --shadow-md: 0 6px 16px rgba(15, 23, 42, 0.07);
+}
+
+html:not([data-theme="dark"]) .console-content {
+  background: var(--background);
+}
+
+html:not([data-theme="dark"]) :is(
+    .console-panel,
+    .dashboard-cost-over-time-panel,
+    .dashboard-provider-usage-panel,
+    .dashboard-live-requests-panel,
+    .analytics-v5-surface,
+    .employee-panel
+  ) {
+  border-color: var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: var(--shadow-xs);
+}
+
+/* The four operational KPIs read as one summary section with internal dividers. */
+html:not([data-theme="dark"])
+  .dashboard-overview-workspace
+  .dashboard-kpi-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1px;
+  overflow: hidden;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--border);
+  box-shadow: var(--shadow-xs);
+}
+
+html:not([data-theme="dark"])
+  .dashboard-overview-workspace
+  .dashboard-kpi-card {
+  border: 0;
+  border-radius: 0;
+  background: var(--card);
+  box-shadow: none;
+}
+
+html:not([data-theme="dark"])
+  .dashboard-kpi-card[data-tone]
+  .dashboard-kpi-icon {
+  background: color-mix(in srgb, var(--brand-blue) 9%, var(--card));
+  color: var(--brand-blue-strong);
+}
+
+html .dashboard-overview-workspace .dashboard-kpi-card[data-tone="orange"] {
+  background: linear-gradient(135deg, #2c5f9f 0%, #1e3a5f 100%);
+}
+
+.dashboard-overview-workspace
+  .dashboard-kpi-card[data-tone="orange"]
+  :is(.dashboard-kpi-label, strong) {
+  color: #ffffff;
+}
+
+.dashboard-overview-workspace
+  .dashboard-kpi-card[data-tone="orange"]
+  .dashboard-kpi-icon {
+  background: rgba(255, 255, 255, 0.14);
+  color: #ffffff;
+}
+
+/* Management pages use bounded section bands instead of loose rows on canvas. */
+html:not([data-theme="dark"]) .management-line-content > :is(
+    .console-panel,
+    .provider-line-panel,
+    .credential-line-panel,
+    .team-section
+  ) {
+  padding: 26px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: var(--shadow-xs);
+}
+
+html:not([data-theme="dark"])
+  .management-line-content
+  > .team-section:first-of-type {
+  border-top: 1px solid var(--border);
+}
+
+html:not([data-theme="dark"])
+  .management-line-content
+  > .application-budget-summary {
+  padding: 18px 22px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+html:not([data-theme="dark"])
+  .management-line-content
+  :is(
+    .project-detail-section,
+    .application-row,
+    .provider-card,
+    .credential-card,
+    .team-row,
+    .budget-policy-card,
+    .table-wrap
+  ),
+html:not([data-theme="dark"])
+  .employee-panel
+  :is(
+    .employee-list-grid,
+    .employee-usage-ranking,
+    .employee-cost-insights
+  ) {
+  background: var(--card);
+}
+
+html:not([data-theme="dark"])
+  .management-line-content
+  .project-detail-section
+  + .project-detail-section {
+  border-top-color: var(--border);
+}
+
+/* Analytics keeps chart colors but removes competing card colors. */
+html:not([data-theme="dark"]) .analytics-v5-metric-grid {
+  border-color: var(--border-strong);
+  background: var(--border);
+  box-shadow: var(--shadow-xs);
+}
+
+html:not([data-theme="dark"]) .analytics-v5-metric {
+  background: var(--card);
+}
+
+html:not([data-theme="dark"]) .analytics-v5-metric-primary {
+  background: color-mix(in srgb, var(--primary) 4%, var(--card));
+}
+
+html:not([data-theme="dark"])
+  :is(.analytics-impact-kpi-grid, .analytics-domain-kpi-grid) {
+  gap: 1px;
+  overflow: hidden;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--border);
+  box-shadow: var(--shadow-xs);
+}
+
+html:not([data-theme="dark"])
+  :is(.analytics-kpi-card, .analytics-impact-kpi, .analytics-domain-kpi) {
+  background: var(--card);
+}
+
+html:not([data-theme="dark"])
+  :is(.analytics-impact-kpi, .analytics-domain-kpi) {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+html:not([data-theme="dark"])
+  :is(.analytics-kpi-card, .analytics-impact-kpi, .analytics-domain-kpi)[data-tone]
+  :is(.analytics-kpi-title > span, div > span) {
+  background: color-mix(in srgb, var(--brand-blue) 9%, var(--card));
+  color: var(--brand-blue-strong);
+}
+
+@media (max-width: 760px) {
+  html:not([data-theme="dark"])
+    .dashboard-overview-workspace
+    .dashboard-kpi-grid,
+  html:not([data-theme="dark"]) .analytics-v5-metric-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  html:not([data-theme="dark"]) .management-line-content > :is(
+      .console-panel,
+      .provider-line-panel,
+      .credential-line-panel,
+      .team-section
+    ) {
+    padding: 20px 18px;
+  }
+}
+
+@media (min-width: 761px) and (max-width: 1100px) {
+  html:not([data-theme="dark"])
+    .dashboard-overview-workspace
+    .dashboard-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1101px) and (max-width: 1280px) {
+  html[data-presentation-mode="true"]:not([data-theme="dark"])
+    .dashboard-overview-workspace
+    .dashboard-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 761px) and (max-width: 980px) {
+  html:not([data-theme="dark"]) .analytics-v5-metric-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }

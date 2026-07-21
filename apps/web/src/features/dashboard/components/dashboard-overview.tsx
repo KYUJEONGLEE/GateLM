@@ -473,9 +473,11 @@ export function DashboardOverviewView({
           <div className="dashboard-kpi-grid" aria-label={text.keyMetrics}>
             {kpiCards.map((card) => (
               <article className="dashboard-kpi-card" data-tone={card.tone} key={card.label}>
-                <span className="dashboard-kpi-icon">{card.icon}</span>
                 <div className="dashboard-kpi-copy">
-                  <span className="dashboard-kpi-label">{card.label}</span>
+                  <div className="dashboard-kpi-heading">
+                    <span className="dashboard-kpi-icon">{card.icon}</span>
+                    <span className="dashboard-kpi-label">{card.label}</span>
+                  </div>
                   <strong>{card.value}</strong>
                 </div>
               </article>

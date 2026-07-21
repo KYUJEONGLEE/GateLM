@@ -69,9 +69,9 @@ test("primary actions share one visual token contract", async () => {
   expect(styles).toContain("--primary-action-padding-inline: 24px;");
   expect(styles).toContain("--primary-action-radius: 999px;");
   expect(styles).toContain("--primary-action-icon-size: 30px;");
-  expect(styles).toContain("--primary-action-background: #0f7f63;");
-  expect(styles).toContain("--primary-action-background-hover: #0c765b;");
-  expect(styles).toContain("--primary-action-shadow: 0 4px 10px rgba(15, 127, 99, 0.3);");
+  expect(styles).toContain("--primary-action-background: #2563eb;");
+  expect(styles).toContain("--primary-action-background-hover: #1d4ed8;");
+  expect(styles).toContain("--primary-action-shadow: 0 4px 10px rgba(37, 99, 235, 0.28);");
   expect(styles).toMatch(
     /\.primary-button,\s*\.secondary-button \{[\s\S]*?height: var\(--primary-action-height\);[\s\S]*?padding: 0 var\(--primary-action-padding-inline\);[\s\S]*?font-size: var\(--primary-action-font-size\);/
   );
