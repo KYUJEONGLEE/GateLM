@@ -515,7 +515,7 @@ html[data-theme="dark"] .gatelm-logo[data-surface="light"] .gatelm-logo-image-da
 }
 
 .gatelm-logo-wordmark span:last-child {
-  color: #10b981;
+  color: #2563eb;
 }
 
 html:not([data-theme="dark"]) .console-sidebar .gatelm-logo-wordmark {
@@ -533,8 +533,19 @@ html[data-theme="dark"] .gatelm-logo-wordmark {
   color: #ffffff;
 }
 
+html[data-theme="dark"] .gatelm-logo-wordmark span:last-child {
+  color: #93c5fd;
+}
+
 html[data-theme="dark"] .gatelm-logo[data-surface="light"] .gatelm-logo-wordmark {
   color: #0f172a;
+}
+
+html[data-theme="dark"]
+  .gatelm-logo[data-surface="light"]
+  .gatelm-logo-wordmark
+  span:last-child {
+  color: #2563eb;
 }
 
 .console-brand-copy {
@@ -793,6 +804,19 @@ html:not([data-theme="dark"]) .console-sidebar .console-subnav-link {
 
 .console-nav-sidebar-toggle {
   margin-left: auto;
+  background: #ffffff;
+  border-color: #dbe3ec;
+  color: #1e3a5f;
+}
+
+.console-nav-sidebar-toggle:hover {
+  background: #f8fafc;
+  border-color: var(--sidebar-ring);
+  color: #1d4ed8;
+}
+
+.console-nav-sidebar-toggle:focus-visible {
+  outline-color: var(--sidebar-ring);
 }
 
 .console-shell[data-sidebar-collapsed="true"] .console-nav-sidebar-toggle {
@@ -14721,9 +14745,9 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
   min-height: 100vh;
   overflow-x: hidden;
   background:
-    linear-gradient(90deg, rgba(16, 163, 127, 0.06) 1px, transparent 1px),
-    linear-gradient(180deg, rgba(16, 163, 127, 0.05) 1px, transparent 1px),
-    #f8fbf9;
+    linear-gradient(90deg, rgba(37, 99, 235, 0.06) 1px, transparent 1px),
+    linear-gradient(180deg, rgba(37, 99, 235, 0.05) 1px, transparent 1px),
+    #f8fafc;
   background-size: 42px 42px, 42px 42px, auto;
   color: #102033;
 }
@@ -14770,7 +14794,7 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
   height: 34px;
   place-items: center;
   background: var(--primary);
-  border: 1px solid rgba(16, 163, 127, 0.7);
+  border: 1px solid rgba(37, 99, 235, 0.7);
   border-radius: 8px;
   color: var(--primary-foreground);
   font-size: calc(var(--font-size-md) + var(--global-font-lift));
@@ -14827,7 +14851,7 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
 .landing-auth-button {
   padding: 0 14px;
   background: rgba(255, 255, 255, 0.72);
-  border: 1px solid rgba(187, 209, 200, 0.9);
+  border: 1px solid rgba(199, 211, 226, 0.9);
   color: #102033;
   box-shadow: var(--shadow-xs);
 }
@@ -14852,9 +14876,9 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
 .landing-auth-button:hover,
 .landing-secondary-cta:hover,
 .landing-summary-link:hover {
-  border-color: rgba(16, 163, 127, 0.42);
+  border-color: rgba(37, 99, 235, 0.42);
   background: #ffffff;
-  color: #0d7e63;
+  color: #1d4ed8;
 }
 
 .landing-auth-button-primary,
@@ -14863,7 +14887,7 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
   background: var(--primary);
   border-color: var(--primary);
   color: var(--primary-foreground);
-  box-shadow: 0 12px 26px rgba(16, 163, 127, 0.22);
+  box-shadow: 0 12px 26px rgba(37, 99, 235, 0.22);
 }
 
 .landing-auth-button-primary:hover,
@@ -14898,9 +14922,9 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
   margin: 0;
   padding: 7px 10px;
   background: rgba(255, 255, 255, 0.78);
-  border: 1px solid rgba(187, 209, 200, 0.9);
+  border: 1px solid rgba(199, 211, 226, 0.9);
   border-radius: 8px;
-  color: #0d7e63;
+  color: #1d4ed8;
   font-size: calc(var(--font-size-sm) + var(--global-font-lift));
   font-weight: var(--font-weight-bold);
   letter-spacing: 0;
@@ -14915,10 +14939,10 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
 .landing-chip-row span {
   min-height: 32px;
   padding: 8px 12px;
-  background: #eef8f4;
-  border: 1px solid #cbe9df;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
   border-radius: 8px;
-  color: #0e8f70;
+  color: #2563eb;
   font-size: calc(var(--font-size-sm) + var(--global-font-lift));
   font-weight: var(--font-weight-bold);
   line-height: 1;
@@ -14959,7 +14983,7 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
 
 .landing-secondary-cta {
   background: rgba(255, 255, 255, 0.82);
-  border-color: rgba(187, 209, 200, 0.9);
+  border-color: rgba(199, 211, 226, 0.9);
   color: #102033;
   box-shadow: var(--shadow-xs);
 }
@@ -14981,7 +15005,7 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
   width: min(100%, 560px);
   overflow: hidden;
   background: rgba(255, 255, 255, 0.92);
-  border: 1px solid rgba(190, 210, 204, 0.95);
+  border: 1px solid rgba(184, 199, 217, 0.95);
   border-radius: 8px;
   box-shadow: 0 24px 72px rgba(16, 32, 51, 0.14);
 }
@@ -14993,7 +15017,7 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
   min-height: 54px;
   padding: 0 18px;
   background: rgba(255, 255, 255, 0.9);
-  border-bottom: 1px solid rgba(219, 231, 226, 0.95);
+  border-bottom: 1px solid rgba(216, 226, 237, 0.95);
 }
 
 .landing-window-bar span {
@@ -15016,9 +15040,9 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
 
 .landing-window-bar em {
   padding: 6px 10px;
-  background: #e6f7ee;
+  background: #eff6ff;
   border-radius: 999px;
-  color: #168454;
+  color: #2563eb;
   font-size: calc(var(--font-size-xs) + var(--global-font-lift));
   font-style: normal;
   font-weight: var(--font-weight-bold);
@@ -15031,8 +15055,8 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
   gap: 18px 14px;
   padding: 26px 22px 22px;
   background:
-    linear-gradient(90deg, rgba(16, 163, 127, 0.07) 1px, transparent 1px),
-    linear-gradient(180deg, rgba(16, 163, 127, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(37, 99, 235, 0.07) 1px, transparent 1px),
+    linear-gradient(180deg, rgba(37, 99, 235, 0.06) 1px, transparent 1px),
     linear-gradient(180deg, rgba(248, 252, 250, 0.94), rgba(255, 255, 255, 0.96));
   background-size: 42px 42px, 42px 42px, auto;
 }
@@ -15042,7 +15066,7 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
 .landing-provider-row span,
 .landing-metric-row div {
   background: #ffffff;
-  border: 1px solid rgba(218, 230, 226, 0.95);
+  border: 1px solid rgba(216, 226, 237, 0.95);
   border-radius: 8px;
   box-shadow: var(--shadow-xs);
 }
@@ -15090,8 +15114,8 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
   display: grid;
   place-items: center;
   padding: 0 10px;
-  background: #f7fbf9;
-  border: 1px solid #dcebe5;
+  background: #f8fafc;
+  border: 1px solid #d8e2ed;
   border-radius: 8px;
   color: #24344a;
   font-size: calc(var(--font-size-xs) + var(--global-font-lift));
@@ -15148,7 +15172,7 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
   width: min(100% - 36px, 1240px);
   margin: 0 auto 18px;
   background: rgba(255, 255, 255, 0.82);
-  border: 1px solid rgba(218, 230, 226, 0.95);
+  border: 1px solid rgba(216, 226, 237, 0.95);
   border-radius: 8px;
   box-shadow: var(--shadow-xs);
 }
@@ -15179,7 +15203,7 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
   place-items: center;
   padding: 0 8px;
   background: #ffffff;
-  border: 1px solid #e2eee9;
+  border: 1px solid #e2e8f0;
   border-radius: 8px;
   color: #1a2d42;
   font-size: calc(var(--font-size-sm) + var(--global-font-lift));
@@ -15232,7 +15256,7 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
   min-height: 38px;
   padding: 0 14px;
   background: #ffffff;
-  border: 1px solid #dcebe5;
+  border: 1px solid #d8e2ed;
   color: #102033;
   font-family: inherit;
   font-size: calc(var(--font-size-sm) + var(--global-font-lift));
@@ -15245,7 +15269,7 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
   margin: 0 auto 18px;
   padding: 46px 34px;
   background: rgba(255, 255, 255, 0.82);
-  border: 1px solid rgba(218, 230, 226, 0.95);
+  border: 1px solid rgba(216, 226, 237, 0.95);
   border-radius: 8px;
   box-shadow: var(--shadow-xs);
 }
@@ -15297,7 +15321,7 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
   min-height: 176px;
   padding: 22px;
   background: #ffffff;
-  border: 1px solid #dcebe5;
+  border: 1px solid #d8e2ed;
   border-radius: 8px;
   box-shadow: var(--shadow-xs);
 }
@@ -15318,7 +15342,7 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
 
 .landing-policy-showcase {
   background:
-    linear-gradient(180deg, rgba(238, 248, 244, 0.86), rgba(255, 255, 255, 0.82)),
+    linear-gradient(180deg, rgba(239, 246, 255, 0.86), rgba(255, 255, 255, 0.82)),
     #ffffff;
 }
 
@@ -15327,7 +15351,7 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
   height: 12px;
   background: var(--primary);
   border-radius: 999px;
-  box-shadow: 0 0 0 6px rgba(16, 163, 127, 0.12);
+  box-shadow: 0 0 0 6px rgba(37, 99, 235, 0.12);
 }
 
 .landing-workflow-section {
@@ -15355,7 +15379,7 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
   min-height: 52px;
   padding: 15px 16px 15px 56px;
   background: #ffffff;
-  border: 1px solid #dcebe5;
+  border: 1px solid #d8e2ed;
   border-radius: 8px;
   color: #24344a;
   font-size: calc(var(--font-size-sm) + var(--global-font-lift));
@@ -15373,10 +15397,10 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
   width: 28px;
   height: 28px;
   place-items: center;
-  background: #eaf8f2;
-  border: 1px solid #b7e5d2;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
   border-radius: 999px;
-  color: #0d7e63;
+  color: #1d4ed8;
   font-size: calc(var(--font-size-xs) + var(--global-font-lift));
   font-weight: var(--font-weight-bold);
   content: counter(workflow-step);
@@ -15388,7 +15412,7 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
   gap: 24px;
   margin-bottom: 54px;
   background:
-    linear-gradient(135deg, rgba(16, 163, 127, 0.1), rgba(255, 255, 255, 0.82) 54%),
+    linear-gradient(135deg, rgba(37, 99, 235, 0.1), rgba(255, 255, 255, 0.82) 54%),
     #ffffff;
 }
 
@@ -15418,9 +15442,9 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
   overflow: auto;
   padding: 26px 26px 30px;
   background:
-    linear-gradient(180deg, rgba(238, 248, 244, 0.72), rgba(255, 255, 255, 0) 130px),
+    linear-gradient(180deg, rgba(239, 246, 255, 0.72), rgba(255, 255, 255, 0) 130px),
     #ffffff;
-  border: 1px solid rgba(190, 218, 207, 0.95);
+  border: 1px solid rgba(191, 219, 254, 0.95);
   border-radius: 8px;
   box-shadow: 0 28px 88px rgba(16, 32, 51, 0.28);
   overscroll-behavior: contain;
@@ -15456,8 +15480,8 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
   min-width: 36px;
   height: 36px;
   padding: 0;
-  background: #f6faf8;
-  border: 1px solid #dcebe5;
+  background: #f8fafc;
+  border: 1px solid #d8e2ed;
   color: #526173;
 }
 
@@ -15466,8 +15490,8 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 6px;
   padding: 4px;
-  background: #f4faf7;
-  border: 1px solid #dcebe5;
+  background: #f8fafc;
+  border: 1px solid #d8e2ed;
   border-radius: 8px;
 }
 
@@ -15501,9 +15525,9 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
 }
 
 .landing-auth-message-success {
-  background: #ecfbf4;
-  border: 1px solid #bcebd6;
-  color: #0d7e63;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1d4ed8;
 }
 
 .landing-auth-form {
@@ -15528,7 +15552,7 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
 .landing-auth-divider::after {
   display: block;
   height: 1px;
-  background: #dcebe5;
+  background: #d8e2ed;
   content: "";
 }
 
@@ -15544,8 +15568,8 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
   width: 100%;
   min-height: 42px;
   padding: 0 12px;
-  background: #fbfdfc;
-  border: 1px solid #dcebe5;
+  background: #f8fafc;
+  border: 1px solid #d8e2ed;
   border-radius: 8px;
   color: #102033;
   outline: none;
@@ -15553,7 +15577,7 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
 
 .landing-auth-form input:focus {
   border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(16, 163, 127, 0.14);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.14);
 }
 
 .landing-auth-submit,
@@ -15580,8 +15604,8 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
 }
 
 .landing-google-button:hover {
-  border-color: #0d7e63;
-  background: #0d7e63;
+  border-color: var(--brand-blue-strong);
+  background: var(--brand-blue-strong);
 }
 
 .landing-google-mark {
@@ -15616,19 +15640,19 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
 .landing-auth-form > .landing-google-button:last-child {
   margin-bottom: 4px;
   background: #ffffff;
-  border-color: #dcebe5;
+  border-color: #d8e2ed;
   color: #102033;
   box-shadow: var(--shadow-xs);
 }
 
 .landing-auth-form > .landing-google-button:last-child:hover {
-  border-color: #c1d8cf;
-  background: #fbfdfc;
+  border-color: #c7d3e2;
+  background: #f8fafc;
 }
 
 .landing-auth-form > .landing-google-button:last-child .landing-google-mark {
   background: transparent;
-  border: 1px solid #dcebe5;
+  border: 1px solid #d8e2ed;
 }
 
 .landing-signup-steps {
@@ -15645,8 +15669,8 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
   gap: 9px;
   min-height: 34px;
   padding: 0 10px;
-  background: #f7fbf9;
-  border: 1px solid #dcebe5;
+  background: #f8fafc;
+  border: 1px solid #d8e2ed;
   border-radius: 8px;
   color: #526173;
   font-size: calc(var(--font-size-sm) + var(--global-font-lift));
@@ -15654,14 +15678,14 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
 }
 
 .landing-signup-steps li[data-active="true"] {
-  background: #eaf8f2;
-  border-color: #b7e5d2;
-  color: #0d7e63;
+  background: #eff6ff;
+  border-color: #bfdbfe;
+  color: #1d4ed8;
 }
 
 .landing-signup-steps li[data-complete="true"] {
-  background: #effaf4;
-  color: #168454;
+  background: #eff6ff;
+  color: #2563eb;
 }
 
 .landing-ready-state {
@@ -15669,10 +15693,10 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
   align-items: flex-start;
   gap: 12px;
   padding: 14px;
-  background: #effaf4;
-  border: 1px solid #c7ead7;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
   border-radius: 8px;
-  color: #166534;
+  color: #1d4ed8;
 }
 
 .landing-ready-state svg {
@@ -15685,7 +15709,7 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
 }
 
 .landing-ready-state strong {
-  color: #124e2d;
+  color: #1e3a8a;
 }
 
 .landing-ready-state span {
@@ -16011,6 +16035,11 @@ html[data-theme="dark"] .landing-brand .gatelm-logo-wordmark {
   color: #ffffff;
 }
 
+.landing-brand .gatelm-logo-wordmark span:last-child,
+html[data-theme="dark"] .landing-brand .gatelm-logo-wordmark span:last-child {
+  color: #93c5fd;
+}
+
 .landing-nav-links {
   gap: 32px;
   color: #9fb0aa;
@@ -16023,7 +16052,7 @@ html[data-theme="dark"] .landing-brand .gatelm-logo-wordmark {
 }
 
 .landing-nav-links a:hover {
-  color: #34d3a6;
+  color: #93c5fd;
 }
 
 .landing-top-actions {
@@ -16052,8 +16081,8 @@ html[data-theme="dark"] .landing-brand .gatelm-logo-wordmark {
 
 .landing-topbar .landing-auth-button:hover {
   background: rgba(255, 255, 255, 0.06);
-  border-color: #34d3a6;
-  color: #34d3a6;
+  border-color: #93c5fd;
+  color: #93c5fd;
 }
 
 .landing-topbar .landing-auth-button-primary {
@@ -16063,8 +16092,8 @@ html[data-theme="dark"] .landing-brand .gatelm-logo-wordmark {
 }
 
 .landing-topbar .landing-auth-button-primary:hover {
-  background: #0d7e63;
-  border-color: #0d7e63;
+  background: var(--brand-blue-strong);
+  border-color: var(--brand-blue-strong);
   color: #ffffff;
 }
 
@@ -16083,9 +16112,9 @@ html[data-theme="dark"] .landing-brand .gatelm-logo-wordmark {
   margin: 0;
   padding: 7px 16px;
   background: transparent;
-  border: 1px solid rgba(16, 185, 129, 0.42);
+  border: 1px solid rgba(96, 165, 250, 0.46);
   border-radius: 999px;
-  color: #34d3a6;
+  color: #93c5fd;
   font-size: 13px;
   letter-spacing: 0;
 }
@@ -16140,8 +16169,8 @@ html[data-theme="dark"] .landing-brand .gatelm-logo-wordmark {
 
 .landing-hero .landing-secondary-cta:hover {
   background: rgba(255, 255, 255, 0.05);
-  border-color: #34d3a6;
-  color: #34d3a6;
+  border-color: #93c5fd;
+  color: #93c5fd;
 }
 
 .landing-hero-cards {
@@ -16186,7 +16215,7 @@ html[data-theme="dark"] .landing-brand .gatelm-logo-wordmark {
   gap: 14px;
   background: #ffffff;
   border: 0;
-  border-bottom: 1px solid #e8efec;
+  border-bottom: 1px solid #e2e8f0;
   border-radius: 0;
   box-shadow: none;
   color: #526173;
@@ -16222,7 +16251,7 @@ html[data-theme="dark"] .landing-brand .gatelm-logo-wordmark {
 }
 
 .landing-provider-band span i {
-  color: #c3d2cc;
+  color: #cbd5e1;
   font-style: normal;
 }
 
@@ -16262,8 +16291,8 @@ html[data-theme="dark"] .landing-brand .gatelm-logo-wordmark {
   gap: 12px;
   min-height: 224px;
   padding: 28px;
-  background: #f8fbf9;
-  border: 1px solid #dcebe5;
+  background: #f8fafc;
+  border: 1px solid #d8e2ed;
   border-radius: 8px;
 }
 
@@ -16330,7 +16359,7 @@ html[data-theme="dark"] .landing-brand .gatelm-logo-wordmark {
 }
 
 .landing-security li > b {
-  color: #34d3a6;
+  color: #60a5fa;
 }
 
 .landing-security li span {
@@ -16386,7 +16415,7 @@ html[data-theme="dark"] .landing-brand .gatelm-logo-wordmark {
   position: relative;
   min-height: 58px;
   padding: 17px 18px 17px 62px;
-  border: 1px solid #dcebe5;
+  border: 1px solid #d8e2ed;
   border-radius: 8px;
   color: #24344a;
   font-size: 14px;
@@ -16404,7 +16433,7 @@ html[data-theme="dark"] .landing-brand .gatelm-logo-wordmark {
   place-items: center;
   background: #0b1620;
   border-radius: 999px;
-  color: #34d3a6;
+  color: #93c5fd;
   font-size: 12px;
   font-weight: 800;
   content: counter(landing-step);
