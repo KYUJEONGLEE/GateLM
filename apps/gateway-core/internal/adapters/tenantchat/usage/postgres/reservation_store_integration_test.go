@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -17,6 +19,229 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+func TestTenantCostPeriodSerializesConcurrentFirstReservationsIntegration(t *testing.T) {
+	pool, fixture := setupUsageIntegration(t)
+	fixture.configureEmployeeLedgerRollout(t, pool, "off")
+	actors := createUsageIntegrationActors(t, pool, fixture, 16)
+	admissionStore := admissionpostgres.NewStore(pool)
+	contexts := make([]tenantchat.RequestContext, 0, len(actors))
+	for index, actor := range actors {
+		suffix := fmt.Sprintf("tenant_cost_first_period_%02d", index)
+		requestContext := fixture.admissionContext()
+		requestContext.RequestID = suffix + "_request"
+		requestContext.TurnID = suffix + "_turn"
+		requestContext.IdempotencyKey = suffix + "_attempt"
+		requestContext.ExecutionScope.Actor = actor
+		requestContext.ExecutionScope.QuotaScope.ID = actor.UserID
+		admission, err := admissionStore.Create(context.Background(), requestContext, tenantchat.AdmissionLimits{
+			RequestsPerWindow: 100, Window: time.Minute, MaxActiveAdmissionsPerUser: 2, AdmissionTTL: 30 * time.Second,
+		})
+		if err != nil {
+			t.Fatalf("create concurrent tenant cost admission %d: %v", index, err)
+		}
+		completionContext := fixture.completionContext(admission.AdmissionID)
+		completionContext.RequestID = requestContext.RequestID
+		completionContext.TurnID = requestContext.TurnID
+		completionContext.IdempotencyKey = requestContext.IdempotencyKey
+		completionContext.ExecutionScope = requestContext.ExecutionScope
+		contexts = append(contexts, completionContext)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	store := NewReservationStore(pool)
+	store.now = func() time.Time { return time.Now().UTC().Truncate(time.Microsecond) }
+	snapshot := fixture.snapshot(1_000_000_000, 1_000)
+	start := make(chan struct{})
+	errorsByRequest := make(chan error, len(contexts))
+	var workers sync.WaitGroup
+	for _, requestContext := range contexts {
+		requestContext := requestContext
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			<-start
+			_, err := store.BeginExecution(ctx, requestContext, snapshot)
+			errorsByRequest <- err
+		}()
+	}
+	close(start)
+	workers.Wait()
+	close(errorsByRequest)
+
+	accepted := 0
+	rejected := 0
+	for err := range errorsByRequest {
+		switch {
+		case err == nil:
+			accepted++
+		case errors.Is(err, tenantchat.ErrBudgetHardLimit):
+			rejected++
+		default:
+			t.Fatalf("concurrent first reservation returned unexpected error: %v", err)
+		}
+	}
+	if accepted != 8 || rejected != 8 {
+		t.Fatalf("tenant budget boundary mismatch: accepted=%d rejected=%d", accepted, rejected)
+	}
+
+	var periodRows, reservationRows, ledgerRows int64
+	var reservedCost int64
+	if err := pool.QueryRow(context.Background(), `
+		SELECT
+		  (SELECT count(*) FROM tenant_chat_tenant_cost_periods WHERE tenant_id = $1::uuid),
+		  COALESCE((SELECT sum(reserved_cost_micro_usd) FROM tenant_chat_tenant_cost_periods WHERE tenant_id = $1::uuid), 0),
+		  (SELECT count(*) FROM tenant_chat_usage_reservations WHERE tenant_id = $1::uuid),
+		  (SELECT count(*) FROM tenant_chat_usage_ledger_entries WHERE tenant_id = $1::uuid AND event_type = 'usage_reserved')
+	`, fixture.tenantID).Scan(&periodRows, &reservedCost, &reservationRows, &ledgerRows); err != nil {
+		t.Fatalf("read concurrent tenant cost balances: %v", err)
+	}
+	if periodRows != 1 || reservedCost != 1_000 || reservationRows != 8 || ledgerRows != 8 {
+		t.Fatalf(
+			"tenant cost serialization mismatch: periods=%d reserved=%d reservations=%d ledger=%d",
+			periodRows, reservedCost, reservationRows, ledgerRows,
+		)
+	}
+}
+
+func TestTenantCostPeriodMixedReservationReconciliationAndReceiptIntegration(t *testing.T) {
+	pool, fixture := setupUsageIntegration(t)
+	fixture.configureEmployeeLedgerRollout(t, pool, "off")
+	actors := createUsageIntegrationActors(t, pool, fixture, 2)
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	store := NewReservationStore(pool)
+	store.now = func() time.Time { return now }
+	snapshot := fixture.snapshot(1_000_000_000, 1_000_000_000)
+	admissionStore := admissionpostgres.NewStore(pool)
+
+	createContext := func(actor tenantchat.Actor, suffix string) tenantchat.RequestContext {
+		t.Helper()
+		admissionContext := fixture.admissionContext()
+		admissionContext.RequestID = suffix + "_request"
+		admissionContext.TurnID = suffix + "_turn"
+		admissionContext.IdempotencyKey = suffix + "_attempt"
+		admissionContext.ExecutionScope.Actor = actor
+		admissionContext.ExecutionScope.QuotaScope.ID = actor.UserID
+		admission, err := admissionStore.Create(context.Background(), admissionContext, tenantchat.AdmissionLimits{
+			RequestsPerWindow: 100, Window: time.Minute, MaxActiveAdmissionsPerUser: 2, AdmissionTTL: 30 * time.Second,
+		})
+		if err != nil {
+			t.Fatalf("create mixed-path admission %s: %v", suffix, err)
+		}
+		completionContext := fixture.completionContext(admission.AdmissionID)
+		completionContext.RequestID = admissionContext.RequestID
+		completionContext.TurnID = admissionContext.TurnID
+		completionContext.IdempotencyKey = admissionContext.IdempotencyKey
+		completionContext.ExecutionScope = admissionContext.ExecutionScope
+		return completionContext
+	}
+
+	pendingContext := createContext(actors[0], "tenant_cost_mixed_pending")
+	pendingReservation, err := store.BeginExecution(context.Background(), pendingContext, snapshot)
+	if err != nil {
+		t.Fatalf("reserve mixed-path pending request: %v", err)
+	}
+	if _, err := store.MarkPending(
+		context.Background(), pendingContext, pendingReservation.ReservationID, 1, "timed_out",
+	); err != nil {
+		t.Fatalf("mark mixed-path request pending: %v", err)
+	}
+	concurrentContext := createContext(actors[1], "tenant_cost_mixed_concurrent")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	start := make(chan struct{})
+	type reconcileResult struct {
+		processed bool
+		err       error
+	}
+	reconcileResults := make(chan reconcileResult, 1)
+	reservationResults := make(chan struct {
+		reservation tenantchat.UsageReservation
+		err         error
+	}, 1)
+	go func() {
+		<-start
+		processed, reconcileErr := store.ReconcileNextPending(ctx, now.Add(15*time.Minute))
+		reconcileResults <- reconcileResult{processed: processed, err: reconcileErr}
+	}()
+	go func() {
+		<-start
+		reservation, reserveErr := store.BeginExecution(ctx, concurrentContext, snapshot)
+		reservationResults <- struct {
+			reservation tenantchat.UsageReservation
+			err         error
+		}{reservation: reservation, err: reserveErr}
+	}()
+	close(start)
+	reconciled := <-reconcileResults
+	reserved := <-reservationResults
+	if reconciled.err != nil || !reconciled.processed {
+		t.Fatalf("mixed-path reconciliation: processed=%t err=%v", reconciled.processed, reconciled.err)
+	}
+	if reserved.err != nil {
+		t.Fatalf("mixed-path concurrent reservation: %v", reserved.err)
+	}
+
+	start = make(chan struct{})
+	receiptResults := make(chan error, 1)
+	settlementResults := make(chan struct {
+		settlement tenantchat.UsageSettlement
+		err        error
+	}, 1)
+	go func() {
+		<-start
+		_, receiptErr := store.RecordUsageReceipt(ctx, tenantchat.UsageReceipt{
+			RequestID: pendingContext.RequestID, AttemptNo: 1, ProviderID: "provider",
+			InputTokens: 80, OutputTokens: 20,
+		})
+		receiptResults <- receiptErr
+	}()
+	go func() {
+		<-start
+		settlement, settleErr := store.FinalizeConfirmed(
+			ctx, concurrentContext, reserved.reservation.ReservationID, 1,
+			tenantchat.ConfirmedUsage{InputTokens: 100, OutputTokens: 50}, "succeeded",
+		)
+		settlementResults <- struct {
+			settlement tenantchat.UsageSettlement
+			err        error
+		}{settlement: settlement, err: settleErr}
+	}()
+	close(start)
+	if receiptErr := <-receiptResults; receiptErr != nil {
+		t.Fatalf("mixed-path usage receipt: %v", receiptErr)
+	}
+	settled := <-settlementResults
+	if settled.err != nil || settled.settlement.State != "settled" {
+		t.Fatalf("mixed-path confirmed settlement: result=%+v err=%v", settled.settlement, settled.err)
+	}
+
+	var reservedCost, confirmedCost, unconfirmedCost, reservationConfirmedCost int64
+	var settledLedgerRows int64
+	if err := pool.QueryRow(context.Background(), `
+		SELECT cost_period.reserved_cost_micro_usd,
+		       cost_period.confirmed_cost_micro_usd,
+		       cost_period.unconfirmed_exposure_micro_usd,
+		       (SELECT COALESCE(sum(confirmed_cost_micro_usd), 0)
+		          FROM tenant_chat_usage_reservations WHERE tenant_id = $1::uuid),
+		       (SELECT count(*) FROM tenant_chat_usage_ledger_entries
+		         WHERE tenant_id = $1::uuid AND event_type = 'usage_settled')
+		FROM tenant_chat_tenant_cost_periods AS cost_period
+		WHERE cost_period.tenant_id = $1::uuid
+	`, fixture.tenantID).Scan(
+		&reservedCost, &confirmedCost, &unconfirmedCost, &reservationConfirmedCost, &settledLedgerRows,
+	); err != nil {
+		t.Fatalf("read mixed-path tenant cost balance: %v", err)
+	}
+	if reservedCost != 0 || unconfirmedCost != 0 || confirmedCost != reservationConfirmedCost || settledLedgerRows != 2 {
+		t.Fatalf(
+			"mixed-path tenant cost mismatch: reserved=%d confirmed=%d reservation_confirmed=%d unconfirmed=%d settled_ledger=%d",
+			reservedCost, confirmedCost, reservationConfirmedCost, unconfirmedCost, settledLedgerRows,
+		)
+	}
+}
 
 func TestConsumeAndReserveWritesAtomicUsageLedgerIntegration(t *testing.T) {
 	pool, fixture := setupUsageIntegration(t)
@@ -1479,6 +1704,43 @@ type usageFixture struct {
 	employeeID string
 }
 
+func createUsageIntegrationActors(
+	t *testing.T,
+	pool *pgxpool.Pool,
+	fixture usageFixture,
+	count int,
+) []tenantchat.Actor {
+	t.Helper()
+	if count < 1 {
+		t.Fatal("usage integration actor count must be positive")
+	}
+	actors := []tenantchat.Actor{{
+		UserID: fixture.userID, ActorKind: "employee", EmployeeID: fixture.employeeID,
+	}}
+	for index := 1; index < count; index++ {
+		userID := mustUsageUUID(t)
+		employeeID := mustUsageUUID(t)
+		email := fmt.Sprintf("%s-%s@integration.local", fixture.tenantID, userID)
+		inserts := []struct {
+			query string
+			args  []any
+		}{
+			{`INSERT INTO users (id, email, status, "createdAt", "updatedAt") VALUES ($1::uuid, $2, 'active', now(), now())`, []any{userID, email}},
+			{`INSERT INTO tenant_memberships (id, "tenantId", "userId", role, status, "createdAt", "updatedAt") VALUES (gen_random_uuid(), $1::uuid, $2::uuid, 'employee', 'active', now(), now())`, []any{fixture.tenantID, userID}},
+			{`INSERT INTO employees (id, "tenantId", "userId", email, status, "invitationStatus", "createdAt", "updatedAt") VALUES ($1::uuid, $2::uuid, $3::uuid, $4, 'active', 'accepted', now(), now())`, []any{employeeID, fixture.tenantID, userID, email}},
+		}
+		for _, insert := range inserts {
+			if _, err := pool.Exec(context.Background(), insert.query, insert.args...); err != nil {
+				t.Fatalf("create usage integration actor %d: %v", index, err)
+			}
+		}
+		actors = append(actors, tenantchat.Actor{
+			UserID: userID, ActorKind: "employee", EmployeeID: employeeID,
+		})
+	}
+	return actors
+}
+
 func (f usageFixture) configureEmployeeLedgerRollout(t *testing.T, pool *pgxpool.Pool, mode string) {
 	t.Helper()
 	if mode != "off" && mode != "shadow" {
@@ -1768,7 +2030,8 @@ func setupUsageIntegration(t *testing.T) (*pgxpool.Pool, usageFixture) {
 		_, _ = pool.Exec(context.Background(), `DELETE FROM tenant_chat_request_admissions WHERE tenant_id = $1::uuid`, fixture.tenantID)
 		_, _ = pool.Exec(context.Background(), `DELETE FROM employees WHERE "tenantId" = $1::uuid`, fixture.tenantID)
 		_, _ = pool.Exec(context.Background(), `DELETE FROM tenant_memberships WHERE "tenantId" = $1::uuid`, fixture.tenantID)
-		_, _ = pool.Exec(context.Background(), `DELETE FROM users WHERE id = $1::uuid`, fixture.userID)
+		_, _ = pool.Exec(context.Background(), `DELETE FROM users WHERE id = $1::uuid OR email LIKE $2`,
+			fixture.userID, fixture.tenantID+"-%@integration.local")
 		_, _ = pool.Exec(context.Background(), `DELETE FROM tenants WHERE id = $1::uuid`, fixture.tenantID)
 		pool.Close()
 	})

@@ -367,6 +367,10 @@ func ensureCostPeriod(
 	snapshot tenantruntime.Snapshot,
 	now time.Time,
 ) (costPeriod, error) {
+	// The tenant cost period row is the accounting serialization point. The
+	// initial insert converges through the unique key, and both this path and
+	// settlement paths lock the row before changing its balances. Keeping that
+	// lock close to the balance write avoids serializing unrelated user work.
 	period, err := findCostPeriod(ctx, tx, requestContext, now)
 	if err == nil {
 		return period, nil

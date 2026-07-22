@@ -42,10 +42,6 @@ func (s *ReservationStore) FinalizeConfirmed(
 		"tenant-chat-user:"+requestContext.ExecutionScope.TenantID+":"+requestContext.ExecutionScope.Actor.UserID); err != nil {
 		return tenantchat.UsageSettlement{}, tenantchat.ErrUsageGuardUnavailable
 	}
-	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`,
-		"tenant-chat-cost:"+requestContext.ExecutionScope.TenantID); err != nil {
-		return tenantchat.UsageSettlement{}, tenantchat.ErrUsageGuardUnavailable
-	}
 
 	reservation, err := lockReservationForSettlement(ctx, tx, requestContext, reservationID)
 	if err != nil {
@@ -386,6 +382,9 @@ func lockSettlementPeriods(
 	requestContext tenantchat.RequestContext,
 	reservation settlementReservation,
 ) (tokenPeriod, costPeriod, error) {
+	// All settlement, receipt, and reconciliation paths use the same
+	// user-period then tenant-cost-period row lock order. The cost row, rather
+	// than a transaction-wide tenant advisory lock, serializes balance writes.
 	var userPeriod tokenPeriod
 	err := tx.QueryRow(ctx, `
 		SELECT period_start, period_end, period_timezone, limit_tokens,

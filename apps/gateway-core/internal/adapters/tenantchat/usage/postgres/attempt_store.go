@@ -47,10 +47,6 @@ func (s *ReservationStore) StartAttempt(
 		"tenant-chat-user:"+requestContext.ExecutionScope.TenantID+":"+requestContext.ExecutionScope.Actor.UserID); err != nil {
 		return tenantchat.ErrUsageGuardUnavailable
 	}
-	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`,
-		"tenant-chat-cost:"+requestContext.ExecutionScope.TenantID); err != nil {
-		return tenantchat.ErrUsageGuardUnavailable
-	}
 
 	var reservationState string
 	var storedRequestID string
