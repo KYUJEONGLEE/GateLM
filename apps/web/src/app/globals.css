@@ -20730,14 +20730,6 @@ html:has(.tenant-management-content) {
   object-fit: contain;
 }
 
-.tenant-routing-provider-icon[data-family="claude"] img {
-  filter: brightness(0);
-}
-
-html[data-theme="dark"] .tenant-routing-provider-icon[data-family="claude"] img {
-  filter: brightness(0) invert(1);
-}
-
 .tenant-routing-provider-control select,
 .tenant-routing-model-control select {
   width: 100%;
