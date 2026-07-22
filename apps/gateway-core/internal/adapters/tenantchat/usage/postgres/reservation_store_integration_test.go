@@ -441,6 +441,26 @@ func TestEmployeeWeeklyFallbackSettlementIsAppliedExactlyOnceIntegration(t *test
 	if err != nil || restricted {
 		t.Fatalf("begin employee weekly fallback: restricted=%t err=%v", restricted, err)
 	}
+	var toppedUpReservationTokens, toppedUpWeeklyTokens, toppedUpLedgerVersion int64
+	if err := pool.QueryRow(context.Background(), `
+		SELECT reservation.reserved_tokens, reservation.ledger_version, period.reserved_tokens
+		FROM tenant_chat_usage_reservations AS reservation
+		JOIN tenant_chat_employee_weekly_token_periods AS period
+		  ON period.tenant_id = reservation.tenant_id
+		 AND period.employee_id = reservation.employee_id
+		 AND period.period_start = reservation.employee_weekly_period_start
+		WHERE reservation.reservation_id = $1::uuid
+	`, reservation.ReservationID).Scan(
+		&toppedUpReservationTokens, &toppedUpLedgerVersion, &toppedUpWeeklyTokens,
+	); err != nil {
+		t.Fatalf("read employee weekly fallback top-up: %v", err)
+	}
+	if toppedUpReservationTokens != 400 || toppedUpWeeklyTokens != 400 || toppedUpLedgerVersion != 2 {
+		t.Fatalf(
+			"employee weekly fallback top-up mismatch: reservation=%d weekly=%d ledger=%d",
+			toppedUpReservationTokens, toppedUpWeeklyTokens, toppedUpLedgerVersion,
+		)
+	}
 	settlement, err := store.FinalizeConfirmed(
 		context.Background(), completionContext, reservation.ReservationID, 2,
 		tenantchat.ConfirmedUsage{InputTokens: 100, OutputTokens: 20}, "succeeded",
@@ -476,6 +496,359 @@ func TestEmployeeWeeklyFallbackSettlementIsAppliedExactlyOnceIntegration(t *test
 			reserved, confirmed, unconfirmed, state, policyVersion,
 		)
 	}
+}
+
+func TestEmployeeWeeklyFallbackTopUpRejectsHardLimitAndRollsBackIntegration(t *testing.T) {
+	pool, fixture := setupUsageIntegration(t)
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	store := NewReservationStore(pool)
+	store.now = func() time.Time { return now }
+	snapshot := fixture.snapshot(10_000, 1_000_000)
+	snapshot.PolicyVersion = 3
+	snapshot.Policies.Quota.EmployeeWeeklyTokenLimits = []tenantruntime.EmployeeWeeklyTokenLimit{{
+		EmployeeID: fixture.employeeID, LimitTokens: 300,
+	}}
+	completionContext, reservation, fallbackRoute := reserveFallbackRequest(
+		t, pool, fixture, store, snapshot, "weekly_fallback_hard_stop",
+	)
+	previousUsage := tenantchat.ConfirmedUsage{InputTokens: 100, OutputTokens: 80}
+
+	for retry := 0; retry < 2; retry++ {
+		if _, err := store.BeginFallback(
+			context.Background(), completionContext, snapshot, reservation.ReservationID,
+			1, previousUsage, "failed_post_delta", fallbackRoute, 2,
+		); !errors.Is(err, tenantchat.ErrEmployeeWeeklyTokenQuotaHardLimit) {
+			t.Fatalf("employee weekly fallback retry %d must be blocked, got %v", retry+1, err)
+		}
+	}
+
+	var reservationTokens, ledgerVersion, weeklyReserved, weeklyConfirmed int64
+	var weeklyState string
+	var topUpLedgerRows, topUpOutboxRows, fallbackAttemptRows int
+	var primaryCompleted bool
+	if err := pool.QueryRow(context.Background(), `
+		SELECT reservation.reserved_tokens, reservation.ledger_version,
+		       period.reserved_tokens, period.confirmed_total_tokens, period.state,
+		       (SELECT count(*) FROM tenant_chat_usage_ledger_entries
+		         WHERE request_id = $2 AND event_type = 'usage_topped_up'),
+		       (SELECT count(*) FROM tenant_chat_invocation_outbox
+		         WHERE aggregate_id = $2 AND event_type = 'usage_topped_up'),
+		       (SELECT count(*) FROM tenant_chat_provider_attempts
+		         WHERE request_id = $2 AND kind = 'fallback'),
+		       primary_attempt.completed_at IS NOT NULL
+		FROM tenant_chat_usage_reservations AS reservation
+		JOIN tenant_chat_employee_weekly_token_periods AS period
+		  ON period.tenant_id = reservation.tenant_id
+		 AND period.employee_id = reservation.employee_id
+		 AND period.period_start = reservation.employee_weekly_period_start
+		JOIN tenant_chat_provider_attempts AS primary_attempt
+		  ON primary_attempt.request_id = reservation.request_id
+		 AND primary_attempt.reservation_id = reservation.reservation_id
+		 AND primary_attempt.attempt_no = 1
+		WHERE reservation.reservation_id = $1::uuid
+	`, reservation.ReservationID, completionContext.RequestID).Scan(
+		&reservationTokens, &ledgerVersion, &weeklyReserved, &weeklyConfirmed, &weeklyState,
+		&topUpLedgerRows, &topUpOutboxRows, &fallbackAttemptRows, &primaryCompleted,
+	); err != nil {
+		t.Fatalf("read rejected employee weekly fallback: %v", err)
+	}
+	if reservationTokens != 200 || ledgerVersion != 1 || weeklyReserved != 200 ||
+		weeklyConfirmed != 0 || weeklyState != "normal" || topUpLedgerRows != 0 ||
+		topUpOutboxRows != 0 || fallbackAttemptRows != 0 || primaryCompleted {
+		t.Fatalf(
+			"rejected fallback changed state: reservation=%d ledger=%d weekly=(%d,%d,%s) topup=(%d,%d) attempts=%d primary_completed=%t",
+			reservationTokens, ledgerVersion, weeklyReserved, weeklyConfirmed, weeklyState,
+			topUpLedgerRows, topUpOutboxRows, fallbackAttemptRows, primaryCompleted,
+		)
+	}
+
+	settlement, err := store.FinalizeConfirmed(
+		context.Background(), completionContext, reservation.ReservationID, 1,
+		previousUsage, "failed_post_delta",
+	)
+	if err != nil {
+		t.Fatalf("settle primary after rejected fallback: %v", err)
+	}
+	if settlement.ConfirmedInputTokens != 100 || settlement.ConfirmedOutputTokens != 80 {
+		t.Fatalf("primary settlement after rejected fallback mismatch: %+v", settlement)
+	}
+	if err := pool.QueryRow(context.Background(), `
+		SELECT reserved_tokens, confirmed_total_tokens
+		FROM tenant_chat_employee_weekly_token_periods
+		WHERE tenant_id = $1::uuid AND employee_id = $2::uuid
+	`, fixture.tenantID, fixture.employeeID).Scan(&weeklyReserved, &weeklyConfirmed); err != nil {
+		t.Fatalf("read weekly period after primary settlement: %v", err)
+	}
+	if weeklyReserved != 0 || weeklyConfirmed != 180 {
+		t.Fatalf("primary settlement was not applied exactly once: reserved=%d confirmed=%d", weeklyReserved, weeklyConfirmed)
+	}
+}
+
+func TestEmployeeWeeklyFallbackTopUpIsAtomicUnderConcurrencyIntegration(t *testing.T) {
+	pool, fixture := setupUsageIntegration(t)
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	store := NewReservationStore(pool)
+	store.now = func() time.Time { return now }
+	snapshot := fixture.snapshot(10_000, 1_000_000)
+	snapshot.PolicyVersion = 3
+	snapshot.Policies.Quota.EmployeeWeeklyTokenLimits = []tenantruntime.EmployeeWeeklyTokenLimit{{
+		EmployeeID: fixture.employeeID, LimitTokens: 600,
+	}}
+	firstContext, firstReservation, fallbackRoute := reserveFallbackRequest(
+		t, pool, fixture, store, snapshot, "weekly_fallback_concurrent_1",
+	)
+	secondContext, secondReservation, _ := reserveFallbackRequest(
+		t, pool, fixture, store, snapshot, "weekly_fallback_concurrent_2",
+	)
+
+	type fallbackResult struct{ err error }
+	results := make(chan fallbackResult, 2)
+	for _, input := range []struct {
+		requestContext tenantchat.RequestContext
+		reservationID  string
+	}{
+		{requestContext: firstContext, reservationID: firstReservation.ReservationID},
+		{requestContext: secondContext, reservationID: secondReservation.ReservationID},
+	} {
+		go func(input struct {
+			requestContext tenantchat.RequestContext
+			reservationID  string
+		}) {
+			_, err := store.BeginFallback(
+				context.Background(), input.requestContext, snapshot, input.reservationID,
+				1, tenantchat.ConfirmedUsage{InputTokens: 100, OutputTokens: 80},
+				"failed_post_delta", fallbackRoute, 2,
+			)
+			results <- fallbackResult{err: err}
+		}(input)
+	}
+	succeeded, blocked := 0, 0
+	for range 2 {
+		result := <-results
+		switch {
+		case result.err == nil:
+			succeeded++
+		case errors.Is(result.err, tenantchat.ErrEmployeeWeeklyTokenQuotaHardLimit):
+			blocked++
+		default:
+			t.Fatalf("concurrent fallback returned unexpected error: %v", result.err)
+		}
+	}
+	if succeeded != 1 || blocked != 1 {
+		t.Fatalf("concurrent fallback decision mismatch: succeeded=%d blocked=%d", succeeded, blocked)
+	}
+
+	var weeklyReserved int64
+	var topUpRows, fallbackAttempts int
+	if err := pool.QueryRow(context.Background(), `
+		SELECT period.reserved_tokens,
+		       (SELECT count(*) FROM tenant_chat_usage_ledger_entries
+		         WHERE tenant_id = $1::uuid AND event_type = 'usage_topped_up'),
+		       (SELECT count(*) FROM tenant_chat_provider_attempts
+		         WHERE tenant_id = $1::uuid AND kind = 'fallback')
+		FROM tenant_chat_employee_weekly_token_periods AS period
+		WHERE period.tenant_id = $1::uuid AND period.employee_id = $2::uuid
+	`, fixture.tenantID, fixture.employeeID).Scan(&weeklyReserved, &topUpRows, &fallbackAttempts); err != nil {
+		t.Fatalf("read concurrent employee weekly fallback: %v", err)
+	}
+	if weeklyReserved != 600 || topUpRows != 1 || fallbackAttempts != 1 {
+		t.Fatalf(
+			"concurrent fallback exceeded weekly quota: reserved=%d topups=%d attempts=%d",
+			weeklyReserved, topUpRows, fallbackAttempts,
+		)
+	}
+}
+
+func TestEmployeeWeeklyFallbackUsesPinnedPeriodAcrossWeekBoundaryIntegration(t *testing.T) {
+	pool, fixture := setupUsageIntegration(t)
+	beforeBoundary := time.Date(2026, 7, 19, 14, 59, 30, 0, time.UTC)
+	afterBoundary := beforeBoundary.Add(time.Minute)
+	store := NewReservationStore(pool)
+	store.now = func() time.Time { return beforeBoundary }
+	snapshot := fixture.snapshot(10_000, 1_000_000)
+	snapshot.PolicyVersion = 3
+	snapshot.Policies.Quota.EmployeeWeeklyTokenLimits = []tenantruntime.EmployeeWeeklyTokenLimit{{
+		EmployeeID: fixture.employeeID, LimitTokens: 1_000,
+	}}
+	completionContext, reservation, fallbackRoute := reserveFallbackRequest(
+		t, pool, fixture, store, snapshot, "weekly_fallback_boundary",
+	)
+	expectedStart, _, err := calendarWeek(beforeBoundary, snapshot.Policies.Quota.Timezone)
+	if err != nil {
+		t.Fatalf("calculate expected employee week: %v", err)
+	}
+
+	store.now = func() time.Time { return afterBoundary }
+	if _, err := store.BeginFallback(
+		context.Background(), completionContext, snapshot, reservation.ReservationID,
+		1, tenantchat.ConfirmedUsage{InputTokens: 100, OutputTokens: 10},
+		"failed_post_delta", fallbackRoute, 2,
+	); err != nil {
+		t.Fatalf("top up fallback across employee week boundary: %v", err)
+	}
+	var periodStart time.Time
+	var reserved, periodRows int64
+	if err := pool.QueryRow(context.Background(), `
+		SELECT period_start, reserved_tokens,
+		       (SELECT count(*) FROM tenant_chat_employee_weekly_token_periods
+		         WHERE tenant_id = $1::uuid AND employee_id = $2::uuid)
+		FROM tenant_chat_employee_weekly_token_periods
+		WHERE tenant_id = $1::uuid AND employee_id = $2::uuid
+	`, fixture.tenantID, fixture.employeeID).Scan(&periodStart, &reserved, &periodRows); err != nil {
+		t.Fatalf("read pinned employee weekly fallback period: %v", err)
+	}
+	if !periodStart.Equal(expectedStart) || reserved != 400 || periodRows != 1 {
+		t.Fatalf(
+			"fallback moved to a different employee week: start=%s expected=%s reserved=%d rows=%d",
+			periodStart, expectedStart, reserved, periodRows,
+		)
+	}
+}
+
+func TestEmployeeWeeklyFallbackStartAttemptRejectsHardLimitIntegration(t *testing.T) {
+	pool, fixture := setupUsageIntegration(t)
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	store := NewReservationStore(pool)
+	store.now = func() time.Time { return now }
+	snapshot := fixture.snapshot(10_000, 1_000_000)
+	snapshot.PolicyVersion = 3
+	snapshot.Policies.Quota.EmployeeWeeklyTokenLimits = []tenantruntime.EmployeeWeeklyTokenLimit{{
+		EmployeeID: fixture.employeeID, LimitTokens: 300,
+	}}
+	completionContext, reservation, fallbackRoute := reserveFallbackRequest(
+		t, pool, fixture, store, snapshot, "weekly_fallback_start_attempt",
+	)
+	if err := store.StartAttempt(
+		context.Background(), completionContext, snapshot, reservation.ReservationID,
+		fallbackRoute, 2, "fallback",
+	); !errors.Is(err, tenantchat.ErrEmployeeWeeklyTokenQuotaHardLimit) {
+		t.Fatalf("StartAttempt fallback must enforce employee weekly quota, got %v", err)
+	}
+	var reservationTokens, ledgerVersion, weeklyReserved int64
+	var fallbackAttempts int
+	if err := pool.QueryRow(context.Background(), `
+		SELECT reservation.reserved_tokens, reservation.ledger_version, period.reserved_tokens,
+		       (SELECT count(*) FROM tenant_chat_provider_attempts
+		         WHERE request_id = $2 AND kind = 'fallback')
+		FROM tenant_chat_usage_reservations AS reservation
+		JOIN tenant_chat_employee_weekly_token_periods AS period
+		  ON period.tenant_id = reservation.tenant_id
+		 AND period.employee_id = reservation.employee_id
+		 AND period.period_start = reservation.employee_weekly_period_start
+		WHERE reservation.reservation_id = $1::uuid
+	`, reservation.ReservationID, completionContext.RequestID).Scan(
+		&reservationTokens, &ledgerVersion, &weeklyReserved, &fallbackAttempts,
+	); err != nil {
+		t.Fatalf("read rejected StartAttempt fallback: %v", err)
+	}
+	if reservationTokens != 200 || ledgerVersion != 1 || weeklyReserved != 200 || fallbackAttempts != 0 {
+		t.Fatalf(
+			"StartAttempt fallback changed state: reservation=%d ledger=%d weekly=%d attempts=%d",
+			reservationTokens, ledgerVersion, weeklyReserved, fallbackAttempts,
+		)
+	}
+}
+
+func TestFallbackWithoutEmployeeWeeklyPolicyRemainsUnlimitedIntegration(t *testing.T) {
+	for _, testCase := range []struct {
+		name string
+	}{
+		{name: "employee"},
+		{name: "tenant_admin"},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			pool, fixture := setupUsageIntegration(t)
+			now := time.Now().UTC().Truncate(time.Microsecond)
+			store := NewReservationStore(pool)
+			store.now = func() time.Time { return now }
+			snapshot := fixture.snapshot(10_000, 1_000_000)
+			actor := fixture.executionScope().Actor
+			if testCase.name == "tenant_admin" {
+				actor = tenantchat.Actor{UserID: fixture.userID, ActorKind: "tenant_admin"}
+			}
+			completionContext, reservation, fallbackRoute := reserveFallbackRequestForActor(
+				t, pool, fixture, store, snapshot, "fallback_without_weekly_"+testCase.name, actor,
+			)
+			if _, err := store.BeginFallback(
+				context.Background(), completionContext, snapshot, reservation.ReservationID,
+				1, tenantchat.ConfirmedUsage{InputTokens: 100, OutputTokens: 10},
+				"failed_post_delta", fallbackRoute, 2,
+			); err != nil {
+				t.Fatalf("fallback without employee weekly policy: %v", err)
+			}
+			var weeklyRows, reservationEmployeeIdentities int
+			if err := pool.QueryRow(context.Background(), `
+				SELECT (SELECT count(*) FROM tenant_chat_employee_weekly_token_periods
+				         WHERE tenant_id = $1::uuid),
+				       (SELECT count(*) FROM tenant_chat_usage_reservations
+				         WHERE reservation_id = $2::uuid AND employee_id IS NOT NULL)
+			`, fixture.tenantID, reservation.ReservationID).Scan(
+				&weeklyRows, &reservationEmployeeIdentities,
+			); err != nil {
+				t.Fatalf("read fallback without employee weekly policy: %v", err)
+			}
+			if weeklyRows != 0 || reservationEmployeeIdentities != 0 {
+				t.Fatalf(
+					"fallback without weekly policy created identity: periods=%d reservations=%d",
+					weeklyRows, reservationEmployeeIdentities,
+				)
+			}
+		})
+	}
+}
+
+func reserveFallbackRequest(
+	t *testing.T,
+	pool *pgxpool.Pool,
+	fixture usageFixture,
+	store *ReservationStore,
+	snapshot tenantruntime.Snapshot,
+	suffix string,
+) (tenantchat.RequestContext, tenantchat.UsageReservation, tenantchat.SelectedRoute) {
+	return reserveFallbackRequestForActor(
+		t, pool, fixture, store, snapshot, suffix, fixture.executionScope().Actor,
+	)
+}
+
+func reserveFallbackRequestForActor(
+	t *testing.T,
+	pool *pgxpool.Pool,
+	fixture usageFixture,
+	store *ReservationStore,
+	snapshot tenantruntime.Snapshot,
+	suffix string,
+	actor tenantchat.Actor,
+) (tenantchat.RequestContext, tenantchat.UsageReservation, tenantchat.SelectedRoute) {
+	t.Helper()
+	admissionContext := fixture.admissionContext()
+	admissionContext.RequestID = suffix + "_request"
+	admissionContext.TurnID = suffix + "_turn"
+	admissionContext.IdempotencyKey = suffix + "_attempt"
+	admissionContext.ExecutionScope.Actor = actor
+	admission, err := admissionpostgres.NewStore(pool).Create(
+		context.Background(), admissionContext,
+		tenantchat.AdmissionLimits{
+			RequestsPerWindow: 100, Window: time.Minute,
+			MaxActiveAdmissionsPerUser: 2, AdmissionTTL: 30 * time.Second,
+		},
+	)
+	if err != nil {
+		t.Fatalf("create fallback admission %s: %v", suffix, err)
+	}
+	completionContext := fixture.completionContext(admission.AdmissionID)
+	completionContext.RequestID = admissionContext.RequestID
+	completionContext.TurnID = admissionContext.TurnID
+	completionContext.IdempotencyKey = admissionContext.IdempotencyKey
+	completionContext.ExecutionScope.Actor = actor
+	reservation, err := store.BeginExecution(context.Background(), completionContext, snapshot)
+	if err != nil {
+		t.Fatalf("reserve fallback request %s: %v", suffix, err)
+	}
+	fallbackRoute, err := selectRoute(snapshot, "economy", "normal", "normal")
+	if err != nil {
+		t.Fatalf("select fallback route %s: %v", suffix, err)
+	}
+	return completionContext, reservation, fallbackRoute
 }
 
 func TestEmployeeWeeklyPendingAndLateUsageAreReconciledExactlyOnceIntegration(t *testing.T) {

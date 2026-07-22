@@ -309,6 +309,57 @@ func findEmployeeWeeklyTokenPeriod(
 	return result, err
 }
 
+// lockEmployeeWeeklyTokenPeriodForFallback resolves the period identity pinned
+// to the original reservation. Using the reservation identity instead of now
+// keeps a fallback that crosses a week boundary in the same weekly ledger.
+func lockEmployeeWeeklyTokenPeriodForFallback(
+	ctx context.Context,
+	tx pgx.Tx,
+	requestContext tenantchat.RequestContext,
+	snapshot tenantruntime.Snapshot,
+	reservationID string,
+) (*tokenPeriod, error) {
+	actor := requestContext.ExecutionScope.Actor
+	if actor.ActorKind != "employee" || actor.EmployeeID == "" {
+		return nil, nil
+	}
+	if _, enabled := snapshot.Policies.Quota.EmployeeWeeklyTokenLimit(actor.EmployeeID); !enabled {
+		return nil, nil
+	}
+
+	var result tokenPeriod
+	err := tx.QueryRow(ctx, `
+		SELECT period.period_start, period.period_end, period.period_timezone, period.limit_tokens,
+		       period.limit_tokens, period.limit_tokens, period.limit_tokens,
+		       period.reserved_tokens, period.confirmed_total_tokens,
+		       period.unconfirmed_tokens, period.state, period.policy_version
+		FROM tenant_chat_usage_reservations AS reservation
+		JOIN tenant_chat_employee_weekly_token_periods AS period
+		  ON period.tenant_id = reservation.tenant_id
+		 AND period.employee_id = reservation.employee_id
+		 AND period.period_start = reservation.employee_weekly_period_start
+		WHERE reservation.reservation_id = $1::uuid
+		  AND reservation.tenant_id = $2::uuid
+		  AND reservation.user_id = $3::uuid
+		  AND reservation.request_id = $4
+		  AND reservation.turn_id = $5
+		  AND reservation.idempotency_key = $6
+		  AND reservation.employee_id = $7::uuid
+		FOR UPDATE OF period
+	`, reservationID, requestContext.ExecutionScope.TenantID, actor.UserID,
+		requestContext.RequestID, requestContext.TurnID, requestContext.IdempotencyKey,
+		actor.EmployeeID).Scan(
+		&result.Start, &result.End, &result.Timezone, &result.Limit,
+		&result.Warning, &result.Economy, &result.HardStop,
+		&result.Reserved, &result.Confirmed, &result.Unconfirmed, &result.State,
+		&result.PolicyVersion,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
 func ensureCostPeriod(
 	ctx context.Context,
 	tx pgx.Tx,
