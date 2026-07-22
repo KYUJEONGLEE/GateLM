@@ -2,6 +2,11 @@ import type { LiveRequestRow } from "@/lib/gateway/live-requests-types";
 import type { Locale } from "@/lib/i18n/locale";
 
 const projectPillToneCount = 6;
+const demoProjectTones: Record<string, number> = {
+  "ask lake": 2,
+  gatelm: 0,
+  "sketch catch": 4
+};
 
 export type PrimaryPolicyResult =
   | {
@@ -50,6 +55,11 @@ export function projectPillTone(value: string | null | undefined) {
   const seed = typeof value === "string" && value.trim().length > 0
     ? value.trim()
     : "unknown-project";
+  const namedTone = demoProjectTones[seed.toLocaleLowerCase()];
+
+  if (namedTone !== undefined) {
+    return namedTone;
+  }
 
   return stableHash(seed) % projectPillToneCount;
 }

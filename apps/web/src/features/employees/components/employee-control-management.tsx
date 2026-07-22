@@ -98,6 +98,7 @@ type EmployeeCostRange = "24h" | "7d" | "30d";
 const EMPLOYEE_WEEKLY_TOKEN_LIMIT_DEFAULT = 1_000_000;
 const EMPLOYEE_WEEKLY_TOKEN_LIMIT_SLIDER_MAX = 10_000_000;
 const EMPLOYEE_WEEKLY_TOKEN_LIMIT_SLIDER_STEP = 1_000_000;
+const EMPLOYEE_COST_RANK_COLORS = ["#d9a321", "#94a3b8", "#b87333", "#0f8f66"];
 const UNASSIGNED_DEPARTMENT_VALUE = "__unassigned_department__";
 
 type EmployeeResponsePayload = {
@@ -2361,7 +2362,7 @@ export function EmployeeControlManagement({
                 maxRows={10}
                 microUsdMaximumFractionDigits={3}
                 orientation="vertical"
-                outlierMultiplier={1.5}
+                rankColors={EMPLOYEE_COST_RANK_COLORS}
                 rows={employeeCostChartRows}
               />
             ) : (
@@ -2385,11 +2386,11 @@ export function EmployeeControlManagement({
             <dl className="employee-cost-insights-metrics">
               <div className="employee-cost-insights-primary">
                 <dt>{locale === "ko" ? "기간 총 비용" : "Total cost"}</dt>
-                <dd>{formatMicroUsd(employeeCostChartVisibleTotal, locale)}</dd>
+                <dd>{formatMicroUsd(employeeCostChartVisibleTotal)}</dd>
               </div>
               <div>
                 <dt>{locale === "ko" ? "사용 직원 평균" : "Average per employee"}</dt>
-                <dd>{formatMicroUsd(employeeCostChartAverage, locale)}</dd>
+                <dd>{formatMicroUsd(employeeCostChartAverage)}</dd>
               </div>
               <div>
                 <dt>{locale === "ko" ? "직원" : "Employees"}</dt>
@@ -2405,7 +2406,7 @@ export function EmployeeControlManagement({
                 <strong>{employeeCostChartTopEmployee?.label ?? "-"}</strong>
                 <b>
                   {employeeCostChartTopEmployee
-                    ? formatMicroUsd(employeeCostChartTopEmployee.value, locale)
+                    ? formatMicroUsd(employeeCostChartTopEmployee.value)
                     : "-"}
                 </b>
               </div>
@@ -2568,35 +2569,16 @@ export function EmployeeControlManagement({
                         className="employee-list-cell employee-token-cell"
                         data-label={usageText.tokens}
                       >
-                        <strong
-                          data-rank={
-                            employeeUsage &&
-                            (employeeUsage.dailyCostMicroUsd ?? 0) > 0 &&
-                            employeeUsage.dailyRank <= 3
-                              ? employeeUsage.dailyRank
-                              : undefined
-                          }
-                        >
-                          {formatMicroUsd(employeeUsage?.dailyCostMicroUsd ?? null, locale)}
+                        <strong>
+                          {formatMicroUsd(employeeUsage?.dailyCostMicroUsd ?? null)}
                         </strong>
                       </div>
                       <div
                         className="employee-list-cell employee-token-cell"
                         data-label={usageText.weeklyTokens}
                       >
-                        <strong
-                          data-rank={
-                            employeeUsage &&
-                            (employeeUsage.weeklyCostMicroUsd ?? 0) > 0 &&
-                            employeeUsage.weeklyRank <= 3
-                              ? employeeUsage.weeklyRank
-                              : undefined
-                          }
-                        >
-                          {formatMicroUsd(
-                            employeeUsage?.weeklyCostMicroUsd ?? null,
-                            locale
-                          )}
+                        <strong>
+                          {formatMicroUsd(employeeUsage?.weeklyCostMicroUsd ?? null)}
                         </strong>
                       </div>
                       <div
@@ -2837,28 +2819,14 @@ export function EmployeeControlManagement({
               <div className="employee-usage-summary-grid">
                 <article>
                   <span>{usageText.tokens}</span>
-                  <strong
-                    data-rank={
-                      (selectedUsage.dailyCostMicroUsd ?? 0) > 0 &&
-                      selectedUsage.dailyRank <= 3
-                        ? selectedUsage.dailyRank
-                        : undefined
-                    }
-                  >
-                    {formatMicroUsd(selectedUsage.dailyCostMicroUsd, locale)}
+                  <strong>
+                    {formatMicroUsd(selectedUsage.dailyCostMicroUsd)}
                   </strong>
                 </article>
                 <article>
                   <span>{usageText.weeklyTokens}</span>
-                  <strong
-                    data-rank={
-                      (selectedUsage.weeklyCostMicroUsd ?? 0) > 0 &&
-                      selectedUsage.weeklyRank <= 3
-                        ? selectedUsage.weeklyRank
-                        : undefined
-                    }
-                  >
-                    {formatMicroUsd(selectedUsage.weeklyCostMicroUsd, locale)}
+                  <strong>
+                    {formatMicroUsd(selectedUsage.weeklyCostMicroUsd)}
                   </strong>
                 </article>
               </div>
@@ -3652,13 +3620,13 @@ function formatTokenLimit(
   return formatTokenCount(value, locale);
 }
 
-function formatMicroUsd(value: number | null, locale: Locale) {
+function formatMicroUsd(value: number | null) {
   if (value === null) {
     return "-";
   }
 
   const usd = (Number.isFinite(value) ? Math.max(0, value) : 0) / 1_000_000;
-  return formatUsd(usd, locale === "ko" ? "ko-KR" : "en-US");
+  return formatUsd(usd, "en-US");
 }
 
 function formatBudgetUsd(value: number) {

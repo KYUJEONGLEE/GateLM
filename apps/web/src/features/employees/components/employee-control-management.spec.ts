@@ -91,9 +91,11 @@ test("employee ranking and detail controls use Tenant Chat cost observation and 
   expect(source).toContain("AnalyticsRankedBarChart");
   expect(source).toContain('kind="micro-usd"');
   expect(source).toContain('orientation="vertical"');
-  expect(source).toContain("outlierMultiplier={1.5}");
-  expect(source).toContain("employeeUsage.dailyRank <= 3");
-  expect(source).toContain("employeeUsage.weeklyRank <= 3");
+  expect(source).toContain(
+    'const EMPLOYEE_COST_RANK_COLORS = ["#d9a321", "#94a3b8", "#b87333", "#0f8f66"]'
+  );
+  expect(source).toContain("rankColors={EMPLOYEE_COST_RANK_COLORS}");
+  expect(source).not.toContain("data-rank=");
   expect(source).toContain('useState<EmployeeCostRange>("30d")');
   expect(source).toContain("row.monthlyCostMicroUsd ?? 0");
   expect(source).toContain('locale === "ko" ? "30일" : "30d"');
@@ -147,7 +149,7 @@ test("employee cost graph requests Tenant Chat ranges", async () => {
 test("employee monetary values round to at most three decimal places", async () => {
   const source = await readFile(employeeManagementSourceUrl, "utf8");
 
-  expect(source).toContain("return formatUsd(usd, locale ===");
+  expect(source).toContain('return formatUsd(usd, "en-US")');
   expect(source).toContain('return formatUsd(value, "en-US")');
   expect(source).toContain("maximumFractionDigits: 3");
   expect(source).toContain("minimumFractionDigits: 2");
