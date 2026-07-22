@@ -22427,7 +22427,7 @@ html[data-theme="dark"] .dashboard-live-project-pill[data-project-tone="5"] {
 }
 
 .dashboard-overview-content .dashboard-kpi-label {
-  font-size: calc(16px + var(--global-font-lift));
+  font-size: calc(20px + var(--global-font-lift));
 }
 
 .dashboard-overview-content .dashboard-kpi-card strong {
