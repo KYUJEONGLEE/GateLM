@@ -465,7 +465,7 @@ export function RequestLogTable({
                         <td>
                           <span
                             className="request-log-project-pill"
-                            data-project-tone={projectTone(record.projectId || projectName)}
+                            data-project-tone={projectTone(projectName)}
                             title={record.projectId}
                           >
                             {projectName}
@@ -613,6 +613,17 @@ function RequestRoutingCell({
 }
 
 function projectTone(value: string) {
+  const namedTones: Record<string, number> = {
+    "ask lake": 2,
+    gatelm: 0,
+    "sketch catch": 4
+  };
+  const namedTone = namedTones[value.trim().toLocaleLowerCase()];
+
+  if (namedTone !== undefined) {
+    return String(namedTone);
+  }
+
   return String(stableHash(value) % 8);
 }
 

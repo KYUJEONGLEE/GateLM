@@ -313,7 +313,7 @@ export function LiveRequestsView({
                     <Link
                       aria-label={`${row.projectName || row.projectId} ${locale === "ko" ? "프로젝트 열기" : "Open project"}`}
                       className="dashboard-live-project-pill"
-                      data-project-tone={projectPillTone(row.projectId || row.projectName)}
+                      data-project-tone={projectPillTone(row.projectName || row.projectId)}
                       href={`/tenants/${encodeURIComponent(tenantId)}/projects/${encodeURIComponent(row.projectId)}/policies`}
                       title={projectTitle(row)}
                     >
