@@ -310,7 +310,13 @@ test("Chat App routing uses a category master-detail presentation without changi
     /\.tenant-chat-app-content \.tenant-routing-difficulty-layout \{[\s\S]*?grid-template-columns: minmax\(0, 1fr\);/
   );
   expect(styles).toMatch(
-    /\.tenant-chat-app-content \.tenant-routing-difficulty-card \{[\s\S]*?min-height: 188px;[\s\S]*?box-shadow: var\(--shadow-md\);/
+    /\.tenant-chat-app-content \.tenant-routing-category-detail \{[\s\S]*?grid-template-rows: auto minmax\(0, 1fr\);[\s\S]*?align-content: stretch;/
+  );
+  expect(styles).toMatch(
+    /\.tenant-chat-app-content \.tenant-routing-difficulty-cards \{[\s\S]*?grid-template-rows: repeat\(2, minmax\(188px, 1fr\)\);[\s\S]*?height: 100%;/
+  );
+  expect(styles).toMatch(
+    /\.tenant-chat-app-content \.tenant-routing-difficulty-card \{[\s\S]*?min-height: 188px;[\s\S]*?height: 100%;[\s\S]*?padding: 26px 28px;[\s\S]*?box-shadow: var\(--shadow-md\);/
   );
   expect(styles).toMatch(
     /\.tenant-chat-app-content[\s\S]*?\.tenant-routing-provider-control select,[\s\S]*?min-height: 54px;[\s\S]*?font-size: 17px;/

@@ -21544,7 +21544,8 @@ html:has(.tenant-management-content) {
 
 .tenant-chat-app-content .tenant-routing-category-detail {
   display: grid;
-  align-content: start;
+  grid-template-rows: auto minmax(0, 1fr);
+  align-content: stretch;
   gap: 16px;
   padding: 18px;
 }
@@ -21563,12 +21564,15 @@ html:has(.tenant-management-content) {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   min-width: 0;
+  min-height: 0;
 }
 
 .tenant-chat-app-content .tenant-routing-difficulty-cards {
   display: grid;
+  grid-template-rows: repeat(2, minmax(188px, 1fr));
   gap: 14px;
   min-width: 0;
+  height: 100%;
 }
 
 .tenant-chat-app-content .tenant-routing-difficulty-card {
@@ -21577,7 +21581,8 @@ html:has(.tenant-management-content) {
   gap: 18px;
   min-width: 0;
   min-height: 188px;
-  padding: 22px 24px;
+  height: 100%;
+  padding: 26px 28px;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   background: var(--surface);
