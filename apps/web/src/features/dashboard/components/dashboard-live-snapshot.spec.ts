@@ -234,6 +234,9 @@ test("dashboard keeps its compact default scale and enlarges operational labels 
     /\.dashboard-overview-content \.dashboard-kpi-label \{[^}]*font-size: calc\(20px \+ var\(--global-font-lift\)\);/
   );
   expect(readabilityStyles).toMatch(
+    /\.dashboard-overview-content :is\([\s\S]*?\.dashboard-kpi-card,[\s\S]*?\.dashboard-cost-over-time-panel,[\s\S]*?\.dashboard-provider-usage-panel,[\s\S]*?\.dashboard-live-requests-panel[\s\S]*?\) \{\s*box-shadow: var\(--shadow-md\);/
+  );
+  expect(readabilityStyles).toMatch(
     /html\[data-presentation-mode="true"\] \.dashboard-overview-content \.dashboard-kpi-label \{[^}]*font-size: calc\(26px \+ var\(--global-font-lift\)\);/
   );
   expect(readabilityStyles).toMatch(

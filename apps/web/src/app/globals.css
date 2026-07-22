@@ -22773,6 +22773,15 @@ html[data-theme="dark"] .dashboard-live-project-pill[data-project-tone="5"] {
   min-height: 142px;
 }
 
+.dashboard-overview-content :is(
+    .dashboard-kpi-card,
+    .dashboard-cost-over-time-panel,
+    .dashboard-provider-usage-panel,
+    .dashboard-live-requests-panel
+  ) {
+  box-shadow: var(--shadow-md);
+}
+
 .dashboard-overview-content .dashboard-kpi-label {
   font-size: calc(20px + var(--global-font-lift));
 }
