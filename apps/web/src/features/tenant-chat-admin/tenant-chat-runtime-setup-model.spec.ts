@@ -280,6 +280,7 @@ test("Chat App routing uses a category master-detail presentation without changi
   expect(source).toContain('className="tenant-routing-workbench"');
   expect(source).toContain('className="tenant-routing-category-option"');
   expect(source).toContain('className="tenant-routing-category-detail"');
+  expect(source).not.toContain('className="tenant-routing-difficulty-rail"');
   expect(source).toContain('useState<TenantChatRoutingCategory>("code")');
   expect(source).toContain('"tenant-routing-model-selectors"');
   expect(source).toContain('"tenant-routing-standalone-controls"');
@@ -306,7 +307,10 @@ test("Chat App routing uses a category master-detail presentation without changi
     /\.tenant-chat-app-content \.tenant-routing-workbench \{[\s\S]*?grid-template-columns: minmax\(300px, 0\.72fr\) minmax\(0, 1\.9fr\);/
   );
   expect(styles).toMatch(
-    /\.tenant-chat-app-content \.tenant-routing-difficulty-card \{[\s\S]*?min-height: 188px;/
+    /\.tenant-chat-app-content \.tenant-routing-difficulty-layout \{[\s\S]*?grid-template-columns: minmax\(0, 1fr\);/
+  );
+  expect(styles).toMatch(
+    /\.tenant-chat-app-content \.tenant-routing-difficulty-card \{[\s\S]*?min-height: 188px;[\s\S]*?box-shadow: var\(--shadow-md\);/
   );
   expect(styles).toMatch(
     /\.tenant-chat-app-content[\s\S]*?\.tenant-routing-provider-control select,[\s\S]*?min-height: 54px;[\s\S]*?font-size: 17px;/

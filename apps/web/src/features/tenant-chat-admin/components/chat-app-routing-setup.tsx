@@ -9,7 +9,6 @@ import {
   ChevronRight,
   Code2,
   FileText,
-  Gauge,
   Info,
   Languages,
   LoaderCircle,
@@ -17,8 +16,7 @@ import {
   MessageSquareText,
   PlugZap,
   RefreshCcw,
-  RefreshCw,
-  Star
+  RefreshCw
 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
@@ -787,17 +785,6 @@ export function ChatAppRoutingSetup({
                         </div>
                       </header>
                       <div className="tenant-routing-difficulty-layout">
-                        <div aria-hidden="true" className="tenant-routing-difficulty-rail">
-                          <div className="tenant-routing-difficulty-step" data-difficulty="simple">
-                            <span><Gauge /></span>
-                            <strong>{locale === "ko" ? "일반 요청" : "Simple"}</strong>
-                          </div>
-                          <span className="tenant-routing-difficulty-connector" />
-                          <div className="tenant-routing-difficulty-step" data-difficulty="complex">
-                            <span><Star /></span>
-                            <strong>{locale === "ko" ? "고성능 요청" : "Complex"}</strong>
-                          </div>
-                        </div>
                         <div className="tenant-routing-difficulty-cards">
                           {difficulties.map((difficulty) => (
                             <article

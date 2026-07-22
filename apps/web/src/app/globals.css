@@ -21439,6 +21439,7 @@ html:has(.tenant-management-content) {
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-md);
   background: var(--surface);
+  box-shadow: var(--shadow-xs);
 }
 
 .tenant-chat-app-content .tenant-routing-category-panel {
@@ -21477,6 +21478,7 @@ html:has(.tenant-management-content) {
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   background: var(--surface);
+  box-shadow: var(--shadow-xs);
   color: var(--foreground);
   text-align: left;
   cursor: pointer;
@@ -21486,6 +21488,7 @@ html:has(.tenant-management-content) {
 .tenant-chat-app-content .tenant-routing-category-option:hover {
   border-color: color-mix(in srgb, var(--primary) 44%, var(--border));
   background: color-mix(in srgb, var(--primary) 3%, var(--surface));
+  box-shadow: var(--shadow-sm);
 }
 
 .tenant-chat-app-content .tenant-routing-category-option[data-active="true"] {
@@ -21558,53 +21561,8 @@ html:has(.tenant-management-content) {
 
 .tenant-chat-app-content .tenant-routing-difficulty-layout {
   display: grid;
-  grid-template-columns: 112px minmax(0, 1fr);
-  gap: 16px;
+  grid-template-columns: minmax(0, 1fr);
   min-width: 0;
-}
-
-.tenant-chat-app-content .tenant-routing-difficulty-rail {
-  display: grid;
-  grid-template-rows: minmax(0, 1fr) 44px minmax(0, 1fr);
-  align-items: center;
-  justify-items: center;
-  min-width: 0;
-  padding: 8px 0;
-}
-
-.tenant-chat-app-content .tenant-routing-difficulty-step {
-  display: grid;
-  justify-items: center;
-  gap: 8px;
-  color: var(--foreground);
-  text-align: center;
-}
-
-.tenant-chat-app-content .tenant-routing-difficulty-step > span {
-  display: inline-grid;
-  width: 52px;
-  height: 52px;
-  place-items: center;
-  border-radius: 999px;
-  background: var(--surface-subtle);
-  color: var(--text-muted);
-}
-
-.tenant-chat-app-content .tenant-routing-difficulty-step > span svg {
-  width: 26px;
-  height: 26px;
-}
-
-.tenant-chat-app-content .tenant-routing-difficulty-step strong {
-  max-width: 76px;
-  font-size: 15px;
-  line-height: 1.35;
-}
-
-.tenant-chat-app-content .tenant-routing-difficulty-connector {
-  width: 1px;
-  height: 44px;
-  border-left: 2px dashed var(--border-strong);
 }
 
 .tenant-chat-app-content .tenant-routing-difficulty-cards {
@@ -21623,7 +21581,7 @@ html:has(.tenant-management-content) {
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   background: var(--surface);
-  box-shadow: var(--shadow-xs);
+  box-shadow: var(--shadow-md);
 }
 
 .tenant-chat-app-content .tenant-routing-difficulty-card > header {
@@ -21753,14 +21711,6 @@ html:has(.tenant-management-content) {
 @media (max-width: 1100px) {
   .tenant-chat-app-content .tenant-routing-workbench {
     grid-template-columns: minmax(260px, 0.7fr) minmax(0, 1.45fr);
-  }
-
-  .tenant-chat-app-content .tenant-routing-difficulty-layout {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .tenant-chat-app-content .tenant-routing-difficulty-rail {
-    display: none;
   }
 
   .tenant-chat-app-content .tenant-routing-difficulty-card .tenant-routing-model-selectors {
