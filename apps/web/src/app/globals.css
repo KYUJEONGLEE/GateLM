@@ -18432,19 +18432,9 @@ html[data-theme="dark"] .landing-brand .gatelm-logo-wordmark span:last-child {
   transform: translateX(2px);
 }
 
-.employee-token-cell strong[data-rank="1"],
-.employee-usage-summary-grid strong[data-rank="1"] {
-  color: #d29a16;
-}
-
-.employee-token-cell strong[data-rank="2"],
-.employee-usage-summary-grid strong[data-rank="2"] {
-  color: #7c899b;
-}
-
-.employee-token-cell strong[data-rank="3"],
-.employee-usage-summary-grid strong[data-rank="3"] {
-  color: #b96b3c;
+.employee-token-cell strong,
+.employee-usage-summary-grid strong {
+  color: var(--foreground);
 }
 
 .employee-usage-dialog {
