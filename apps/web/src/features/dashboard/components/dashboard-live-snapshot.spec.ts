@@ -8,6 +8,7 @@ const costSourceUrl = new URL("./cost-over-time-card.tsx", import.meta.url);
 const dashboardStylesSourceUrl = new URL("../../../app/globals.css", import.meta.url);
 const liveRequestViewSourceUrl = new URL("./live-requests-view.tsx", import.meta.url);
 const liveRequestsSourceUrl = new URL("./live-requests-card.tsx", import.meta.url);
+const projectUsageSourceUrl = new URL("./project-usage-card.tsx", import.meta.url);
 const providerUsageSourceUrl = new URL("./provider-model-usage-card.tsx", import.meta.url);
 const tenantChatLiveRequestsSourceUrl = new URL(
   "../../../lib/dashboard/tenant-chat-live-requests.ts",
@@ -183,6 +184,24 @@ test("provider usage keeps the existing cost breakdown wired to the redesigned d
   );
 });
 
+test("the five-minute dashboard swaps only the usage donut to a project breakdown", async () => {
+  const [overviewSource, projectUsageSource, providerUsageSource] = await Promise.all([
+    readFile(overviewSourceUrl, "utf8"),
+    readFile(projectUsageSourceUrl, "utf8"),
+    readFile(providerUsageSourceUrl, "utf8")
+  ]);
+
+  expect(overviewSource).toContain('filters.range === "5m"');
+  expect(overviewSource).toContain("<ProjectUsageCard");
+  expect(overviewSource).toContain("<ProviderModelUsageCard");
+  expect(overviewSource).toContain("overview.costByProject");
+  expect(overviewSource).toContain("new Map(projects.map((project) => [project.id, project.name]))");
+  expect(projectUsageSource).toContain('title: "프로젝트별 사용량"');
+  expect(projectUsageSource).toContain("value: row.costMicroUsd");
+  expect(projectUsageSource).toContain("formatPercent(row.costMicroUsd / totalCostMicroUsd)");
+  expect(providerUsageSource).toContain('title: "모델 별 사용량"');
+});
+
 test("dashboard keeps cost range controls and stacked mobile panels inside the layout flow", async () => {
   const [costSource, styles] = await Promise.all([
     readFile(costSourceUrl, "utf8"),
@@ -212,7 +231,10 @@ test("dashboard keeps its compact default scale and enlarges operational labels 
   );
 
   expect(readabilityStyles).toMatch(
-    /\.dashboard-overview-content \.dashboard-kpi-label \{[^}]*font-size: calc\(16px \+ var\(--global-font-lift\)\);/
+    /\.dashboard-overview-content \.dashboard-kpi-label \{[^}]*font-size: calc\(20px \+ var\(--global-font-lift\)\);/
+  );
+  expect(readabilityStyles).toMatch(
+    /\.dashboard-overview-content :is\([\s\S]*?\.dashboard-kpi-card,[\s\S]*?\.dashboard-cost-over-time-panel,[\s\S]*?\.dashboard-provider-usage-panel,[\s\S]*?\.dashboard-live-requests-panel[\s\S]*?\) \{\s*box-shadow: var\(--shadow-md\);/
   );
   expect(readabilityStyles).toMatch(
     /html\[data-presentation-mode="true"\] \.dashboard-overview-content \.dashboard-kpi-label \{[^}]*font-size: calc\(26px \+ var\(--global-font-lift\)\);/

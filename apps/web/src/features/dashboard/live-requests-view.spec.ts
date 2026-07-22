@@ -155,6 +155,17 @@ test("returns a stable project pill tone when project identifiers are missing", 
   expect(projectPillTone("")).toBe(missingTone);
 });
 
+test("keeps Krafton demo project pills visually distinct", () => {
+  expect(projectPillTone("GateLM")).toBe(0);
+  expect(projectPillTone("Ask Lake")).toBe(2);
+  expect(projectPillTone("Sketch Catch")).toBe(4);
+  expect(new Set([
+    projectPillTone("GateLM"),
+    projectPillTone("Ask Lake"),
+    projectPillTone("Sketch Catch")
+  ]).size).toBe(3);
+});
+
 test("formats request cost for fast table scanning without hiding sub-cent spend", () => {
   expect(formatLiveRequestCostUsd(0)).toBe("$0.00");
   expect(formatLiveRequestCostUsd(0.0004)).toBe("$0.001");

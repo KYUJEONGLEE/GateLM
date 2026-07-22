@@ -48,6 +48,17 @@ test("request log table stays full width with compact text and rows", async () =
   );
 });
 
+test("request log summary metrics render as separate dashboard-style cards", async () => {
+  const styles = await readFile(stylesSourceUrl, "utf8");
+
+  expect(styles).toMatch(
+    /\.request-log-summary-strip \{[^}]*grid-template-columns: repeat\(5, minmax\(0, 1fr\)\);[^}]*gap: var\(--space-4\);/
+  );
+  expect(styles).toMatch(
+    /\.request-log-summary-item \{[^}]*min-height: 116px;[^}]*padding: 20px;[^}]*border: 1px solid var\(--border-strong\);[^}]*border-radius: 10px;[^}]*background: var\(--card\);[^}]*box-shadow: var\(--shadow-xs\);/
+  );
+});
+
 test("request log list uses compact costs and stronger typography without changing detail cost precision", async () => {
   const [tableSource, detailSource, styles] = await Promise.all([
     readFile(requestLogTableSourceUrl, "utf8"),
