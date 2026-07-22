@@ -98,6 +98,7 @@ type EmployeeCostRange = "24h" | "7d" | "30d";
 const EMPLOYEE_WEEKLY_TOKEN_LIMIT_DEFAULT = 1_000_000;
 const EMPLOYEE_WEEKLY_TOKEN_LIMIT_SLIDER_MAX = 10_000_000;
 const EMPLOYEE_WEEKLY_TOKEN_LIMIT_SLIDER_STEP = 1_000_000;
+const EMPLOYEE_COST_RANK_COLORS = ["#d9a321", "#94a3b8", "#b87333", "#0f8f66"];
 const UNASSIGNED_DEPARTMENT_VALUE = "__unassigned_department__";
 
 type EmployeeResponsePayload = {
@@ -2361,7 +2362,7 @@ export function EmployeeControlManagement({
                 maxRows={10}
                 microUsdMaximumFractionDigits={3}
                 orientation="vertical"
-                outlierMultiplier={1.5}
+                rankColors={EMPLOYEE_COST_RANK_COLORS}
                 rows={employeeCostChartRows}
               />
             ) : (

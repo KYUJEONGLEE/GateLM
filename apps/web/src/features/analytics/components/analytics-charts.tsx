@@ -55,6 +55,7 @@ export function AnalyticsRankedBarChart({
   orientation = "horizontal",
   outlierMultiplier,
   presentation = false,
+  rankColors,
   rows
 }: {
   ariaLabel: string;
@@ -65,6 +66,7 @@ export function AnalyticsRankedBarChart({
   orientation?: "horizontal" | "vertical";
   outlierMultiplier?: number;
   presentation?: boolean;
+  rankColors?: readonly string[];
   rows: AnalyticsValueRow[];
 }) {
   const theme = useAnalyticsChartTheme();
@@ -161,7 +163,9 @@ export function AnalyticsRankedBarChart({
             itemStyle: {
               borderRadius: isVertical ? [5, 5, 0, 0] : [0, 3, 3, 0],
               color:
-                outlierThreshold === null
+                rankColors && rankColors.length > 0
+                  ? rankColors[Math.min(index, rankColors.length - 1)]
+                  : outlierThreshold === null
                   ? (outcomeColors[row.id] ?? palette[index] ?? palette[0])
                   : row.value >= outlierThreshold
                     ? palette[3]
@@ -188,6 +192,7 @@ export function AnalyticsRankedBarChart({
       microUsdMaximumFractionDigits,
       outlierThreshold,
       presentation,
+      rankColors,
       theme,
       visibleRows
     ]
