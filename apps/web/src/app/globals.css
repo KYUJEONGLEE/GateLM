@@ -25551,26 +25551,26 @@ html:not([data-theme="dark"]) :is(
   box-shadow: var(--shadow-xs);
 }
 
-/* The four operational KPIs read as one summary section with internal dividers. */
+/* Keep the operational KPIs visually distinct and easy to scan. */
 html:not([data-theme="dark"])
   .dashboard-overview-workspace
   .dashboard-kpi-grid {
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 1px;
-  overflow: hidden;
-  border: 1px solid var(--border-strong);
-  border-radius: 10px;
-  background: var(--border);
-  box-shadow: var(--shadow-xs);
+  gap: var(--space-4);
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 html:not([data-theme="dark"])
   .dashboard-overview-workspace
   .dashboard-kpi-card {
-  border: 0;
-  border-radius: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
   background: var(--card);
-  box-shadow: none;
+  box-shadow: var(--shadow-xs);
 }
 
 html:not([data-theme="dark"])
