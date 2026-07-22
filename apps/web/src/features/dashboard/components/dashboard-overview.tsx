@@ -21,6 +21,10 @@ import {
   ProviderModelUsageCard,
   type ProviderModelUsageRow
 } from "@/features/dashboard/components/provider-model-usage-card";
+import {
+  ProjectUsageCard,
+  type ProjectUsageRow
+} from "@/features/dashboard/components/project-usage-card";
 import type { ProjectRecord } from "@/lib/control-plane/projects-types";
 import {
   buildLiveDashboardSnapshotQuery,
@@ -504,11 +508,19 @@ export function DashboardOverviewView({
               }))}
               rangeLabel={rangeLabel(filters.range, locale)}
             />
-            <ProviderModelUsageCard
-              detailsHref={analyticsHref(overview.filters.tenantId, filters)}
-              locale={locale}
-              rows={buildProviderModelUsageRows(overview)}
-            />
+            {filters.range === "5m" ? (
+              <ProjectUsageCard
+                detailsHref={analyticsHref(overview.filters.tenantId, filters)}
+                locale={locale}
+                rows={buildProjectUsageRows(overview, projects, locale)}
+              />
+            ) : (
+              <ProviderModelUsageCard
+                detailsHref={analyticsHref(overview.filters.tenantId, filters)}
+                locale={locale}
+                rows={buildProviderModelUsageRows(overview)}
+              />
+            )}
           </div>
           <LiveRequestsCard
             filters={{
@@ -604,6 +616,26 @@ function buildProviderModelUsageRows(overview: DashboardOverview): ProviderModel
   return Array.from(rowMap.values()).sort(
     (first, second) => second.costMicroUsd - first.costMicroUsd
   );
+}
+
+function buildProjectUsageRows(
+  overview: DashboardOverview,
+  projects: ProjectRecord[],
+  locale: Locale
+): ProjectUsageRow[] {
+  const projectNames = new Map(projects.map((project) => [project.id, project.name]));
+
+  return (overview.costByProject ?? [])
+    .map((row) => ({
+      costMicroUsd: Math.max(row.costMicroUsd, 0),
+      projectId: row.projectId,
+      projectName:
+        projectNames.get(row.projectId) ??
+        (row.projectId === "unknown_project"
+          ? (locale === "ko" ? "미확인 프로젝트" : "Unknown project")
+          : formatDisplayIdentifier(row.projectId))
+    }))
+    .sort((first, second) => second.costMicroUsd - first.costMicroUsd);
 }
 
 function analyticsHref(tenantId: string, filters: DashboardFilterState) {
