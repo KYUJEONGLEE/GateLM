@@ -91,7 +91,10 @@ test("employee ranking and detail controls use Tenant Chat cost observation and 
   expect(source).toContain("AnalyticsRankedBarChart");
   expect(source).toContain('kind="micro-usd"');
   expect(source).toContain('orientation="vertical"');
-  expect(source).toContain("outlierMultiplier={1.5}");
+  expect(source).toContain(
+    'const EMPLOYEE_COST_RANK_COLORS = ["#d9a321", "#94a3b8", "#b87333", "#0f8f66"]'
+  );
+  expect(source).toContain("rankColors={EMPLOYEE_COST_RANK_COLORS}");
   expect(source).toContain("employeeUsage.dailyRank <= 3");
   expect(source).toContain("employeeUsage.weeklyRank <= 3");
   expect(source).toContain('useState<EmployeeCostRange>("30d")');
