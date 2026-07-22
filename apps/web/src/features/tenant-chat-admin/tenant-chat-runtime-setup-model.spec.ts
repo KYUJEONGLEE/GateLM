@@ -307,6 +307,12 @@ test("Chat App routing uses a category master-detail presentation without changi
     /\.tenant-chat-app-content \.tenant-routing-workbench \{[\s\S]*?grid-template-columns: minmax\(300px, 0\.72fr\) minmax\(0, 1\.9fr\);/
   );
   expect(styles).toMatch(
+    /\.tenant-chat-app-content \.tenant-routing-category-option-copy \{[\s\S]*?grid-template-columns: minmax\(66px, 0\.55fr\) minmax\(0, 1\.45fr\);[\s\S]*?column-gap: 12px;/
+  );
+  expect(styles).toMatch(
+    /\.tenant-chat-app-content \.tenant-routing-category-option-copy strong \{[\s\S]*?grid-row: 1 \/ 3;[\s\S]*?font-size: 22px;/
+  );
+  expect(styles).toMatch(
     /\.tenant-chat-app-content \.tenant-routing-difficulty-layout \{[\s\S]*?grid-template-columns: minmax\(0, 1fr\);/
   );
   expect(styles).toMatch(
