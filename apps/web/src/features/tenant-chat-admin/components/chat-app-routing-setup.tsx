@@ -5,8 +5,11 @@ import {
   AlertTriangle,
   BrainCircuit,
   Check,
+  ChevronDown,
+  ChevronRight,
   Code2,
   FileText,
+  Gauge,
   Info,
   Languages,
   LoaderCircle,
@@ -14,7 +17,8 @@ import {
   MessageSquareText,
   PlugZap,
   RefreshCcw,
-  RefreshCw
+  RefreshCw,
+  Star
 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
@@ -386,6 +390,9 @@ export function ChatAppRoutingSetup({
   const [routingMode, setRoutingMode] = useState<TenantChatRoutingMode>(initialSetup?.activeSnapshot?.routingMode ?? "auto");
   const [manualModelRef, setManualModelRef] = useState(initialSetup?.activeSnapshot?.manualModelRef ?? initialRef);
   const [routes, setRoutes] = useState<TenantChatRoutingMatrix>(initialSetup?.activeSnapshot?.routes ?? uniformRoutingMatrix(initialRef));
+  const [selectedRoutingCategory, setSelectedRoutingCategory] =
+    useState<TenantChatRoutingCategory>("code");
+  const [fallbackExpanded, setFallbackExpanded] = useState(false);
   const [cachePolicy, setCachePolicy] = useState<TenantChatAdminCachePolicy>(
     initialSetup?.activeSnapshot?.cachePolicy ?? defaultCachePolicy()
   );
@@ -439,6 +446,12 @@ export function ChatAppRoutingSetup({
       )
     }))
     .filter((provider) => provider.models.length > 0);
+  const selectedCategory = categories.find(
+    (category) => category.id === selectedRoutingCategory
+  ) ?? categories[0];
+  const fallbackSelection = providers
+    .flatMap((provider) => provider.models.map((model) => ({ model, provider })))
+    .find(({ model }) => model.modelRef === fallbackModelRef);
   const providerManagementHref = `/tenants/${encodeURIComponent(tenantId)}/provider-connections?${new URLSearchParams({
     intent: "tenant-chat-setup",
     returnTo: returnPath
@@ -709,38 +722,113 @@ export function ChatAppRoutingSetup({
               </header>
               <div className="tenant-routing-mode-content" key={routingMode}>
                 {routingMode === "auto" ? (
-                  <div aria-label={text.routing} className="tenant-routing-table" role="table">
-                    <div className="tenant-routing-table-head" role="row">
-                      <span role="columnheader">{locale === "ko" ? "카테고리" : "Category"}</span>
-                      {difficulties.map((difficulty) => <span key={difficulty.id} role="columnheader">{difficulty[locale]}</span>)}
-                    </div>
-                    {categories.map((category) => {
-                      const CategoryIcon = category.icon;
-                      return (
-                        <div className="tenant-routing-table-row" key={category.id} role="row">
-                          <div className="tenant-routing-category" role="rowheader">
-                            <CategoryIcon aria-hidden="true" />
-                            <span>{category[locale]}</span>
-                            <RoutingCriteriaPopover
-                              ariaLabel={`${category[locale]} ${text.categoryCriteria}`}
-                              criteria={category.criteria[locale]}
-                              locale={locale}
-                            />
+                  <div className="tenant-routing-workbench">
+                    <aside
+                      aria-label={locale === "ko" ? "라우팅 카테고리" : "Routing categories"}
+                      className="tenant-routing-category-panel"
+                    >
+                      <h4>{locale === "ko" ? "카테고리" : "Category"}</h4>
+                      <div
+                        aria-orientation="vertical"
+                        className="tenant-routing-category-list"
+                        role="tablist"
+                      >
+                        {categories.map((category) => {
+                          const CategoryIcon = category.icon;
+                          const simpleModelRef = routes[category.id]?.simple?.modelRefs?.[0] ?? "";
+                          const complexModelRef = routes[category.id]?.complex?.modelRefs?.[0] ?? "";
+                          return (
+                            <button
+                              aria-controls="tenant-routing-category-detail"
+                              aria-selected={selectedRoutingCategory === category.id}
+                              className="tenant-routing-category-option"
+                              data-active={selectedRoutingCategory === category.id ? "true" : undefined}
+                              id={`tenant-routing-category-${category.id}`}
+                              key={category.id}
+                              onClick={() => setSelectedRoutingCategory(category.id)}
+                              role="tab"
+                              type="button"
+                            >
+                              <span className="tenant-routing-category-option-icon">
+                                <CategoryIcon aria-hidden="true" />
+                              </span>
+                              <span className="tenant-routing-category-option-copy">
+                                <strong>{category[locale]}</strong>
+                                <small>
+                                  {locale === "ko" ? "일반 요청" : "Simple"} · {providerDisplayName(providers, simpleModelRef, text.modelUnavailable)}
+                                </small>
+                                <small>
+                                  {locale === "ko" ? "고성능" : "Complex"} · {providerDisplayName(providers, complexModelRef, text.modelUnavailable)}
+                                </small>
+                              </span>
+                              <ChevronRight aria-hidden="true" className="tenant-routing-category-option-arrow" />
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </aside>
+
+                    <section
+                      aria-labelledby="tenant-routing-category-detail-title"
+                      className="tenant-routing-category-detail"
+                      id="tenant-routing-category-detail"
+                      role="tabpanel"
+                    >
+                      <header className="tenant-routing-category-detail-header">
+                        <div className="tenant-routing-title-with-help">
+                          <h4 id="tenant-routing-category-detail-title">
+                            {selectedCategory[locale]} {locale === "ko" ? "라우팅" : "routing"}
+                          </h4>
+                          <RoutingCriteriaPopover
+                            ariaLabel={`${selectedCategory[locale]} ${text.categoryCriteria}`}
+                            criteria={selectedCategory.criteria[locale]}
+                            locale={locale}
+                          />
+                        </div>
+                      </header>
+                      <div className="tenant-routing-difficulty-layout">
+                        <div aria-hidden="true" className="tenant-routing-difficulty-rail">
+                          <div className="tenant-routing-difficulty-step" data-difficulty="simple">
+                            <span><Gauge /></span>
+                            <strong>{locale === "ko" ? "일반 요청" : "Simple"}</strong>
                           </div>
+                          <span className="tenant-routing-difficulty-connector" />
+                          <div className="tenant-routing-difficulty-step" data-difficulty="complex">
+                            <span><Star /></span>
+                            <strong>{locale === "ko" ? "고성능 요청" : "Complex"}</strong>
+                          </div>
+                        </div>
+                        <div className="tenant-routing-difficulty-cards">
                           {difficulties.map((difficulty) => (
-                            <RoutingCellEditor
-                              ariaLabel={`${category[locale]} ${difficulty[locale]}`}
-                              columnLabel={difficulty[locale]}
+                            <article
+                              className="tenant-routing-difficulty-card"
+                              data-difficulty={difficulty.id}
                               key={difficulty.id}
-                              locale={locale}
-                              onChange={(modelRef) => updateRoute(category.id, difficulty.id, modelRef)}
-                              providers={providers}
-                              value={routes[category.id]?.[difficulty.id]?.modelRefs?.[0] ?? ""}
-                            />
+                            >
+                              <header>
+                                <h5>
+                                  {difficulty.id === "simple"
+                                    ? (locale === "ko" ? "일반 요청" : "Simple request")
+                                    : (locale === "ko" ? "고성능 요청" : "Complex request")}
+                                </h5>
+                                <p>
+                                  {difficulty.id === "simple"
+                                    ? (locale === "ko" ? "빠른 응답과 비용 효율을 우선합니다." : "Prioritizes fast responses and cost efficiency.")
+                                    : (locale === "ko" ? "복잡한 작업은 고성능 모델로 자동 전환합니다." : "Routes complex work to a high-performance model.")}
+                                </p>
+                              </header>
+                              <TenantRoutingProviderModelSelect
+                                ariaLabel={`${selectedCategory[locale]} ${difficulty[locale]}`}
+                                locale={locale}
+                                onChange={(modelRef) => updateRoute(selectedCategory.id, difficulty.id, modelRef)}
+                                providers={providers}
+                                value={routes[selectedCategory.id]?.[difficulty.id]?.modelRefs?.[0] ?? ""}
+                              />
+                            </article>
                           ))}
                         </div>
-                      );
-                    })}
+                      </div>
+                    </section>
                   </div>
                 ) : (
                   <div aria-label={text.manual} className="tenant-routing-fixed-panel">
@@ -762,28 +850,56 @@ export function ChatAppRoutingSetup({
                     />
                   </div>
                 )}
-                <section className="tenant-routing-fallback-card" aria-labelledby="tenant-routing-fallback-title">
+                <section
+                  aria-labelledby="tenant-routing-fallback-title"
+                  className="tenant-routing-fallback-card"
+                  data-expanded={fallbackExpanded ? "true" : undefined}
+                >
                   <header className="tenant-routing-fallback-heading">
-                    <div className="tenant-routing-fallback-title-row">
-                      <h3 id="tenant-routing-fallback-title">{text.fallbackTitle}</h3>
-                      <span className="tenant-routing-fallback-kicker">
-                        <RefreshCcw aria-hidden="true" />
-                        {text.fallbackKicker}
-                      </span>
+                    <div>
+                      <div className="tenant-routing-fallback-title-row">
+                        <h3 id="tenant-routing-fallback-title">{text.fallbackTitle}</h3>
+                        <span className="tenant-routing-fallback-kicker">
+                          <RefreshCcw aria-hidden="true" />
+                          {text.fallbackKicker}
+                        </span>
+                      </div>
+                      <p>{routingMode === "manual" ? text.fixedFallbackDescription : text.fallbackDescription}</p>
                     </div>
-                    <p>{routingMode === "manual" ? text.fixedFallbackDescription : text.fallbackDescription}</p>
+                    <button
+                      aria-expanded={fallbackExpanded}
+                      className="tenant-routing-fallback-toggle"
+                      onClick={() => setFallbackExpanded((current) => !current)}
+                      type="button"
+                    >
+                      <span>
+                        {fallbackSelection
+                          ? `${fallbackSelection.provider.displayName} · ${fallbackSelection.model.modelKey}`
+                          : text.fallbackDisabled}
+                      </span>
+                      <span
+                        aria-hidden="true"
+                        className="tenant-routing-fallback-state"
+                        data-enabled={fallbackSelection ? "true" : undefined}
+                      />
+                      <ChevronDown aria-hidden="true" />
+                    </button>
                   </header>
-                  <TenantRoutingProviderModelSelect
-                    allowEmpty
-                    ariaLabel={text.fallbackTitle}
-                    appearance="standalone"
-                    emptyLabel={text.fallbackDisabled}
-                    locale={locale}
-                    mixedLabel={text.fallbackMixed}
-                    onChange={updateFallback}
-                    providers={fallbackProviders}
-                    value={fallbackModelRef}
-                  />
+                  {fallbackExpanded ? (
+                    <div className="tenant-routing-fallback-controls">
+                      <TenantRoutingProviderModelSelect
+                        allowEmpty
+                        ariaLabel={text.fallbackTitle}
+                        appearance="standalone"
+                        emptyLabel={text.fallbackDisabled}
+                        locale={locale}
+                        mixedLabel={text.fallbackMixed}
+                        onChange={updateFallback}
+                        providers={fallbackProviders}
+                        value={fallbackModelRef}
+                      />
+                    </div>
+                  ) : null}
                 </section>
               </div>
             </section>
@@ -969,21 +1085,6 @@ export function ChatAppRoutingSetup({
   );
 }
 
-function RoutingCellEditor({ ariaLabel, columnLabel, locale, onChange, providers, value }: {
-  ariaLabel: string;
-  columnLabel: string;
-  locale: Locale;
-  onChange: (value: string) => void;
-  providers: RoutingProviderOption[];
-  value: string;
-}) {
-  return (
-    <div className="tenant-routing-route tenant-routing-model-ref-cell" data-column-label={columnLabel} role="cell">
-      <TenantRoutingProviderModelSelect ariaLabel={ariaLabel} locale={locale} onChange={onChange} providers={providers} value={value} />
-    </div>
-  );
-}
-
 function RoutingCriteriaPopover({ ariaLabel, criteria, description, locale, note }: {
   ariaLabel: string;
   criteria: DifficultyCriteria[Locale];
@@ -1121,6 +1222,16 @@ function UnavailableModelOption({ locale, models, value }: {
 }) {
   if (models.some((model) => model.modelRef === value)) return null;
   return <option disabled value={value}>{copy[locale].modelUnavailable}</option>;
+}
+
+function providerDisplayName(
+  providers: RoutingProviderOption[],
+  modelRef: string,
+  unavailableLabel: string
+) {
+  return providers.find((provider) =>
+    provider.models.some((model) => model.modelRef === modelRef)
+  )?.displayName ?? unavailableLabel;
 }
 
 function firstModelRef(setup: TenantChatAdminRuntimeSetup | null) {
