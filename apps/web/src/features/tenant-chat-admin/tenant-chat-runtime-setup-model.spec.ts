@@ -145,7 +145,7 @@ test("degraded routing selections render unavailable options instead of an avail
 
   expect(source.match(/<UnavailableModelOption/g)).toHaveLength(1);
   expect(source).toContain("function TenantRoutingProviderModelSelect");
-  expect(source).toContain('value={routes[category.id]?.[difficulty.id]?.modelRefs?.[0] ?? ""}');
+  expect(source).toContain('value={routes[selectedCategory.id]?.[difficulty.id]?.modelRefs?.[0] ?? ""}');
   expect(source).toContain("routes[category.id]?.[difficulty.id]?.modelRefs ?? []");
   expect(source).toContain('<UnavailableModelOption locale={locale} models={selectedModels} value={value ?? ""} />');
   expect(source).toContain('return <option disabled value={value}>{copy[locale].modelUnavailable}</option>');
@@ -169,9 +169,9 @@ test("Chat App routing selects Provider first and limits models to that Provider
   expect(source).toContain("{showProviderIcon ? (");
   expect(styles).toMatch(/\.tenant-chat-app-content \.tenant-routing-provider-control,\r?\n\.tenant-chat-app-content \.tenant-routing-model-control \{[\s\S]*?min-height: 52px;/);
   expect(styles).toMatch(/\.tenant-chat-app-content \.tenant-routing-provider-control select,\r?\n\.tenant-chat-app-content \.tenant-routing-model-control select \{[\s\S]*?min-height: 50px;[\s\S]*?font-size: 15px;/);
-  expect(styles).toMatch(/\.tenant-chat-app-content \.tenant-routing-table-head \{[\s\S]*?min-height: 44px;[\s\S]*?font-size: 14px;/);
-  expect(styles).toMatch(/\.tenant-chat-app-content \.tenant-routing-category \{[\s\S]*?font-size: 16px;/);
-  expect(styles).toMatch(/\.tenant-chat-app-content \.tenant-routing-route::before \{[\s\S]*?font-size: 14px;/);
+  expect(styles).toMatch(/\.tenant-chat-app-content \.tenant-routing-category-option-copy strong \{[\s\S]*?font-size: 17px;/);
+  expect(styles).toMatch(/\.tenant-chat-app-content \.tenant-routing-difficulty-card h5 \{[\s\S]*?font-size: 22px;/);
+  expect(styles).toMatch(/\.tenant-chat-app-content \.tenant-routing-difficulty-card p \{[\s\S]*?font-size: 14px;/);
 });
 
 test("Chat App routing projects one shared fallback into every routing cell", () => {
@@ -262,7 +262,7 @@ test("Chat App routing keeps existing fallback candidates when a primary changes
   ]);
 });
 
-test("Chat App routing reuses the original routing policy presentation", async () => {
+test("Chat App routing uses a category master-detail presentation without changing policy controls", async () => {
   const componentSourceUrl = new URL("./components/chat-app-routing-setup.tsx", import.meta.url);
   const knowledgeBaseSourceUrl = new URL("../rag-documents/knowledge-base-management.tsx", import.meta.url);
   const stylesUrl = new URL("../../app/globals.css", import.meta.url);
@@ -277,7 +277,10 @@ test("Chat App routing reuses the original routing policy presentation", async (
   expect(styles).toMatch(/\.tenant-chat-app-content \{[\s\S]*?width: 100%;[\s\S]*?max-width: none;[\s\S]*?grid-template-columns: minmax\(0, 1fr\);/);
   expect(source).toContain('className="tenant-routing-switch"');
   expect(source).toContain('className="tenant-routing-model-card"');
-  expect(source).toContain('className="tenant-routing-table"');
+  expect(source).toContain('className="tenant-routing-workbench"');
+  expect(source).toContain('className="tenant-routing-category-option"');
+  expect(source).toContain('className="tenant-routing-category-detail"');
+  expect(source).toContain('useState<TenantChatRoutingCategory>("code")');
   expect(source).toContain('"tenant-routing-model-selectors"');
   expect(source).toContain('"tenant-routing-standalone-controls"');
   expect(source).toContain("MessageSquareMore");
@@ -300,7 +303,10 @@ test("Chat App routing reuses the original routing policy presentation", async (
   );
   expect(knowledgeBaseSource).toContain("tenant-chat-knowledge-panel");
   expect(styles).toMatch(
-    /\.tenant-chat-app-content[\s\S]*?\.tenant-routing-table-row \{[\s\S]*?min-height: 90px;/
+    /\.tenant-chat-app-content \.tenant-routing-workbench \{[\s\S]*?grid-template-columns: minmax\(300px, 0\.72fr\) minmax\(0, 1\.9fr\);/
+  );
+  expect(styles).toMatch(
+    /\.tenant-chat-app-content \.tenant-routing-difficulty-card \{[\s\S]*?min-height: 188px;/
   );
   expect(styles).toMatch(
     /\.tenant-chat-app-content[\s\S]*?\.tenant-routing-provider-control select,[\s\S]*?min-height: 54px;[\s\S]*?font-size: 17px;/
@@ -364,7 +370,7 @@ test("Chat App routing presents general and high-performance difficulty labels i
 
   expect(source).toContain("function RoutingCriteriaPopover");
   expect(source).toContain("criteria={routingDifficultyCriteria[locale]}");
-  expect(source).toContain("criteria={category.criteria[locale]}");
+  expect(source).toContain("criteria={selectedCategory.criteria[locale]}");
   expect(source).toContain('{ id: "simple", en: "Simple", ko: "일반" }');
   expect(source).toContain('{ id: "complex", en: "Complex", ko: "고성능" }');
   expect(source).toContain("요청 길이만으로는 고성능으로 분류되지 않습니다. 작업 수, 제약, 범위, 의존 단계와 카테고리별 신호를 함께 판단합니다.");
@@ -401,7 +407,7 @@ test("Chat App routing switches one policy card between automatic and fixed mode
   expect(source).toContain('className="tenant-routing-mode-content" key={routingMode}');
   expect(source).toContain('className="tenant-routing-fixed-panel"');
   expect(source).toContain('<p>{text.manualDescription}</p>');
-  expect(source).toMatch(/\)\}\r?\n {16}<section className="tenant-routing-fallback-card"/);
+  expect(source).toContain('className="tenant-routing-fallback-card"');
   expect(source).toContain('className="tenant-routing-fallback-title-row"');
   expect(source).toMatch(/<h3 id="tenant-routing-fallback-title">\{text\.fallbackTitle\}<\/h3>\r?\n\s+<span className="tenant-routing-fallback-kicker">/);
   expect(source).toContain('routingMode === "manual" ? text.fixedFallbackDescription : text.fallbackDescription');
