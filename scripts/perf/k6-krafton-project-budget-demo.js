@@ -1,5 +1,6 @@
 import http from "k6/http";
 import { check, fail } from "k6";
+import exec from "k6/execution";
 import { Counter, Rate, Trend } from "k6/metrics";
 
 const PRODUCTION_BASE_URL = "https://gatelm.co.kr";
@@ -13,13 +14,21 @@ const expectAskLakeRateLimit = booleanEnv(
   "GATELM_EXPECT_ASK_LAKE_RATE_LIMIT",
   false,
 );
+const askLakeRampStartSeconds = nonNegativeNumberEnv(
+  "GATELM_ASK_LAKE_RAMP_START_SECONDS",
+  5,
+);
+const askLakeRampEndSeconds = nonNegativeNumberEnv(
+  "GATELM_ASK_LAKE_RAMP_END_SECONDS",
+  10,
+);
 
 const projects = {
   ask_lake: projectConfig({
     displayName: "Ask Lake",
     apiKeyEnv: "GATELM_ASK_LAKE_API_KEY",
     rateEnv: "GATELM_ASK_LAKE_RPS",
-    defaultRate: 100,
+    defaultRate: 140,
     modelEnv: "GATELM_ASK_LAKE_MODEL",
     defaultModel: "mock-balanced",
   }),
@@ -27,7 +36,7 @@ const projects = {
     displayName: "GateLM",
     apiKeyEnv: "GATELM_GATE_API_KEY",
     rateEnv: "GATELM_GATE_RPS",
-    defaultRate: 50,
+    defaultRate: 25,
     modelEnv: "GATELM_GATE_MODEL",
     defaultModel: "mock-balanced",
   }),
@@ -35,7 +44,7 @@ const projects = {
     displayName: "Sketch Catch",
     apiKeyEnv: "GATELM_SKETCH_CATCH_API_KEY",
     rateEnv: "GATELM_SKETCH_CATCH_RPS",
-    defaultRate: 30,
+    defaultRate: 15,
     modelEnv: "GATELM_SKETCH_CATCH_MODEL",
     defaultModel: "mock-balanced",
   }),
@@ -45,11 +54,15 @@ const totalRps = Object.values(projects).reduce(
   (sum, project) => sum + project.rate,
   0,
 );
-
 validateProductionTarget();
 if (totalRps < 150 || totalRps > 200) {
   throw new Error(
     `The combined project rate must stay between 150 and 200 RPS; received ${totalRps}.`,
+  );
+}
+if (askLakeRampEndSeconds <= askLakeRampStartSeconds) {
+  throw new Error(
+    "GATELM_ASK_LAKE_RAMP_END_SECONDS must be greater than GATELM_ASK_LAKE_RAMP_START_SECONDS.",
   );
 }
 
@@ -64,23 +77,34 @@ const projectMetrics = Object.fromEntries(
     },
   ]),
 );
+const cacheHitEvents = new Counter("demo_cache_hit_events");
+const maskingRedactedEvents = new Counter("demo_masking_redacted_events");
+const specialEventFailures = new Counter("demo_special_event_failures");
 
 export const options = {
   scenarios: {
-    ask_lake_traffic: scenario(projects.ask_lake.rate, "askLakeTraffic"),
-    gatelm_traffic: scenario(projects.gatelm.rate, "gatelmTraffic"),
-    sketch_catch_traffic: scenario(
-      projects.sketch_catch.rate,
-      "sketchCatchTraffic",
-    ),
+    combined_traffic: scenario(totalRps, "combinedTraffic"),
   },
   thresholds: buildThresholds(),
   summaryTrendStats: ["avg", "min", "med", "p(90)", "p(95)", "p(99)", "max"],
 };
 
 export function setup() {
+  const runNonce = alphabeticNonce(Date.now() * 1000 + 1);
+  const runId = `krafton_demo_${Date.now().toString(36)}`;
+  const cachePrompts = {};
+
   for (const [projectKey, project] of Object.entries(projects)) {
-    const response = sendCompletion(projectKey, project, "preflight", 0);
+    const cachePrompt = `Summarize teamwork for the demonstration. Cache variant ${runNonce} ${project.displayName}.`;
+    cachePrompts[projectKey] = cachePrompt;
+    const response = sendCompletion(
+      projectKey,
+      project,
+      runId,
+      0,
+      cachePrompt,
+      "cache_warmup",
+    );
     const metadata = safeJson(response.body).gate_lm || {};
     const cacheStatus = headerValue(response, "X-GateLM-Cache-Status");
 
@@ -99,21 +123,41 @@ export function setup() {
           `cacheStatus=${cacheStatus || "unknown"}. Load was blocked.`,
       );
     }
+
+    const cacheHitResponse = sendCompletion(
+      projectKey,
+      project,
+      runId,
+      1,
+      cachePrompt,
+      "cache_preflight_hit",
+    );
+    const cacheHitMetadata = safeJson(cacheHitResponse.body).gate_lm || {};
+    const cacheHitStatus = headerValue(
+      cacheHitResponse,
+      "X-GateLM-Cache-Status",
+    );
+    if (
+      cacheHitResponse.status !== 200 ||
+      cacheHitMetadata.providerCalled === true ||
+      cacheHitStatus !== "hit"
+    ) {
+      fail(
+        `${project.displayName} cache preflight failed: HTTP ${cacheHitResponse.status}, ` +
+          `providerCalled=${cacheHitMetadata.providerCalled === true}, ` +
+          `cacheStatus=${cacheHitStatus || "unknown"}. Load was blocked.`,
+      );
+    }
   }
 
-  return { runId: `krafton_demo_${Date.now().toString(36)}` };
+  return { cachePrompts, runId, trafficStartedAtMs: Date.now() };
 }
 
-export function askLakeTraffic(data) {
-  runProjectRequest("ask_lake", projects.ask_lake, data);
-}
-
-export function gatelmTraffic(data) {
-  runProjectRequest("gatelm", projects.gatelm, data);
-}
-
-export function sketchCatchTraffic(data) {
-  runProjectRequest("sketch_catch", projects.sketch_catch, data);
+export function combinedTraffic(data) {
+  const iteration = exec.scenario.iterationInTest;
+  const elapsedSeconds = Math.max(0, (Date.now() - data.trafficStartedAtMs) / 1000);
+  const projectKey = selectProjectForElapsed(iteration, elapsedSeconds);
+  runProjectRequest(projectKey, projects[projectKey], data, iteration);
 }
 
 export function handleSummary(data) {
@@ -126,16 +170,32 @@ export function handleSummary(data) {
     `  Ask Lake: ${projects.ask_lake.rate} RPS / ${projects.ask_lake.model}`,
     `  GateLM: ${projects.gatelm.rate} RPS / ${projects.gatelm.model}`,
     `  Sketch Catch: ${projects.sketch_catch.rate} RPS / ${projects.sketch_catch.model}`,
+    `  project mix: balanced until ${askLakeRampStartSeconds}s, Ask Lake ramp until ${askLakeRampEndSeconds}s`,
+    `  Ask Lake requests: ${metricValue(data, "project_ask_lake_attempts", "count")}`,
+    `  GateLM requests: ${metricValue(data, "project_gatelm_attempts", "count")}`,
+    `  Sketch Catch requests: ${metricValue(data, "project_sketch_catch_attempts", "count")}`,
     `  completed iterations: ${metricValue(data, "iterations", "count")}`,
     `  dropped iterations: ${metricValue(data, "dropped_iterations", "count")}`,
+    `  cache-hit demo events: ${metricValue(data, "demo_cache_hit_events", "count")}`,
+    `  masking demo events: ${metricValue(data, "demo_masking_redacted_events", "count")}`,
+    `  special-event failures: ${metricValue(data, "demo_special_event_failures", "count")}`,
     `  Ask Lake 429 responses: ${metricValue(data, "project_ask_lake_rate_limited", "count")}`,
     "",
   ];
   return { stdout: lines.join("\n") };
 }
 
-function runProjectRequest(projectKey, project, data) {
-  const response = sendCompletion(projectKey, project, data.runId, __ITER);
+function runProjectRequest(projectKey, project, data, iteration) {
+  const eventKind = eventKindForIteration(iteration);
+  const prompt = promptForEvent(eventKind, projectKey, data, iteration);
+  const response = sendCompletion(
+    projectKey,
+    project,
+    data.runId,
+    iteration,
+    prompt,
+    eventKind,
+  );
   const metrics = projectMetrics[projectKey];
   const rateLimited = response.status === 429;
   const accepted =
@@ -149,12 +209,37 @@ function runProjectRequest(projectKey, project, data) {
     metrics.rateLimited.add(1);
   }
 
+  if (response.status === 200 && eventKind === "cache_hit") {
+    const cacheStatus = headerValue(response, "X-GateLM-Cache-Status");
+    if (cacheStatus === "hit") {
+      cacheHitEvents.add(1);
+    } else {
+      specialEventFailures.add(1);
+    }
+  }
+
+  if (response.status === 200 && eventKind === "masking") {
+    const metadata = safeJson(response.body).gate_lm || {};
+    if (metadata.maskingAction === "redacted") {
+      maskingRedactedEvents.add(1);
+    } else {
+      specialEventFailures.add(1);
+    }
+  }
+
   check(response, {
     [`${project.displayName} returns expected status`]: () => accepted,
   });
 }
 
-function sendCompletion(projectKey, project, runId, iteration) {
+function sendCompletion(
+  projectKey,
+  project,
+  runId,
+  iteration,
+  prompt,
+  eventKind,
+) {
   const uniquePart = `${runId}_${projectKey}_${__VU}_${iteration}_${Date.now()}`;
   const cacheNonce = alphabeticNonce(
     Date.now() * 1000 + __VU * 100 + iteration + 1,
@@ -166,7 +251,9 @@ function sendCompletion(projectKey, project, runId, iteration) {
       messages: [
         {
           role: "user",
-          content: `Write a brief demo response about teamwork. Variant ${cacheNonce}.`,
+          content:
+            prompt ||
+            `Write a brief demo response about teamwork. Variant ${cacheNonce}.`,
         },
       ],
       temperature: 0,
@@ -183,9 +270,41 @@ function sendCompletion(projectKey, project, runId, iteration) {
         name: "POST /v1/chat/completions",
         project: projectKey,
         model: project.model,
+        event_kind: eventKind || "normal",
       },
     },
   );
+}
+
+function eventKindForIteration(iteration) {
+  const secondIndex = Math.floor(iteration / totalRps);
+  const slotInSecond = iteration % totalRps;
+  const specialCount = 1 + (secondIndex % 4);
+
+  for (let index = 0; index < specialCount; index += 1) {
+    const specialSlot = Math.floor(((index + 1) * totalRps) / (specialCount + 1));
+    if (slotInSecond === specialSlot) {
+      return (secondIndex + index) % 2 === 0 ? "cache_hit" : "masking";
+    }
+  }
+
+  return "normal";
+}
+
+function promptForEvent(eventKind, projectKey, data, iteration) {
+  if (eventKind === "cache_hit") {
+    return data.cachePrompts[projectKey];
+  }
+
+  const nonce = alphabeticNonce(Date.now() * 1000 + iteration + 1);
+  if (eventKind === "masking") {
+    return (
+      "Write a support note to demo.contact@example.com and ask them to call " +
+      `010-0000-1234. Reference ${nonce}.`
+    );
+  }
+
+  return `Write a brief demo response about teamwork. Variant ${nonce}.`;
 }
 
 function alphabeticNonce(value) {
@@ -206,10 +325,50 @@ function scenario(rate, exec) {
     rate,
     timeUnit: "1s",
     duration,
-    preAllocatedVUs: Math.max(10, rate),
-    maxVUs: Math.max(20, rate * 2),
+    preAllocatedVUs: Math.max(20, rate * 2),
+    maxVUs: Math.max(40, rate * 3),
     gracefulStop: "10s",
   };
+}
+
+function selectProjectForElapsed(iteration, elapsedSeconds) {
+  const secondIndex = Math.floor(elapsedSeconds);
+  const progress = clamp(
+    (secondIndex - askLakeRampStartSeconds) /
+      (askLakeRampEndSeconds - askLakeRampStartSeconds),
+    0,
+    1,
+  );
+  const initialWeight = totalRps / Object.keys(projects).length;
+  const shuffledSlot = shuffledSlotForSecond(
+    iteration % totalRps,
+    secondIndex,
+  );
+  let cumulativeWeight = 0;
+
+  for (const [projectKey, project] of Object.entries(projects)) {
+    cumulativeWeight += initialWeight + (project.rate - initialWeight) * progress;
+    if (shuffledSlot < cumulativeWeight) {
+      return projectKey;
+    }
+  }
+
+  return "sketch_catch";
+}
+
+function shuffledSlotForSecond(slot, secondIndex) {
+  // Keep the full-second quota exact while rotating the order. These offsets
+  // also leave Ask Lake dominant in the final nine slots shown by the live log.
+  const presentationOffsets = [
+    0, 17, 34, 51, 68, 85, 102, 119, 136, 151, 167,
+  ];
+  const multiplier = 17;
+  const offset = presentationOffsets[secondIndex % presentationOffsets.length];
+  return (slot * multiplier + offset) % totalRps;
+}
+
+function clamp(value, minimum, maximum) {
+  return Math.min(maximum, Math.max(minimum, value));
 }
 
 function buildThresholds() {
@@ -269,6 +428,14 @@ function positiveIntEnv(name, fallback) {
   const value = Number(String(__ENV[name] || fallback).trim());
   if (!Number.isInteger(value) || value <= 0) {
     throw new Error(`${name} must be a positive integer.`);
+  }
+  return value;
+}
+
+function nonNegativeNumberEnv(name, fallback) {
+  const value = Number(String(__ENV[name] ?? fallback).trim());
+  if (!Number.isFinite(value) || value < 0) {
+    throw new Error(`${name} must be a non-negative number.`);
   }
   return value;
 }

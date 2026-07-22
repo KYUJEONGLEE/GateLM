@@ -1,13 +1,13 @@
 [CmdletBinding()]
 param(
     [ValidateRange(1, 200)]
-    [int]$AskLakeRps = 100,
+    [int]$AskLakeRps = 140,
 
     [ValidateRange(1, 200)]
-    [int]$GateLmRps = 50,
+    [int]$GateLmRps = 25,
 
     [ValidateRange(1, 200)]
-    [int]$SketchCatchRps = 30,
+    [int]$SketchCatchRps = 15,
 
     [ValidatePattern('^[1-9][0-9]*(ms|s|m|h)$')]
     [string]$Duration = '5m',
