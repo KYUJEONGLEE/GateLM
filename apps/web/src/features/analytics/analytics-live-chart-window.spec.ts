@@ -11,16 +11,16 @@ test("최근 활동이 짧으면 최소 5분의 요청 추이를 표시한다", 
   expect(analyticsLiveChartStartIndex(buckets)).toBe(121);
 });
 
-test("오래 이어진 활동은 시작 지점 앞의 여유 구간부터 표시한다", () => {
+test("오래 이어진 활동도 최근 5분만 표시한다", () => {
   const buckets = makeBuckets({ count: 181, intervalSeconds: 5, activityStartIndex: 60 });
 
-  expect(analyticsLiveChartStartIndex(buckets)).toBe(58);
+  expect(analyticsLiveChartStartIndex(buckets)).toBe(121);
 });
 
-test("활동이 없으면 선택 기간 전체를 유지한다", () => {
+test("활동이 없어도 최근 5분 window를 유지한다", () => {
   const buckets = makeBuckets({ count: 181, intervalSeconds: 5 });
 
-  expect(analyticsLiveChartStartIndex(buckets)).toBe(0);
+  expect(analyticsLiveChartStartIndex(buckets)).toBe(121);
 });
 
 test("긴 bucket 간격에서는 최소 12개 bucket을 표시한다", () => {

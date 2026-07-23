@@ -20,6 +20,7 @@ import type {
   AnalyticsLiveUsageBucket,
   AnalyticsLiveUsageProject
 } from "@/features/analytics/analytics-live-usage-contract";
+import { analyticsLiveChartStartIndex } from "@/features/analytics/analytics-live-chart-window";
 import {
   analyticsLiveUsageSignature,
   initialAnalyticsLivePollingState,
@@ -171,6 +172,13 @@ export function AnalyticsLiveUsagePanel({
     [fallback.requestVolume, range]
   );
   const displayBuckets = snapshot?.buckets ?? fallbackBuckets;
+  const visibleBuckets = displayBuckets.slice(
+    analyticsLiveChartStartIndex(displayBuckets)
+  );
+  const visiblePeakRps = Math.max(
+    0,
+    ...visibleBuckets.map((bucket) => bucket.incomingRps)
+  );
   const displayProjects = snapshot?.projects
     ?? fallback.sourceMix.map((row) => fallbackProject(row.id, row.value));
   const totalRequests = snapshot?.summary.requestCount ?? fallback.requestCount;
@@ -264,7 +272,7 @@ export function AnalyticsLiveUsagePanel({
               <h3>{text.requestTrend}</h3>
               <p>{text.requestTrendSub}</p>
             </div>
-            {snapshot ? <strong>{formatRps(snapshot.summary.peakIncomingRps)} peak</strong> : null}
+            {snapshot ? <strong>{formatRps(visiblePeakRps)} peak</strong> : null}
           </div>
           {displayBuckets.length > 0 ? (
             <AnalyticsLiveRequestTrendChart

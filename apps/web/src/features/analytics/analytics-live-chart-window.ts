@@ -2,15 +2,9 @@ import type { AnalyticsLiveUsageBucket } from "@/features/analytics/analytics-li
 
 const minimumVisibleDurationMs = 5 * 60 * 1000;
 const minimumVisibleBucketCount = 12;
-const activityPaddingBucketCount = 2;
 
 export function analyticsLiveChartStartIndex(buckets: AnalyticsLiveUsageBucket[]) {
   if (buckets.length < 2) {
-    return 0;
-  }
-
-  const firstActivityIndex = buckets.findIndex(hasActivity);
-  if (firstActivityIndex < 0) {
     return 0;
   }
 
@@ -19,9 +13,8 @@ export function analyticsLiveChartStartIndex(buckets: AnalyticsLiveUsageBucket[]
     return 0;
   }
 
-  const firstActivityAt = Date.parse(buckets[firstActivityIndex].periodStart);
   const latestBucketEnd = Date.parse(buckets.at(-1)?.periodEnd ?? "");
-  if (!Number.isFinite(firstActivityAt) || !Number.isFinite(latestBucketEnd)) {
+  if (!Number.isFinite(latestBucketEnd)) {
     return 0;
   }
 
@@ -29,11 +22,7 @@ export function analyticsLiveChartStartIndex(buckets: AnalyticsLiveUsageBucket[]
     minimumVisibleDurationMs,
     intervalMs * minimumVisibleBucketCount
   );
-  const activityStartWithPadding = firstActivityAt - intervalMs * activityPaddingBucketCount;
-  const targetStartAt = Math.min(
-    activityStartWithPadding,
-    latestBucketEnd - visibleDurationMs
-  );
+  const targetStartAt = latestBucketEnd - visibleDurationMs;
   const startIndex = buckets.findIndex(
     (bucket) => Date.parse(bucket.periodStart) >= targetStartAt
   );
@@ -57,15 +46,6 @@ export function latestAnalyticsRateLimitStartIndex(
   return fallbackStartedAt
     ? buckets.findIndex((bucket) => bucket.periodStart === fallbackStartedAt)
     : -1;
-}
-
-function hasActivity(bucket: AnalyticsLiveUsageBucket) {
-  return (
-    bucket.requestCount > 0 ||
-    bucket.incomingRps > 0 ||
-    bucket.processedRps > 0 ||
-    bucket.rateLimitedRps > 0
-  );
 }
 
 function hasRateLimit(bucket: AnalyticsLiveUsageBucket) {
