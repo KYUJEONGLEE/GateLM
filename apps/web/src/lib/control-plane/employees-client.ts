@@ -946,6 +946,7 @@ function toProjectRecord(value: unknown): ProjectRecord | null {
     description: typeof record.description === "string" ? record.description : null,
     id: record.id,
     name: record.name,
+    rateLimit: normalizeProjectRateLimit(record.rateLimit),
     runtimeApplicationId:
       typeof record.runtimeApplicationId === "string" ? record.runtimeApplicationId : null,
     status,
@@ -954,6 +955,29 @@ function toProjectRecord(value: unknown): ProjectRecord | null {
     updatedAt: record.updatedAt,
     warningThresholdPercent: record.warningThresholdPercent
   };
+}
+
+function normalizeProjectRateLimit(
+  value: unknown
+): ProjectRecord["rateLimit"] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+  return typeof record.enabled === "boolean" &&
+    typeof record.limit === "number" &&
+    Number.isInteger(record.limit) &&
+    record.limit >= 1 &&
+    typeof record.windowSeconds === "number" &&
+    Number.isInteger(record.windowSeconds) &&
+    record.windowSeconds >= 1
+    ? {
+        enabled: record.enabled,
+        limit: record.limit,
+        windowSeconds: record.windowSeconds
+      }
+    : null;
 }
 
 function toProjectEmployeeAssignmentRecord(
@@ -1186,6 +1210,7 @@ function getFixtureProjects(tenantId: string): ProjectRecord[] {
       description: "Employee chatbot access project.",
       id: "project_fixture_employee_chat",
       name: "Employee Chat",
+      rateLimit: null,
       runtimeApplicationId: null,
       status: "ACTIVE",
       tenantId,

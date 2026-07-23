@@ -163,6 +163,7 @@ function buildProject(overrides: Partial<ProjectRecord> = {}): ProjectRecord {
     description: "",
     id: "project_onboarding_draft",
     name: "Onboarding project",
+    rateLimit: null,
     runtimeApplicationId: "app_onboarding_draft",
     status: "DRAFT",
     tenantId: "tenant_demo_acme",

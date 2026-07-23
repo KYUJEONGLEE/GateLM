@@ -106,7 +106,14 @@ export interface ProjectResponseDto {
   status: ResourceStatus;
   totalBudgetUsd: number;
   runtimeApplicationId: string | null;
+  rateLimit: ProjectRateLimitSummaryDto | null;
   warningThresholdPercent: number;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface ProjectRateLimitSummaryDto {
+  enabled: boolean;
+  limit: number;
+  windowSeconds: number;
 }

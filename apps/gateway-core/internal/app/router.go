@@ -326,6 +326,14 @@ func newRouterWithOptions(cfg config.Config, providers *provider.Registry, readi
 		Reader:   routerOptions.InvocationLogReader,
 		TenantID: cfg.DemoTenantID,
 	}))
+	var analyticsLiveUsageReader handlers.AnalyticsLiveUsageReader
+	if reader, ok := routerOptions.InvocationLogReader.(handlers.AnalyticsLiveUsageReader); ok {
+		analyticsLiveUsageReader = reader
+	}
+	mux.Handle("GET /api/analytics/live-usage", observabilityAuth(handlers.AnalyticsLiveUsageHandler{
+		Reader:   analyticsLiveUsageReader,
+		TenantID: cfg.DemoTenantID,
+	}))
 	var analyticsPolicyImpactReader handlers.AnalyticsPolicyImpactReader
 	if reader, ok := routerOptions.InvocationLogReader.(handlers.AnalyticsPolicyImpactReader); ok {
 		analyticsPolicyImpactReader = reader

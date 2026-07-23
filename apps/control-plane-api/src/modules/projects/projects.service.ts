@@ -18,6 +18,7 @@ import { PrismaService } from '@/infrastructure/database/prisma/prisma.service';
 import {
   CreateProjectDto,
   ListProjectsQueryDto,
+  ProjectRateLimitSummaryDto,
   ProjectResponseDto,
   UpdateProjectDto,
 } from './dto/project.dto';
@@ -31,6 +32,11 @@ type RuntimeApplicationProjection = Pick<
   Application,
   'id' | 'projectId' | 'status'
 >;
+
+type ProjectRuntimePolicySummary = {
+  rateLimit: ProjectRateLimitSummaryDto | null;
+  warningThresholdPercent: number;
+};
 
 @Injectable()
 export class ProjectsService {
@@ -101,7 +107,10 @@ export class ProjectsService {
     return this.toProjectResponse(
       project,
       runtimeApplicationId,
-      DEFAULT_WARNING_THRESHOLD_PERCENT,
+      {
+        rateLimit: null,
+        warningThresholdPercent: DEFAULT_WARNING_THRESHOLD_PERCENT,
+      },
     );
   }
 
@@ -124,8 +133,8 @@ export class ProjectsService {
       await this.getRuntimeApplicationIdsByProjectIds(
         page.map((project) => project.id),
       );
-    const warningThresholdPercentsByProjectId =
-      await this.getWarningThresholdPercentsByProjectIds(
+    const runtimePolicySummariesByProjectId =
+      await this.getRuntimePolicySummariesByProjectIds(
         runtimeApplicationIdsByProjectId,
       );
 
@@ -134,8 +143,10 @@ export class ProjectsService {
         this.toProjectResponse(
           project,
           runtimeApplicationIdsByProjectId.get(project.id) ?? null,
-          warningThresholdPercentsByProjectId.get(project.id) ??
-            DEFAULT_WARNING_THRESHOLD_PERCENT,
+          runtimePolicySummariesByProjectId.get(project.id) ?? {
+            rateLimit: null,
+            warningThresholdPercent: DEFAULT_WARNING_THRESHOLD_PERCENT,
+          },
         ),
       ),
       pagination: {
@@ -445,16 +456,18 @@ export class ProjectsService {
   ): Promise<ProjectResponseDto> {
     const runtimeApplicationIdsByProjectId =
       await this.getRuntimeApplicationIdsByProjectIds([project.id]);
-    const warningThresholdPercentsByProjectId =
-      await this.getWarningThresholdPercentsByProjectIds(
+    const runtimePolicySummariesByProjectId =
+      await this.getRuntimePolicySummariesByProjectIds(
         runtimeApplicationIdsByProjectId,
       );
 
     return this.toProjectResponse(
       project,
       runtimeApplicationIdsByProjectId.get(project.id) ?? null,
-      warningThresholdPercentsByProjectId.get(project.id) ??
-        DEFAULT_WARNING_THRESHOLD_PERCENT,
+      runtimePolicySummariesByProjectId.get(project.id) ?? {
+        rateLimit: null,
+        warningThresholdPercent: DEFAULT_WARNING_THRESHOLD_PERCENT,
+      },
     );
   }
 
@@ -516,9 +529,9 @@ export class ProjectsService {
     );
   }
 
-  private async getWarningThresholdPercentsByProjectIds(
+  private async getRuntimePolicySummariesByProjectIds(
     runtimeApplicationIdsByProjectId: Map<string, string>,
-  ): Promise<Map<string, number>> {
+  ): Promise<Map<string, ProjectRuntimePolicySummary>> {
     const runtimeApplicationIds = [
       ...new Set(runtimeApplicationIdsByProjectId.values()),
     ];
@@ -540,22 +553,19 @@ export class ProjectsService {
         document: true,
       },
     });
-    const warningThresholdPercentsByApplicationId = new Map<string, number>();
+    const summariesByApplicationId = new Map<
+      string,
+      ProjectRuntimePolicySummary
+    >();
 
     for (const runtimeConfig of runtimeConfigs) {
-      if (
-        warningThresholdPercentsByApplicationId.has(
-          runtimeConfig.applicationId,
-        )
-      ) {
+      if (summariesByApplicationId.has(runtimeConfig.applicationId)) {
         continue;
       }
 
-      warningThresholdPercentsByApplicationId.set(
+      summariesByApplicationId.set(
         runtimeConfig.applicationId,
-        this.getWarningThresholdPercentFromRuntimeConfigDocument(
-          runtimeConfig.document,
-        ),
+        this.getRuntimePolicySummary(runtimeConfig.document),
       );
     }
 
@@ -563,29 +573,58 @@ export class ProjectsService {
       [...runtimeApplicationIdsByProjectId.entries()].map(
         ([projectId, runtimeApplicationId]) => [
           projectId,
-          warningThresholdPercentsByApplicationId.get(runtimeApplicationId) ??
-            DEFAULT_WARNING_THRESHOLD_PERCENT,
+          summariesByApplicationId.get(runtimeApplicationId) ?? {
+            rateLimit: null,
+            warningThresholdPercent: DEFAULT_WARNING_THRESHOLD_PERCENT,
+          },
         ],
       ),
     );
   }
 
-  private getWarningThresholdPercentFromRuntimeConfigDocument(
+  private getRuntimePolicySummary(
     document: Prisma.JsonValue,
-  ): number {
+  ): ProjectRuntimePolicySummary {
     if (!this.isRecord(document)) {
-      return DEFAULT_WARNING_THRESHOLD_PERCENT;
+      return {
+        rateLimit: null,
+        warningThresholdPercent: DEFAULT_WARNING_THRESHOLD_PERCENT,
+      };
     }
 
     const budgetPolicy = document.budgetPolicy;
+    const rateLimit = document.rateLimit;
 
-    if (!this.isRecord(budgetPolicy)) {
-      return DEFAULT_WARNING_THRESHOLD_PERCENT;
+    return {
+      rateLimit: this.normalizeRateLimitSummary(rateLimit),
+      warningThresholdPercent: this.isRecord(budgetPolicy)
+        ? this.normalizeWarningThresholdPercent(
+            budgetPolicy.warningThresholdPercent,
+          )
+        : DEFAULT_WARNING_THRESHOLD_PERCENT,
+    };
+  }
+
+  private normalizeRateLimitSummary(
+    value: unknown,
+  ): ProjectRateLimitSummaryDto | null {
+    if (!this.isRecord(value)) {
+      return null;
     }
 
-    return this.normalizeWarningThresholdPercent(
-      budgetPolicy.warningThresholdPercent,
-    );
+    const enabled = value.enabled;
+    const limit = value.limit;
+    const windowSeconds = value.windowSeconds;
+
+    return typeof enabled === 'boolean' &&
+      typeof limit === 'number' &&
+      Number.isInteger(limit) &&
+      limit >= 1 &&
+      typeof windowSeconds === 'number' &&
+      Number.isInteger(windowSeconds) &&
+      windowSeconds >= 1
+      ? { enabled, limit, windowSeconds }
+      : null;
   }
 
   private normalizeWarningThresholdPercent(value: unknown): number {
@@ -604,7 +643,7 @@ export class ProjectsService {
   private toProjectResponse(
     project: Project,
     runtimeApplicationId: string | null,
-    warningThresholdPercent: number,
+    runtimePolicySummary: ProjectRuntimePolicySummary,
   ): ProjectResponseDto {
     return {
       id: project.id,
@@ -614,7 +653,9 @@ export class ProjectsService {
       status: project.status,
       totalBudgetUsd: this.toProjectBudgetUsd(project.totalBudgetUsd),
       runtimeApplicationId,
-      warningThresholdPercent,
+      rateLimit: runtimePolicySummary.rateLimit,
+      warningThresholdPercent:
+        runtimePolicySummary.warningThresholdPercent,
       createdAt: project.createdAt.toISOString(),
       updatedAt: project.updatedAt.toISOString(),
     };

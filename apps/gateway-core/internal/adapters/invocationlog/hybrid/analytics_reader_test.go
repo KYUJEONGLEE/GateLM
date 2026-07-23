@@ -19,8 +19,8 @@ type performanceStub struct {
 
 type fullReaderStub struct {
 	performanceStub
-	listCalls, detailCalls, dashboardCalls, costCalls, policyCalls, reliabilityCalls, optionCalls int
-	listErr                                                                                       error
+	listCalls, detailCalls, dashboardCalls, costCalls, liveCalls, policyCalls, reliabilityCalls, optionCalls int
+	listErr, liveErr                                                                                         error
 }
 
 func (s *fullReaderStub) ListProjectLogs(_ context.Context, _ invocationlog.ProjectLogsFilter) ([]invocationlog.RequestLogListItem, error) {
@@ -38,6 +38,10 @@ func (s *fullReaderStub) GetDashboardOverview(_ context.Context, _ invocationlog
 func (s *fullReaderStub) GetCostReport(_ context.Context, _ invocationlog.CostReportFilter) (invocationlog.CostReportFields, error) {
 	s.costCalls++
 	return invocationlog.CostReportFields{}, nil
+}
+func (s *fullReaderStub) GetAnalyticsLiveUsage(_ context.Context, _ invocationlog.AnalyticsLiveUsageFilter) (invocationlog.AnalyticsLiveUsageFields, error) {
+	s.liveCalls++
+	return invocationlog.AnalyticsLiveUsageFields{}, s.liveErr
 }
 func (s *fullReaderStub) GetAnalyticsPolicyImpact(_ context.Context, _ invocationlog.AnalyticsPolicyImpactFilter) (invocationlog.AnalyticsPolicyImpactFields, error) {
 	s.policyCalls++
@@ -129,14 +133,16 @@ func TestAnalyticsReaderRoutesEveryProjectBulkReadToClickHouseAndKeepsDetailOnPo
 	_, _ = reader.ListProjectLogs(context.Background(), invocationlog.ProjectLogsFilter{TenantID: tenantID, ProjectID: projectID, From: from, To: from.Add(time.Hour)})
 	_, _ = reader.GetDashboardOverview(context.Background(), invocationlog.DashboardOverviewFilter{TenantID: tenantID, ProjectID: projectID, From: from, To: from.Add(time.Hour)})
 	_, _ = reader.GetCostReport(context.Background(), invocationlog.CostReportFilter{TenantID: tenantID, ProjectID: projectID, From: from, To: from.Add(time.Hour)})
+	liveTo := from.Truncate(time.Second).Add(15 * time.Minute)
+	_, _ = reader.GetAnalyticsLiveUsage(context.Background(), invocationlog.AnalyticsLiveUsageFilter{TenantID: tenantID, ProjectID: projectID, From: liveTo.Add(-15 * time.Minute), To: liveTo})
 	_, _ = reader.GetAnalyticsPolicyImpact(context.Background(), invocationlog.AnalyticsPolicyImpactFilter{TenantID: tenantID, ProjectID: projectID, From: from, To: from.Add(time.Hour)})
 	_, _ = reader.GetAnalyticsReliability(context.Background(), invocationlog.AnalyticsReliabilityFilter{TenantID: tenantID, ProjectID: projectID, From: from, To: from.Add(time.Hour)})
 	_, _ = reader.ListProjectLogFilterOptions(context.Background(), invocationlog.ProjectLogsFilter{TenantID: tenantID, ProjectID: projectID, From: from, To: from.Add(time.Hour)})
 	detail, _ := reader.GetRequestDetail(context.Background(), invocationlog.RequestDetailFilter{TenantID: tenantID, ProjectID: projectID, RequestID: "request"})
-	if project.listCalls != 1 || project.dashboardCalls != 1 || project.costCalls != 1 || project.policyCalls != 1 || project.reliabilityCalls != 1 || project.optionCalls != 1 {
+	if project.listCalls != 1 || project.dashboardCalls != 1 || project.costCalls != 1 || project.liveCalls != 1 || project.policyCalls != 1 || project.reliabilityCalls != 1 || project.optionCalls != 1 {
 		t.Fatalf("project bulk reads did not all route to ClickHouse stub: %+v", project)
 	}
-	if primary.listCalls != 0 || primary.dashboardCalls != 0 || primary.costCalls != 0 || primary.policyCalls != 0 || primary.reliabilityCalls != 0 || primary.optionCalls != 0 {
+	if primary.listCalls != 0 || primary.dashboardCalls != 0 || primary.costCalls != 0 || primary.liveCalls != 0 || primary.policyCalls != 0 || primary.reliabilityCalls != 0 || primary.optionCalls != 0 {
 		t.Fatalf("project bulk read reached PostgreSQL primary: %+v", primary)
 	}
 	if primary.detailCalls != 1 || detail.RequestID != "postgres-detail" {
@@ -158,6 +164,27 @@ func TestAnalyticsReaderDoesNotFallbackProjectLogsToPostgres(t *testing.T) {
 	}
 	if primary.listCalls != 0 {
 		t.Fatalf("PostgreSQL fallback must stay disabled, got %d calls", primary.listCalls)
+	}
+}
+
+func TestAnalyticsReaderDoesNotFallbackLiveUsageToPostgres(t *testing.T) {
+	primary := &fullReaderStub{}
+	project := &fullReaderStub{liveErr: invocationlog.ErrAnalyticsDataUnavailable}
+	reader, err := NewAnalyticsReader(primary, project)
+	if err != nil {
+		t.Fatalf("new hybrid reader: %v", err)
+	}
+	to := time.Now().UTC().Truncate(time.Second)
+	_, err = reader.GetAnalyticsLiveUsage(context.Background(), invocationlog.AnalyticsLiveUsageFilter{
+		TenantID: "00000000-0000-4000-8000-000000000100",
+		From:     to.Add(-15 * time.Minute),
+		To:       to,
+	})
+	if !errors.Is(err, invocationlog.ErrAnalyticsDataUnavailable) {
+		t.Fatalf("expected ClickHouse unavailable error, got %v", err)
+	}
+	if primary.liveCalls != 0 || project.liveCalls != 1 {
+		t.Fatalf("live usage must not fall back to primary: project=%d primary=%d", project.liveCalls, primary.liveCalls)
 	}
 }
 
