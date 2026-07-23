@@ -190,13 +190,19 @@ function RankingChart({
         const value = values[index] ?? 0;
         const isViewer = viewerRank === row.rank;
         return <li className={isViewer ? 'is-viewer' : ''} key={row.rank}>
-          <div className="usage-ranking-chart-label">
-            <span className="usage-ranking-chart-rank">{row.rank}</span>
-            <strong>{row.displayName}{isViewer && <span className="usage-ranking-me">나</span>}</strong>
-            <span className="usage-ranking-chart-value">{formatRankingValue(row, metric)}</span>
-          </div>
+          <span
+            className="usage-ranking-chart-value"
+            title={formatRankingValue(row, metric)}
+          >
+            {formatCompactRankingValue(row, metric)}
+          </span>
           <div className="usage-ranking-chart-track" aria-hidden>
-            <span style={{ width: `${rankingBarPercent(value, maximum)}%` }} />
+            <span style={{ height: `${rankingBarPercent(value, maximum)}%` }} />
+          </div>
+          <div className="usage-ranking-chart-label">
+            <span className="usage-ranking-chart-rank">{row.rank}위</span>
+            <strong title={row.displayName}>{row.displayName}</strong>
+            {isViewer && <span className="usage-ranking-me">나</span>}
           </div>
         </li>;
       })}
@@ -247,15 +253,27 @@ function formatRankingValue(
     : `${formatInteger(row.confirmedTotalTokens)} 토큰`;
 }
 
+function formatCompactRankingValue(
+  row: Pick<UsageRankingRow, 'confirmedTotalTokens' | 'estimatedCostMicroUsd'>,
+  metric: UsageRankingMetric,
+): string {
+  if (metric === 'cost') return formatMicroUsd(row.estimatedCostMicroUsd);
+  return new Intl.NumberFormat('ko-KR', {
+    maximumFractionDigits: 1,
+    notation: 'compact',
+  }).format(row.confirmedTotalTokens);
+}
+
 function formatInteger(value: number): string {
   return new Intl.NumberFormat('ko-KR', { maximumFractionDigits: 0 }).format(value);
 }
 
 function formatMicroUsd(value: number): string {
   const usd = value / 1_000_000;
+  if (usd > 0 && usd < 0.0001) return '<$0.0001';
   return new Intl.NumberFormat('en-US', {
     currency: 'USD',
-    maximumFractionDigits: usd < 0.01 ? 6 : 2,
+    maximumFractionDigits: 4,
     minimumFractionDigits: 2,
     style: 'currency',
   }).format(usd);

@@ -9,13 +9,13 @@ import {
   BookOpenText,
   Check,
   CheckCircle2,
-  ChevronLeft,
-  ChevronRight,
   Copy,
   Gauge,
   LoaderCircle,
   LogOut,
   MessageSquareText,
+  PanelLeftClose,
+  PanelLeftOpen,
   Pencil,
   Plus,
   Send,
@@ -668,7 +668,7 @@ export function ChatShell() {
             onClick={compactLayout ? () => closeDrawer(true) : toggleNavigation}
             type="button"
           >
-            <ChevronLeft size={20} aria-hidden />
+            <PanelLeftClose size={19} strokeWidth={2.2} aria-hidden />
           </button>
         </div>
         <nav className="sidebar-primary-nav" aria-label="Tenant Chat">
@@ -737,7 +737,7 @@ export function ChatShell() {
           onClick={compactLayout ? () => setMenuOpen(true) : toggleNavigation}
           type="button"
         >
-          <ChevronRight size={21} aria-hidden />
+          <PanelLeftOpen size={19} strokeWidth={2.2} aria-hidden />
         </button>
         <h1 className="sr-only">{activeView === 'usage-ranking' ? '사용량 순위' : selected?.title ?? 'GateLM Chat'}</h1>
         {activeView === 'chat' && <div className="topbar-actions">

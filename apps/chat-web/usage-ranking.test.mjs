@@ -54,6 +54,12 @@ test('ranking response excludes unknown identity and provider fields', () => {
   }
 });
 
+test('ranking response accepts an administrator without an employee viewer row', () => {
+  const response = ranking();
+  response.viewer = null;
+  assert.equal(usageRankingResponse(response).viewer, null);
+});
+
 test('ranking upstream injects fixed credentials without browser scope headers', async () => {
   let request;
   const result = await usageRankingJson({
@@ -141,7 +147,7 @@ test('ranking view caches filters, aborts stale reads, and keeps ChatShell mount
   assert.match(chatShell, /<UsageRankingView active=\{activeView === 'usage-ranking'\} \/>/);
 });
 
-test('ranking view renders a dependency-free top-ten bar chart with exact values', () => {
+test('ranking view renders a dependency-free vertical top-ten chart with compact labels', () => {
   const rankingView = readFileSync(
     new URL('./src/components/usage-ranking-view.tsx', import.meta.url),
     'utf8',
@@ -152,10 +158,34 @@ test('ranking view renders a dependency-free top-ten bar chart with exact values
   );
   assert.match(rankingView, /items\.slice\(0, 10\)/);
   assert.match(rankingView, /rankingBarPercent\(value, maximum\)/);
-  assert.match(rankingView, /formatRankingValue\(row, metric\)/);
+  assert.match(rankingView, /formatCompactRankingValue\(row, metric\)/);
+  assert.match(rankingView, /height: `\$\{rankingBarPercent\(value, maximum\)\}%`/);
   assert.match(styles, /\.usage-ranking-chart-track > span/);
+  assert.match(styles, /grid-template-columns: repeat\(auto-fit, minmax\(76px, 1fr\)\)/);
+  assert.match(styles, /\.usage-ranking-chart-label > strong \{[^}]*font-size: 14pt;/);
+  assert.match(styles, /\.usage-ranking-chart-value \{[^}]*font-size: 14pt;/);
   assert.match(styles, /background: var\(--g-primary\)/);
+  assert.match(rankingView, /if \(usd > 0 && usd < 0\.0001\) return '<\$0\.0001';/);
+  assert.match(rankingView, /maximumFractionDigits: 4/);
   assert.doesNotMatch(rankingView, /echarts|recharts|chart\.js/i);
+});
+
+test('ranking retry button and brand glow avoid baseline and rectangular clipping', () => {
+  const styles = readFileSync(
+    new URL('./src/app/globals.css', import.meta.url),
+    'utf8',
+  );
+  assert.match(styles, /\.usage-ranking-status\.is-error \.g-button \{[^}]*display: inline-flex;[^}]*align-items: center;[^}]*gap: 7px;/);
+  assert.match(styles, /\.brand-mark::before \{[^}]*border-radius: 999px;[^}]*radial-gradient/);
+});
+
+test('new conversation action aligns its icon and label', () => {
+  const styles = readFileSync(
+    new URL('./src/app/globals.css', import.meta.url),
+    'utf8',
+  );
+  assert.match(styles, /\.new-conversation \{[^}]*display: inline-flex;[^}]*align-items: center;[^}]*justify-content: center;[^}]*gap: 7px;/);
+  assert.match(styles, /\.new-conversation > svg \{[^}]*display: block;[^}]*flex: 0 0 auto;/);
 });
 
 test('local runner preserves existing data and applies only deploy migrations', () => {

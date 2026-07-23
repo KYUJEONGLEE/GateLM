@@ -50,7 +50,7 @@ export function usageRankingResponse(value) {
   ]);
   if (!['raw', 'rollup', 'hybrid'].includes(provenance.source)) invalid();
   const viewer = source.viewer === null ? null : rankingRow(source.viewer, true);
-  if (viewer?.rank !== null && viewer.rank > rankedEmployeeCount) invalid();
+  if (viewer && viewer.rank !== null && viewer.rank > rankedEmployeeCount) invalid();
   if (
     viewer &&
     viewer.rank !== null &&
