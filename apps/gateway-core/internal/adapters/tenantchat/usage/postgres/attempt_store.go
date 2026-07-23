@@ -47,10 +47,6 @@ func (s *ReservationStore) StartAttempt(
 		"tenant-chat-user:"+requestContext.ExecutionScope.TenantID+":"+requestContext.ExecutionScope.Actor.UserID); err != nil {
 		return tenantchat.ErrUsageGuardUnavailable
 	}
-	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`,
-		"tenant-chat-cost:"+requestContext.ExecutionScope.TenantID); err != nil {
-		return tenantchat.ErrUsageGuardUnavailable
-	}
 
 	var reservationState string
 	var storedRequestID string
@@ -303,6 +299,9 @@ func (s *ReservationStore) topUpFallback(
 	now time.Time,
 ) error {
 	additionalTokens := requestContext.UsageIntent.EstimatedInputTokens + requestContext.UsageIntent.MaxOutputTokens
+	if additionalTokens < requestContext.UsageIntent.EstimatedInputTokens {
+		return tenantchat.ErrUsageGuardUnavailable
+	}
 	userPeriod, err := findTokenPeriod(ctx, tx, requestContext, now)
 	if err != nil {
 		return tenantchat.ErrUsageGuardUnavailable
@@ -311,9 +310,21 @@ func (s *ReservationStore) topUpFallback(
 	if err != nil {
 		return tenantchat.ErrUsageGuardUnavailable
 	}
+	employeeWeeklyPeriod, err := lockEmployeeWeeklyTokenPeriodForFallback(
+		ctx, tx, requestContext, snapshot, reservationID,
+	)
+	if err != nil {
+		return tenantchat.ErrUsageGuardUnavailable
+	}
 	projectedTokens := userPeriod.Confirmed + userPeriod.Unconfirmed + userPeriod.Reserved + additionalTokens
 	if projectedTokens < additionalTokens || projectedTokens > userPeriod.HardStop {
 		return tenantchat.ErrQuotaHardLimit
+	}
+	if employeeWeeklyPeriod != nil {
+		projectedEmployeeTokens := employeeWeeklyPeriod.Confirmed + employeeWeeklyPeriod.Unconfirmed + employeeWeeklyPeriod.Reserved + additionalTokens
+		if employeeWeeklyPeriod.State == "blocked" || projectedEmployeeTokens < additionalTokens || projectedEmployeeTokens > employeeWeeklyPeriod.HardStop {
+			return tenantchat.ErrEmployeeWeeklyTokenQuotaHardLimit
+		}
 	}
 	projectedCost := tenantPeriod.Confirmed + tenantPeriod.Unconfirmed + tenantPeriod.Reserved + exposureCost
 	if projectedCost < exposureCost || projectedCost > tenantPeriod.HardStop {
@@ -343,13 +354,14 @@ func (s *ReservationStore) topUpFallback(
 	`, requestContext.ExecutionScope.TenantID, tenantPeriod.Start, exposureCost, budgetState, now); err != nil {
 		return tenantchat.ErrUsageGuardUnavailable
 	}
-	if _, err = tx.Exec(ctx, `
+	tag, err := tx.Exec(ctx, `
 		UPDATE tenant_chat_usage_reservations
 		SET reserved_tokens = reserved_tokens + $3,
 		    reserved_cost_micro_usd = reserved_cost_micro_usd + $4,
 		    ledger_version = $5, updated_at = $6
 		WHERE reservation_id = $1::uuid AND tenant_id = $2::uuid AND state = 'reserved'
-	`, reservationID, requestContext.ExecutionScope.TenantID, additionalTokens, exposureCost, nextVersion, now); err != nil {
+	`, reservationID, requestContext.ExecutionScope.TenantID, additionalTokens, exposureCost, nextVersion, now)
+	if err != nil || tag.RowsAffected() != 1 {
 		return tenantchat.ErrUsageGuardUnavailable
 	}
 	if _, err = tx.Exec(ctx, `

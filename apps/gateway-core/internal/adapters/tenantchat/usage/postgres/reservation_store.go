@@ -108,10 +108,6 @@ func (s *ReservationStore) consumeAndReserve(
 		"tenant-chat-user:"+requestContext.ExecutionScope.TenantID+":"+actor.UserID); err != nil {
 		return tenantchat.UsageReservation{}, tenantchat.ErrUsageGuardUnavailable
 	}
-	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`,
-		"tenant-chat-cost:"+requestContext.ExecutionScope.TenantID); err != nil {
-		return tenantchat.UsageReservation{}, tenantchat.ErrUsageGuardUnavailable
-	}
 	if actor.ActorKind == "employee" && actor.EmployeeID != "" {
 		if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`,
 			"tenant-chat-employee-week:"+requestContext.ExecutionScope.TenantID+":"+actor.EmployeeID); err != nil {

@@ -5,12 +5,14 @@
 | Status | Supporting implementation evidence; not an API, DB, event, or release contract |
 | Reviewed baseline | `origin/dev` at `c83921c89966cc894031b314d88c6ed0eb714363` |
 | Minute Rollup implementation | `feat/postgres-monthly-log-partitions` at `c5a7246d1` |
-| Reviewed at | 2026-07-21 |
-| Scope | Gateway, Tenant Chat, and Tenant Chat RAG code paths inspected in this snapshot |
+| Quota PR base | `origin/dev` at `fe2045d82625a2e67dab2afd6cdb63bc64c443bb` |
+| Quota evidence | Isolated probe `codex/quota-contention-probe` at `b4bbb1d4`; PR branch `fix/tenant-chat-quota-contention` |
+| Reviewed at | General snapshot 2026-07-21; quota evidence 2026-07-22 |
+| Scope | Gateway, Tenant Chat, Tenant Chat RAG, and the local PostgreSQL quota probe |
 
 ## How To Read This Document
 
-This document describes problems that the checked-in code and tests address. It does not claim a production SLA, a completed release, or measured throughput. In particular, a distributed primitive such as Redis Lua or PostgreSQL `SKIP LOCKED` is evidence of a scale-aware design, not evidence of a specific RPS, p95, or p99 result.
+This document describes problems that the checked-in code and tests address. It does not claim a production SLA or a completed release. A distributed primitive such as Redis Lua or PostgreSQL `SKIP LOCKED` is not evidence of a specific RPS, p95, or p99 result. Where an item cites a dated performance report, the measured claim is limited to that report's environment and workload.
 
 Each item intentionally separates:
 
@@ -216,7 +218,34 @@ Request-per-second limiting alone does not prevent a small number of very large 
 
 These are scale-control primitives, not a capacity benchmark. Their Redis Cluster compatibility, failover behavior, and target throughput need dedicated operational tests.
 
-## 9. Internal RAG Embedding Requests Are One-Time Across Gateway Replicas
+## 9. Personal Token Quota Contention Is a Durable Accounting Problem
+
+### Failure mode
+
+Request Rate Limit, provider token-window protection, and personal cumulative Token Quota are different controls. Treating the personal Quota as another disposable Redis counter loses the durable reservation, settlement, replay, and audit relationship required for cost accounting. Keeping that relationship in one PostgreSQL transaction can instead create contention when many employees in one Tenant share a cost-period row.
+
+### How the implementation addresses it
+
+- PostgreSQL reservation, period, ledger, and outbox rows remain the accounting source of truth.
+- The probe exercises the real `BeginExecution -> FinalizeConfirmed` path and compares one shared Tenant with a 16-Tenant control.
+- A correctness probe exposed a fallback top-up that could bypass the employee weekly limit; the fix locks the period pinned by the original reservation and fails before fallback dispatch.
+- Tenant cost balance writes were already serialized by the cost-period row's `FOR UPDATE`. The isolated optimization removes only the redundant Tenant cost advisory lock while retaining row locks, transaction boundaries, and ledger ordering.
+- A later `pgx.Batch` candidate improved general database round-trip cost but did not meet the predeclared residual-contention target, so it was reverted.
+
+### Evidence
+
+- [Detailed Token Quota contention report](../testing/tenant-chat-token-quota-contention-report.md)
+- [Re-executable PostgreSQL contention probe](../../apps/gateway-core/internal/adapters/tenantchat/usage/postgres/reservation_store_contention_probe_test.go)
+- [Tenant cost period locking](../../apps/gateway-core/internal/adapters/tenantchat/usage/postgres/periods.go)
+- [Concurrent period, fallback, and mixed settlement regressions](../../apps/gateway-core/internal/adapters/tenantchat/usage/postgres/reservation_store_integration_test.go)
+
+At scenario B (one Tenant, 16 employees), concurrency 8, and 1,000 operations repeated three times, median throughput changed from `36.97` to `55.26 ops/s` (`+49.5%`). All three repetitions improved, while the 16-Tenant control changed by `+3.8%`. Quota overshoot, duplicate settlement, balance mismatch, and deadlock checks remained at zero.
+
+### Claim boundary
+
+This is a local PostgreSQL probe result, not production HTTP RPS or an SLA. The accepted change improves throughput, not tail latency: scenario B Begin p95 regressed, and waits moved from the redundant advisory lock to `transactionid` and `tuple` row-lock events. The evidence does not support claiming that Redis Hash or Lua improved personal Token Quota memory or time complexity.
+
+## 10. Internal RAG Embedding Requests Are One-Time Across Gateway Replicas
 
 ### Failure mode
 
@@ -238,7 +267,7 @@ A signed service-to-service request can be replayed while it remains valid. Sign
 
 This establishes the shared-state replay guard. It does not by itself prove signing-key rotation operations or cross-region Redis replication behavior.
 
-## 10. Request-Path Success Does Not Prove Dashboard Pipeline Capacity
+## 11. Request-Path Success Does Not Prove Dashboard Pipeline Capacity
 
 ### Failure mode
 
@@ -282,7 +311,7 @@ The persistent worker was then re-enabled with a 60-second interval, discovery b
 
 The incident evidence was collected on 2026-07-20 with image tag `production-distributed-23c6e6d847de`; query-plan recovery used main SHA `d2a06ab3d9922028c21ac3155d172a628cd03e2c`, and cursor convergence plus conservative worker re-enablement used main SHA `6e28c03235fb9ba86a352ebecf11635168d140f0`. It proves the diagnosed failure, measured query-plan improvement, completion of the bounded backlog, exact cursor convergence, and stable first automatic worker interval. It does not prove concurrent Dashboard safety or unlimited-scale capacity. Minute aggregation and bounded Policy Impact fallback were implemented later in feature commit `c5a7246d1`, deployed through main SHA `b274dca9624a56488fbbb38853e43edd88d82be9`, and activated after the staged parity checks described below. A repeated dashboard-aware production load test, adaptive polling, normalized ingestion dimensions, partition cutover, retention, and query budgets remain follow-up work.
 
-## 11. Bounding Rollup Work Instead of Making One Unbounded Query Faster
+## 12. Bounding Rollup Work Instead of Making One Unbounded Query Faster
 
 ### Failure mode
 
@@ -360,7 +389,7 @@ After activation, new Tenant Chat traffic also converged automatically on the ne
 
 The local A/B proves the implementation delta in an isolated PostgreSQL environment. The production-clone rehearsal additionally proves exact reader and parent-grain parity for the copied 70,252-row dataset and the measured raw-versus-Rollup reader delta on an `m7i.large`. Production activation proves staged migration, closed-grain parity, two-Gateway reader activation, and availability at the public boundary. It does not prove the same performance factor on live production while writes, authenticated Dashboard polling, and both Gateway readers run concurrently. A repeated `300 RPS × 10 minute` dashboard-aware test is still required before claiming that the production bottleneck is fully resolved.
 
-## 12. Large-Scale Validation Still Required
+## 13. Large-Scale Validation Still Required
 
 The following claims must not be made until they are measured on the target environment:
 

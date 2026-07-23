@@ -382,12 +382,8 @@ func validateReleasedReplay(
 }
 
 func lockUsageActors(ctx context.Context, tx pgx.Tx, requestContext tenantchat.RequestContext) error {
-	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`,
-		"tenant-chat-user:"+requestContext.ExecutionScope.TenantID+":"+requestContext.ExecutionScope.Actor.UserID); err != nil {
-		return err
-	}
 	_, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`,
-		"tenant-chat-cost:"+requestContext.ExecutionScope.TenantID)
+		"tenant-chat-user:"+requestContext.ExecutionScope.TenantID+":"+requestContext.ExecutionScope.Actor.UserID)
 	return err
 }
 
