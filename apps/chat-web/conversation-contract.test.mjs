@@ -255,6 +255,19 @@ test('ChatShell displays only final server-validated citations', () => {
   assert.match(source, /replaceCitations\(message, citations\)/);
 });
 
+test('ChatShell keeps the collapse action inside the open sidebar and uses directional controls', () => {
+  const source = readFileSync(new URL('./src/components/chat-shell.tsx', import.meta.url), 'utf8');
+  const styles = readFileSync(new URL('./src/app/globals.css', import.meta.url), 'utf8');
+
+  assert.match(source, /className="g-button g-button--ghost sidebar-collapse-toggle"[\s\S]*?<PanelLeftClose/);
+  assert.match(source, /className="g-button g-button--ghost navigation-toggle navigation-open-toggle"[\s\S]*?<PanelLeftOpen/);
+  assert.doesNotMatch(source, /<Menu\s/);
+  assert.match(source, /if \(next\) drawerTriggerRef\.current\?\.focus\(\);[\s\S]*?sidebar-collapse-toggle/);
+  assert.match(styles, /\.navigation-open-toggle \{ display: none;/);
+  assert.match(styles, /\.chat-shell\.is-sidebar-collapsed \.navigation-open-toggle \{ display: inline-grid;/);
+  assert.match(styles, /\.chat-main\.is-drawer-open \.navigation-open-toggle \{ display: none;/);
+});
+
 test('ChatShell defaults new conversations to normal and forwards an explicit knowledge mode', () => {
   const source = readFileSync(new URL('./src/components/chat-shell.tsx', import.meta.url), 'utf8');
   assert.match(source, /useState<KnowledgeMode>\('off'\)/);

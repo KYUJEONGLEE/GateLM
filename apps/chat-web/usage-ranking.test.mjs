@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 import {
@@ -51,6 +52,12 @@ test('ranking response excludes unknown identity and provider fields', () => {
       /Invalid usage ranking contract/,
     );
   }
+});
+
+test('ranking response accepts an administrator without an employee viewer row', () => {
+  const response = ranking();
+  response.viewer = null;
+  assert.equal(usageRankingResponse(response).viewer, null);
 });
 
 test('ranking upstream injects fixed credentials without browser scope headers', async () => {
@@ -121,6 +128,79 @@ test('ranking upstream aborts a timed-out read and returns only the safe error',
       error.status === 503 &&
       error.payload.code === 'CHAT_USAGE_UNAVAILABLE',
   );
+});
+
+test('ranking view caches filters, aborts stale reads, and keeps ChatShell mounted', () => {
+  const rankingView = readFileSync(
+    new URL('./src/components/usage-ranking-view.tsx', import.meta.url),
+    'utf8',
+  );
+  const chatShell = readFileSync(
+    new URL('./src/components/chat-shell.tsx', import.meta.url),
+    'utf8',
+  );
+  assert.match(rankingView, /cacheRef\.current\.get\(cacheKey\)/);
+  assert.match(rankingView, /requestRef\.current\?\.abort\(\)/);
+  assert.match(rankingView, /return \(\) => controller\.abort\(\)/);
+  assert.doesNotMatch(rankingView, /setInterval|setTimeout/);
+  assert.match(chatShell, /hidden=\{activeView !== 'chat'\}/);
+  assert.match(chatShell, /<UsageRankingView active=\{activeView === 'usage-ranking'\} \/>/);
+});
+
+test('ranking view renders a dependency-free vertical top-ten chart with compact labels', () => {
+  const rankingView = readFileSync(
+    new URL('./src/components/usage-ranking-view.tsx', import.meta.url),
+    'utf8',
+  );
+  const styles = readFileSync(
+    new URL('./src/app/globals.css', import.meta.url),
+    'utf8',
+  );
+  assert.match(rankingView, /items\.slice\(0, 10\)/);
+  assert.match(rankingView, /rankingBarPercent\(value, maximum\)/);
+  assert.match(rankingView, /formatCompactRankingValue\(row, metric\)/);
+  assert.match(rankingView, /height: `\$\{rankingBarPercent\(value, maximum\)\}%`/);
+  assert.match(styles, /\.usage-ranking-chart-track > span/);
+  assert.match(styles, /grid-template-columns: repeat\(auto-fit, minmax\(76px, 1fr\)\)/);
+  assert.match(styles, /\.usage-ranking-chart-label > strong \{[^}]*font-size: 14pt;/);
+  assert.match(styles, /\.usage-ranking-chart-value \{[^}]*font-size: 14pt;/);
+  assert.match(styles, /background: var\(--g-primary\)/);
+  assert.match(rankingView, /if \(usd > 0 && usd < 0\.0001\) return '<\$0\.0001';/);
+  assert.match(rankingView, /maximumFractionDigits: 4/);
+  assert.doesNotMatch(rankingView, /echarts|recharts|chart\.js/i);
+});
+
+test('ranking retry button and brand glow avoid baseline and rectangular clipping', () => {
+  const styles = readFileSync(
+    new URL('./src/app/globals.css', import.meta.url),
+    'utf8',
+  );
+  assert.match(styles, /\.usage-ranking-status\.is-error \.g-button \{[^}]*display: inline-flex;[^}]*align-items: center;[^}]*gap: 7px;/);
+  assert.match(styles, /\.brand-mark::before \{[^}]*border-radius: 999px;[^}]*radial-gradient/);
+});
+
+test('new conversation action aligns its icon and label', () => {
+  const styles = readFileSync(
+    new URL('./src/app/globals.css', import.meta.url),
+    'utf8',
+  );
+  assert.match(styles, /\.new-conversation \{[^}]*display: inline-flex;[^}]*align-items: center;[^}]*justify-content: center;[^}]*gap: 7px;/);
+  assert.match(styles, /\.new-conversation > svg \{[^}]*display: block;[^}]*flex: 0 0 auto;/);
+});
+
+test('local runner preserves existing data and applies only deploy migrations', () => {
+  const runner = readFileSync(
+    new URL('../../scripts/dev/tenant-chat-local-run.sh', import.meta.url),
+    'utf8',
+  );
+  assert.match(runner, /node_modules\/prisma\/build\/index\.js migrate deploy/);
+  assert.match(runner, /GATELM_PROVIDER_CREDENTIAL_ENCRYPTION_KEY/);
+  assert.match(runner, /existing PostgreSQL and Redis data were preserved/i);
+  assert.match(runner, /CHAT_WEB_ORIGIN="http:\/\/chat\.localhost:3002"/);
+  assert.match(runner, /fetch\('http:\/\/gateway-core:8080\/readyz'\)/);
+  assert.doesNotMatch(runner, /^.*"\$\{compose\[@\]\}".*\bdown\b.*$/m);
+  assert.doesNotMatch(runner, /^\s*(docker|"\$\{compose\[@\]\}")\s+volume\s+(rm|prune)\b/m);
+  assert.doesNotMatch(runner, /^\s*(pnpm|corepack)\s+.*\bdev\b/m);
 });
 
 function ranking() {
