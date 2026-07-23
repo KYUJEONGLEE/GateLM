@@ -12,6 +12,7 @@ export async function middleware(request: NextRequest) {
   const canonicalBrowserUrl = canonicalLocalBrowserUrl(
     request.url,
     process.env.GATELM_CHAT_WEB_ORIGIN?.trim(),
+    request.headers.get('host')?.trim() || undefined,
   );
   if (canonicalBrowserUrl && ['GET', 'HEAD'].includes(request.method)) {
     return secureResponse(NextResponse.redirect(canonicalBrowserUrl, 307), contentSecurityPolicy);

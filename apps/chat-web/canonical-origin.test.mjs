@@ -23,6 +23,39 @@ test('redirects numeric loopback aliases without changing the requested path or 
   );
 });
 
+test('uses the incoming Host header when the Next.js request URL has an internal host', () => {
+  assert.equal(
+    canonicalLocalBrowserUrl(
+      'http://0.0.0.0:3002/login?source=test',
+      'http://chat.localhost:3002',
+      'localhost:3002',
+    ),
+    'http://chat.localhost:3002/login?source=test',
+  );
+});
+
+test('derives the local canonical origin when the Edge runtime environment is unavailable', () => {
+  assert.equal(
+    canonicalLocalBrowserUrl(
+      'http://0.0.0.0:3002/login?source=test',
+      undefined,
+      'localhost:3002',
+    ),
+    'http://chat.localhost:3002/login?source=test',
+  );
+});
+
+test('does not redirect a canonical incoming Host when the request URL uses an internal host', () => {
+  assert.equal(
+    canonicalLocalBrowserUrl(
+      'http://localhost:3002/login',
+      undefined,
+      'chat.localhost:3002',
+    ),
+    null,
+  );
+});
+
 test('does not redirect the canonical host or unrelated production origins', () => {
   assert.equal(
     canonicalLocalBrowserUrl(
