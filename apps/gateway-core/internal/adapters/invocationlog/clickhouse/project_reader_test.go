@@ -106,6 +106,10 @@ func TestProjectReaderUsesClickHouseCompatibleAliasesAndBucketConversions(t *tes
 			t.Fatalf("aggregate query must not scan the raw invocation table: %s", statement)
 		}
 	}
+	if strings.Contains(queries[3], "sum(requests)") ||
+		strings.Contains(queries[3], "sumIf(requests") {
+		t.Fatalf("policy impact aggregate source columns must be qualified to avoid ClickHouse alias shadowing: %s", queries[3])
+	}
 
 	reliability, err := reader.GetAnalyticsReliability(context.Background(), invocationlog.AnalyticsReliabilityFilter{
 		TenantID: filter.TenantID, ProjectID: filter.ProjectID, Surface: invocationlog.AnalyticsReliabilitySurfaceProjectApplication,
@@ -122,6 +126,10 @@ func TestProjectReaderUsesClickHouseCompatibleAliasesAndBucketConversions(t *tes
 	}
 	if !strings.Contains(queries[4], "llm_invocations_dashboard_second_rollup") {
 		t.Fatalf("reliability totals must use the rollup: %s", queries[4])
+	}
+	if strings.Contains(queries[4], "sum(requests)") ||
+		strings.Contains(queries[4], "sumIf(requests") {
+		t.Fatalf("reliability aggregate source columns must be qualified to avoid ClickHouse alias shadowing: %s", queries[4])
 	}
 	if !strings.Contains(queries[5], "llm_invocations_by_time FINAL") {
 		t.Fatalf("reliability incidents must use the time-ordered read model: %s", queries[5])

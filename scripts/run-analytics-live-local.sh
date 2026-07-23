@@ -64,7 +64,6 @@ Optional port overrides:
 
 Load mode:
   GATELM_LOAD_API_KEY       Project API key. Prompted securely when omitted.
-  GATELM_LOAD_APP_TOKEN     Application token. Prompted securely when omitted.
   GATELM_LOAD_REQUESTS      Total requests, default 120.
   GATELM_LOAD_CONCURRENCY   Parallel requests, default 8.
   GATELM_LOAD_MODEL         Requested model, default auto.
@@ -143,16 +142,10 @@ record_service_listener() {
   local name="$1"
   local port="$2"
   local owner
-  local next_pid_file="${PID_FILE}.next"
   owner="$(windows_port_pid "$port")"
   [[ "$owner" =~ ^[1-9][0-9]*$ ]] || die "Could not resolve the Windows listener PID for $name on port $port."
 
-  awk -F: -v name="$name" -v owner="$owner" -v port="$port" '
-    BEGIN { OFS = ":" }
-    $1 == name { print name, owner, port, "listener"; next }
-    { print }
-  ' "$PID_FILE" > "$next_pid_file"
-  mv "$next_pid_file" "$PID_FILE"
+  printf '%s-listener:%s:%s:listener\n' "$name" "$owner" "$port" >>"$PID_FILE"
 }
 
 stop_apps() {
@@ -477,14 +470,13 @@ SQL
 }
 
 prepare_node_runtime() {
-  log "Preparing generated clients and workspace libraries without DB mutation"
+  log "Preparing workspace libraries without DB mutation"
   : > "$PREPARE_LOG"
 
   (
     cd "$REPO_ROOT"
     corepack pnpm --filter @gatelm/tenant-content-crypto build
     corepack pnpm --filter @gatelm/rag-config build
-    corepack pnpm --filter @gatelm/control-plane-api exec prisma generate
   ) >>"$PREPARE_LOG" 2>&1 || {
     tail -n 100 "$PREPARE_LOG" >&2 || true
     die "Node runtime preparation failed."
@@ -534,9 +526,10 @@ start_stack() {
       CONTROL_PLANE_ADMIN_AUTH_MODE=session_cookie \
       CONTROL_PLANE_AUTH_STATE_SECRET="$auth_state_secret" \
       CONTROL_PLANE_INTERNAL_SERVICE_TOKEN="$control_plane_token" \
+      GATELM_DEMO_MOCK_PROVIDER_BASE_URL="$MOCK_PROVIDER_BASE_URL" \
       DATABASE_URL="$DATABASE_URL" \
       REDIS_URL="$REDIS_URL" \
-    corepack pnpm --filter @gatelm/control-plane-api exec nest start --watch
+    corepack pnpm --filter @gatelm/control-plane-api exec nest start
 
   if ! wait_for_http "Control Plane" "http://127.0.0.1:${CONTROL_PLANE_PORT}/healthz" 120; then
     tail -n 120 "$CONTROL_PLANE_LOG" >&2 || true
@@ -651,14 +644,7 @@ run_load() {
     printf '\n'
     export GATELM_LOAD_API_KEY
   fi
-  if [[ -z "${GATELM_LOAD_APP_TOKEN:-}" ]]; then
-    read -r -s -p "Application token: " GATELM_LOAD_APP_TOKEN
-    printf '\n'
-    export GATELM_LOAD_APP_TOKEN
-  fi
-
   [[ -n "$GATELM_LOAD_API_KEY" ]] || die "Project API key is required."
-  [[ -n "$GATELM_LOAD_APP_TOKEN" ]] || die "Application token is required."
 
   export GATELM_LOAD_GATEWAY_URL="$gateway_url"
   export GATELM_LOAD_MODEL="${GATELM_LOAD_MODEL:-auto}"
@@ -681,7 +667,6 @@ run_load() {
           --output /dev/null \
           --write-out "%{http_code}\n" \
           --header "Authorization: Bearer ${GATELM_LOAD_API_KEY}" \
-          --header "X-GateLM-App-Token: ${GATELM_LOAD_APP_TOKEN}" \
           --header "X-GateLM-Feature-Id: analytics-live-local" \
           --header "Content-Type: application/json" \
           --data "$payload" \
