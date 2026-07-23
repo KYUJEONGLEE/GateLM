@@ -1,6 +1,12 @@
 import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { IdentityResult, TenantEntitlement } from './auth.types';
+import {
+  parseUsageRankingResponse,
+  type UsageRankingMetric,
+  type UsageRankingRange,
+  type UsageRankingResponse,
+} from '../usage/usage-ranking.contract';
 
 const MAX_RESPONSE_BYTES = 64 * 1024;
 
@@ -75,6 +81,25 @@ export class ControlPlaneClient {
     return this.request(
       `/internal/v1/tenant-chat/identity/entitlements/${encodeURIComponent(userId)}/${encodeURIComponent(tenantId)}`,
     );
+  }
+
+  async usageRanking(input: Readonly<{
+    metric: UsageRankingMetric;
+    range: UsageRankingRange;
+    tenantId: string;
+    viewerEmployeeId?: string;
+  }>): Promise<UsageRankingResponse> {
+    const query = new URLSearchParams({
+      metric: input.metric,
+      range: input.range,
+      ...(input.viewerEmployeeId
+        ? { viewerEmployeeId: input.viewerEmployeeId }
+        : {}),
+    });
+    const value = await this.request<unknown>(
+      `/internal/v1/tenant-chat/usage/rankings/${encodeURIComponent(input.tenantId)}?${query}`,
+    );
+    return parseUsageRankingResponse(value);
   }
 
   async activeRuntimeSnapshot(tenantId: string): Promise<ActiveRuntimeSnapshotMetadata> {
