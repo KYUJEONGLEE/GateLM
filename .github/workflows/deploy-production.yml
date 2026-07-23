@@ -40,9 +40,11 @@ jobs:
       AWS_DATA_INSTANCE_ID: ${{ vars.AWS_DATA_INSTANCE_ID }}
       AWS_AI_INSTANCE_ID: ${{ vars.AWS_AI_INSTANCE_ID }}
       AWS_PII_INSTANCE_ID: ${{ vars.AWS_PII_INSTANCE_ID }}
+      AWS_PII_SECONDARY_INSTANCE_ID: ${{ vars.AWS_PII_SECONDARY_INSTANCE_ID || '' }}
       GATELM_PUBLIC_URL: ${{ vars.GATELM_PUBLIC_URL }}
       GATELM_CHAT_URL: ${{ vars.GATELM_CHAT_URL }}
       GATELM_GATEWAY_UPSTREAM_HOST: ${{ vars.GATELM_GATEWAY_UPSTREAM_HOST || '10.78.2.20' }}
+      GATELM_PII_UPSTREAM_HOST: ${{ vars.GATELM_PII_UPSTREAM_HOST || '10.78.2.50' }}
 
     steps:
       - name: Checkout deployment SHA
@@ -72,9 +74,14 @@ jobs:
           : "${AWS_DATA_INSTANCE_ID:?AWS_DATA_INSTANCE_ID production variable is required}"
           : "${AWS_AI_INSTANCE_ID:?AWS_AI_INSTANCE_ID production variable is required}"
           : "${AWS_PII_INSTANCE_ID:?AWS_PII_INSTANCE_ID production variable is required}"
+          if [[ -n "$AWS_PII_SECONDARY_INSTANCE_ID" ]]; then
+            [[ "$AWS_PII_SECONDARY_INSTANCE_ID" =~ ^i-[0-9a-f]{8,17}$ ]]
+            [[ "$AWS_PII_SECONDARY_INSTANCE_ID" != "$AWS_PII_INSTANCE_ID" ]]
+          fi
           : "${GATELM_PUBLIC_URL:?GATELM_PUBLIC_URL production variable is required}"
           : "${GATELM_CHAT_URL:?GATELM_CHAT_URL production variable is required}"
           [[ "$GATELM_GATEWAY_UPSTREAM_HOST" == "10.78.2.20" || "$GATELM_GATEWAY_UPSTREAM_HOST" == "10.78.2.10" ]]
+          [[ "$GATELM_PII_UPSTREAM_HOST" == "10.78.2.50" || "$GATELM_PII_UPSTREAM_HOST" == "10.78.2.11" ]]
           git fetch --no-tags origin main
           current_main_sha="$(git rev-parse origin/main)"
           if [[ "$DEPLOY_SHA" != "$current_main_sha" ]]; then
@@ -171,7 +178,9 @@ jobs:
             "$GATELM_CHAT_URL" \
             deploy \
             "$AWS_GATEWAY_SECONDARY_INSTANCE_ID" \
-            "$GATELM_GATEWAY_UPSTREAM_HOST"
+            "$GATELM_GATEWAY_UPSTREAM_HOST" \
+            "$AWS_PII_SECONDARY_INSTANCE_ID" \
+            "$GATELM_PII_UPSTREAM_HOST"
 
       - name: Verify public authentication boundaries
         shell: bash
@@ -213,4 +222,6 @@ jobs:
             "$GATELM_CHAT_URL" \
             rollback \
             "$AWS_GATEWAY_SECONDARY_INSTANCE_ID" \
-            "$GATELM_GATEWAY_UPSTREAM_HOST"
+            "$GATELM_GATEWAY_UPSTREAM_HOST" \
+            "$AWS_PII_SECONDARY_INSTANCE_ID" \
+            "$GATELM_PII_UPSTREAM_HOST"
