@@ -129,7 +129,7 @@ Policy Impact reader는 완료된 minute Rollup, 분 경계 앞의 작은 raw ed
 - `source`: `postgresql_request_log`, `postgresql_rollup`, 또는 `postgresql_hybrid`
 - `isStale`와 `queryBudget.status`: `ok`, `partial`, `stale`, `too_broad`, `unavailable`
 
-여러 surface를 합칠 때 freshness는 가장 오래된 source를 보수적으로 사용하고 query status는 가장 나쁜 상태를 선택한다. Web polling은 같은 rollup을 3초마다 반복 조회하지 않으며 기본 30초 이상으로 맞춘다. 실제 HTTP 성공·실패를 확인할 수 있는 Cost over time fetch는 첫 실패 후 60초, 반복 실패 후 120초로 backoff한다. `router.refresh()` 기반 Overview 갱신은 응답 성공 여부를 직접 판정할 수 없으므로 가짜 실패 상태를 만들지 않고, visibility·transition pending·30초 최소 간격으로 중복 갱신만 막는다. 1초 주기의 Live Requests raw polling은 rollup 조회가 아니며 이 계약의 범위 밖이다.
+여러 surface를 합칠 때 freshness는 가장 오래된 source를 보수적으로 사용하고 query status는 가장 나쁜 상태를 선택한다. PostgreSQL rollup reader를 사용하는 Web polling은 같은 rollup을 3초마다 반복 조회하지 않으며 기본 30초 이상으로 맞춘다. 실제 HTTP 성공·실패를 확인할 수 있는 Cost over time fetch는 첫 실패 후 60초, 반복 실패 후 120초로 backoff한다. `router.refresh()` 기반 Overview 갱신은 응답 성공 여부를 직접 판정할 수 없으므로 가짜 실패 상태를 만들지 않고, visibility·transition pending·30초 최소 간격으로 중복 갱신만 막는다. 1초 주기의 Live Requests raw polling은 rollup 조회가 아니며 이 계약의 범위 밖이다. `clickhouse-analytics-mirror-contract.md` Phase 6을 통과한 ClickHouse second-rollup 경로는 별도 부하 검증과 정합성 검증을 전제로 1초 snapshot polling을 허용한다.
 
 ## 9. Security And Rollout
 

@@ -1,0 +1,36 @@
+<clickhouse>
+    <!-- Production keeps structured diagnostics, but not unbounded trace-level
+         tables that compete with the product analytics workload. -->
+    <logger>
+        <level>information</level>
+    </logger>
+
+    <query_log>
+        <database>system</database>
+        <table>query_log</table>
+        <partition_by>toYYYYMM(event_date)</partition_by>
+        <ttl>event_date + INTERVAL 7 DAY DELETE</ttl>
+        <flush_interval_milliseconds>7500</flush_interval_milliseconds>
+    </query_log>
+
+    <text_log>
+        <database>system</database>
+        <table>text_log</table>
+        <partition_by>toYYYYMM(event_date)</partition_by>
+        <ttl>event_date + INTERVAL 3 DAY DELETE</ttl>
+        <flush_interval_milliseconds>7500</flush_interval_milliseconds>
+        <level>warning</level>
+    </text_log>
+
+    <metric_log>
+        <database>system</database>
+        <table>metric_log</table>
+        <partition_by>toYYYYMM(event_date)</partition_by>
+        <ttl>event_date + INTERVAL 7 DAY DELETE</ttl>
+        <flush_interval_milliseconds>7500</flush_interval_milliseconds>
+        <collect_interval_milliseconds>1000</collect_interval_milliseconds>
+    </metric_log>
+
+    <trace_log remove="remove"/>
+    <processors_profile_log remove="remove"/>
+</clickhouse>
