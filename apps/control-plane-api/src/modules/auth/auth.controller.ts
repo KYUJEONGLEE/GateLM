@@ -265,6 +265,10 @@ export class AuthController {
       session.kind === 'full'
         ? AUTH_COOKIE_NAMES.full
         : AUTH_COOKIE_NAMES.onboarding;
+    // The browser must receive this opaque bearer value; only its hash is
+    // persisted server-side. baseCookieOptions applies the configured cookie
+    // protections.
+    // codeql[js/clear-text-storage-of-sensitive-data]
     response.cookie(cookieName, session.token, {
       ...this.baseCookieOptions(),
       expires: session.expiresAt,
