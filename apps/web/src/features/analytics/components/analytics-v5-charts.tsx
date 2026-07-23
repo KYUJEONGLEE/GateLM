@@ -1,6 +1,10 @@
 "use client";
 
 import { useMemo } from "react";
+import {
+  ANALYTICS_OTHER_ROW_ID,
+  compactAnalyticsValueRows
+} from "@/features/analytics/analytics-chart-data";
 import type { AnalyticsV5Evidence } from "@/features/analytics/analytics-v5-evidence";
 import type { AnalyticsValueRow } from "@/features/analytics/analytics-read-model";
 import {
@@ -132,7 +136,10 @@ export function AnalyticsV5ModelShareChart({
   rows: AnalyticsValueRow[];
 }) {
   const theme = useAnalyticsChartTheme();
-  const visibleRows = useMemo(() => rows.filter((row) => row.value > 0).slice(0, 5), [rows]);
+  const visibleRows = useMemo(
+    () => compactAnalyticsValueRows(rows, 5, locale === "ko" ? "기타" : "Other"),
+    [locale, rows]
+  );
   const totalRequests = useMemo(
     () => visibleRows.reduce((sum, row) => sum + row.value, 0),
     [visibleRows]
@@ -184,11 +191,21 @@ export function AnalyticsV5ModelShareChart({
         {visibleRows.map((row, index) => (
           <div className="analytics-v5-model-share-row" key={row.id}>
             <i style={{ backgroundColor: palette[index] }} />
-            <ProviderFamilyIcon
-              className="analytics-v5-model-share-provider"
-              family={getProviderFamilyFromKey(modelRowProvider(row.id))}
-              size={18}
-            />
+            {row.id === ANALYTICS_OTHER_ROW_ID ? (
+              <span
+                aria-hidden="true"
+                className="analytics-v5-model-share-provider"
+                data-family="other"
+              >
+                ···
+              </span>
+            ) : (
+              <ProviderFamilyIcon
+                className="analytics-v5-model-share-provider"
+                family={getProviderFamilyFromKey(modelRowProvider(row.id))}
+                size={18}
+              />
+            )}
             <strong title={row.label}>{truncateModelLegendLabel(row.label)}</strong>
             <span>{formatPercent(safeRatio(row.value, totalRequests))}</span>
             <em>{formatInteger(row.value)}</em>

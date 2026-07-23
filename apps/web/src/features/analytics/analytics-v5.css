@@ -343,6 +343,13 @@
   object-fit: contain;
 }
 
+.analytics-v5-model-share-provider[data-family="other"] {
+  color: var(--text-muted);
+  font-size: 14px;
+  font-weight: 850;
+  letter-spacing: -1px;
+}
+
 html[data-theme="dark"] .analytics-v5-model-share-provider[data-family="openai"] img {
   filter: invert(1);
 }

@@ -518,6 +518,7 @@ export function AnalyticsCostPanel({
           <ChartOrEmpty hasData={hasRows(attributionChartRows)} locale={locale}>
             <AnalyticsCostAttributionChart
               ariaLabel={text.byProject}
+              otherLabel={locale === "ko" ? "기타" : "Other"}
               rows={attributionChartRows}
               totalLabel={locale === "ko" ? "총 비용" : "Total spend"}
             />

@@ -56,7 +56,7 @@ export function AnalyticsV5Overview({
         routing: "Routing policy result",
         title: "Policy impact"
       };
-  const modelRows = model.impact.modelMix.slice(0, 5);
+  const modelRows = model.impact.modelMix;
   const routingDifficultyRows = model.impact.routingDifficulties;
   const baselineCostMicroUsd = model.cost.totalCostMicroUsd + model.impact.savedCostMicroUsd;
   const baselinePrefix = model.impact.savedCostComplete ? "" : "≥ ";

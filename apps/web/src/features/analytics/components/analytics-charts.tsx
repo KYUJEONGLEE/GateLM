@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { compactAnalyticsValueRows } from "@/features/analytics/analytics-chart-data";
 import type { AnalyticsValueRow } from "@/features/analytics/analytics-read-model";
 import type { AnalyticsRequestVolumePoint } from "@/features/analytics/analytics-usage-merge";
 import {
@@ -516,17 +517,19 @@ export function AnalyticsCompositionChart({
 
 export function AnalyticsCostAttributionChart({
   ariaLabel,
+  otherLabel,
   rows,
   totalLabel
 }: {
   ariaLabel: string;
+  otherLabel: string;
   rows: AnalyticsValueRow[];
   totalLabel: string;
 }) {
   const theme = useAnalyticsChartTheme();
   const visibleRows = useMemo(
-    () => rows.filter((row) => row.value > 0).slice(0, 5),
-    [rows]
+    () => compactAnalyticsValueRows(rows, 5, otherLabel),
+    [otherLabel, rows]
   );
   const totalCostMicroUsd = useMemo(
     () => visibleRows.reduce((sum, row) => sum + row.value, 0),
