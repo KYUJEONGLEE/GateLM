@@ -152,7 +152,11 @@ export async function GET(request: NextRequest) {
         ),
     surface === "tenant_chat"
       ? Promise.resolve(undefined)
-      : getLiveMonthToDateCostMicroUsd(tenantId, projectFilters),
+      : getLiveMonthToDateCostMicroUsd(tenantId, {
+          ...projectFilters,
+          from: monthToDateRange.from,
+          to: monthToDateRange.to
+        }),
     surface === "project_application"
       ? Promise.resolve(undefined)
       : getTenantChatDashboard(
@@ -187,23 +191,22 @@ export async function GET(request: NextRequest) {
     mergeLiveRequestPayloads
   );
 
-  if (!overview || !costOverTime || !liveRequests) {
+  const hasCompleteMonthToDateData =
+    (surface === "tenant_chat" || projectApplicationMonthToDate !== undefined) &&
+    (surface === "project_application" || tenantChatMonthToDate !== undefined);
+
+  if (!overview || !costOverTime || !liveRequests || !hasCompleteMonthToDateData) {
     return jsonError("Failed to load dashboard snapshot", 502);
   }
 
   const projectMonthCostMicroUsd = projectApplicationMonthToDate ?? 0;
   const tenantChatMonthCostMicroUsd =
     tenantChatMonthToDate?.usage?.confirmedCostMicroUsd ?? 0;
-  const hasMonthToDateData =
-    projectApplicationMonthToDate !== undefined ||
-    (tenantChatMonthToDate !== undefined && tenantChatMonthToDate !== null);
   const snapshot: LiveDashboardSnapshot = {
     costOverTime,
     generatedAt: new Date().toISOString(),
     liveRequests,
-    monthToDateCostMicroUsd: hasMonthToDateData
-      ? projectMonthCostMicroUsd + tenantChatMonthCostMicroUsd
-      : overview.totalCostMicroUsd,
+    monthToDateCostMicroUsd: projectMonthCostMicroUsd + tenantChatMonthCostMicroUsd,
     overview
   };
 

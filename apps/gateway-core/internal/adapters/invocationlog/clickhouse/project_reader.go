@@ -65,7 +65,7 @@ FROM %s.%s FINAL
 WHERE %s
 ORDER BY created_at DESC, request_id DESC
 LIMIT {limit:UInt32}
-FORMAT JSONEachRow`, r.client.database, r.client.table, strings.Join(where, "\n  AND ")), params)
+FORMAT JSONEachRow`, r.client.database, r.client.timeTable(), strings.Join(where, "\n  AND ")), params)
 		if queryErr != nil {
 			return queryErr
 		}
@@ -186,18 +186,18 @@ func (r *ProjectReader) ListProjectLogFilterOptions(ctx context.Context, filter 
 	}
 	result := invocationlog.RequestLogFilterOptions{}
 	err = r.observe(ctx, "log_filter_options", func(readCtx context.Context) error {
-		where, params := projectWhere(normalized.TenantID, normalized.ProjectID, normalized.From, normalized.To)
+		where, params := rollupWhere(normalized.TenantID, normalized.ProjectID, normalized.From, normalized.To)
 		rows, queryErr := queryJSONEachRow[filterOptionRow](readCtx, r.client, fmt.Sprintf(`
 WITH filtered AS (
   SELECT requested_model, budget_scope_type, budget_scope_id, budget_scope_resolved_by
-  FROM %s.%s FINAL WHERE %s
+  FROM %s.%s WHERE %s
 )
 SELECT 'requested_model' AS option_type, requested_model AS value, '' AS scope_type, '' AS scope_id, '' AS resolved_by
 FROM filtered WHERE requested_model != '' GROUP BY requested_model
 UNION ALL
 SELECT 'budget_scope', '', budget_scope_type, budget_scope_id, budget_scope_resolved_by
 FROM filtered WHERE budget_scope_id != '' GROUP BY budget_scope_type, budget_scope_id, budget_scope_resolved_by
-FORMAT JSONEachRow`, r.client.database, r.client.table, strings.Join(where, " AND ")), params)
+FORMAT JSONEachRow`, r.client.database, r.client.dashboardRollupTable(), strings.Join(where, " AND ")), params)
 		if queryErr != nil {
 			return queryErr
 		}
@@ -241,7 +241,7 @@ func (r *ProjectReader) GetDashboardOverview(ctx context.Context, filter invocat
 	var summary dashboardSummaryRow
 	var dimensions []dashboardDimensionRow
 	err = r.observe(ctx, "dashboard", func(readCtx context.Context) error {
-		where, params := projectWhere(normalized.TenantID, normalized.ProjectID, normalized.From, normalized.To)
+		where, params := rollupWhere(normalized.TenantID, normalized.ProjectID, normalized.From, normalized.To)
 		addScopeFilter(&where, params, normalized.BudgetScope)
 		cte := dashboardFilteredCTE(r.client, where)
 		group, groupCtx := errgroup.WithContext(readCtx)
@@ -319,43 +319,43 @@ type dashboardDimensionRow struct {
 
 func dashboardFilteredCTE(client *queryClient, where []string) string {
 	return fmt.Sprintf(`WITH filtered AS (
- SELECT *, if(cache_status='hit','hit',if(cache_status='miss','miss',if(cache_status='error','error',if(cache_status='bypass','bypassed','not_used')))) AS cache_outcome
- FROM %s.%s FINAL WHERE %s
+ SELECT *
+ FROM %s.%s WHERE %s
 )
-`, client.database, client.table, strings.Join(where, " AND "))
+`, client.database, client.dashboardRollupTable(), strings.Join(where, " AND "))
 }
 
 const dashboardSummarySQL = `SELECT
- count() AS total, countIf(terminal_status='success') AS success, countIf(terminal_status='failed') AS failed,
- countIf(terminal_status='blocked') AS blocked, countIf(terminal_status='rate_limited') AS rate_limited, countIf(terminal_status='cancelled') AS cancelled,
- countIf(cache_outcome='hit' AND cache_type='exact') AS cache_hits, countIf(cache_outcome IN ('hit','miss','error') AND cache_type='exact') AS cache_eligible,
- countIf(fallback_outcome='success') AS fallback_success, sum(prompt_tokens) AS prompt_tokens, sum(completion_tokens) AS completion_tokens,
+ sum(requests) AS total, sumIf(requests,terminal_status='success') AS success, sumIf(requests,terminal_status='failed') AS failed,
+ sumIf(requests,terminal_status='blocked') AS blocked, sumIf(requests,terminal_status='rate_limited') AS rate_limited, sumIf(requests,terminal_status='cancelled') AS cancelled,
+ sumIf(requests,cache_outcome='hit' AND cache_type='exact') AS cache_hits, sumIf(requests,cache_outcome IN ('hit','miss','error') AND cache_type='exact') AS cache_eligible,
+ sumIf(requests,fallback_outcome='success') AS fallback_success, sum(prompt_tokens) AS prompt_tokens, sum(completion_tokens) AS completion_tokens,
  sum(total_tokens) AS total_tokens, sum(cost_micro_usd) AS cost, sum(ifNull(saved_cost_micro_usd,0)) AS saved_cost,
- if(countIf(terminal_status IN ('success','failed'))=0,NULL,avgIf(toFloat64(latency_ms),terminal_status IN ('success','failed'))) AS avg_latency,
- if(countIf(terminal_status IN ('success','failed'))=0,NULL,quantileExactIf(0.95)(latency_ms,terminal_status IN ('success','failed'))) AS p95_latency,
- if(countIf(terminal_status IN ('success','failed'))=0,NULL,quantileExactIf(0.95)(gateway_internal_latency_ms,terminal_status IN ('success','failed'))) AS p95_gateway,
- if(countIf(terminal_status IN ('success','failed'))=0,NULL,quantileExactIf(0.99)(gateway_internal_latency_ms,terminal_status IN ('success','failed'))) AS p99_gateway,
- if(countIf(terminal_status IN ('success','failed') AND provider_latency_ms IS NOT NULL)=0,NULL,quantileExactIf(0.95)(provider_latency_ms,terminal_status IN ('success','failed') AND provider_latency_ms IS NOT NULL)) AS p95_provider,
- if(countIf(terminal_status IN ('success','failed') AND provider_latency_ms IS NOT NULL)=0,NULL,quantileExactIf(0.99)(provider_latency_ms,terminal_status IN ('success','failed') AND provider_latency_ms IS NOT NULL)) AS p99_provider,
- if(countIf(stream=1 AND ttft_ms IS NOT NULL)=0,NULL,avgIf(toFloat64(ttft_ms),stream=1 AND ttft_ms IS NOT NULL)) AS avg_ttft,
- if(countIf(stream=1 AND ttft_ms IS NOT NULL)=0,NULL,quantileExactIf(0.50)(ttft_ms,stream=1 AND ttft_ms IS NOT NULL)) AS p50_ttft,
- if(countIf(stream=1 AND ttft_ms IS NOT NULL)=0,NULL,quantileExactIf(0.95)(ttft_ms,stream=1 AND ttft_ms IS NOT NULL)) AS p95_ttft,
- if(countIf(stream=1 AND ttft_ms IS NOT NULL)=0,NULL,quantileExactIf(0.99)(ttft_ms,stream=1 AND ttft_ms IS NOT NULL)) AS p99_ttft,
- countIf(stream=1) AS stream_count, countIf(stream=1 AND ttft_ms IS NOT NULL) AS ttft_count,
- if(count()=0,NULL,toUnixTimestamp64Milli(max(created_at))) AS last_ms
+ if(sumIf(requests,latency_eligible=1)=0,NULL,sumIf(latency_sum_ms,latency_eligible=1)/sumIf(requests,latency_eligible=1)) AS avg_latency,
+ if(sumIf(requests,latency_eligible=1)=0,NULL,arrayElement(quantilesTDigestMergeIf(0.50,0.95,0.99)(latency_quantiles,latency_eligible=1),2)) AS p95_latency,
+ if(sumIf(requests,latency_eligible=1)=0,NULL,arrayElement(quantilesTDigestMergeIf(0.50,0.95,0.99)(gateway_latency_quantiles,latency_eligible=1),2)) AS p95_gateway,
+ if(sumIf(requests,latency_eligible=1)=0,NULL,arrayElement(quantilesTDigestMergeIf(0.50,0.95,0.99)(gateway_latency_quantiles,latency_eligible=1),3)) AS p99_gateway,
+ if(sumIf(requests,provider_latency_eligible=1)=0,NULL,arrayElement(quantilesTDigestMergeIf(0.50,0.95,0.99)(provider_latency_quantiles,provider_latency_eligible=1),2)) AS p95_provider,
+ if(sumIf(requests,provider_latency_eligible=1)=0,NULL,arrayElement(quantilesTDigestMergeIf(0.50,0.95,0.99)(provider_latency_quantiles,provider_latency_eligible=1),3)) AS p99_provider,
+ if(sumIf(requests,ttft_eligible=1)=0,NULL,sumIf(ttft_sum_ms,ttft_eligible=1)/sumIf(requests,ttft_eligible=1)) AS avg_ttft,
+ if(sumIf(requests,ttft_eligible=1)=0,NULL,arrayElement(quantilesTDigestMergeIf(0.50,0.95,0.99)(ttft_quantiles,ttft_eligible=1),1)) AS p50_ttft,
+ if(sumIf(requests,ttft_eligible=1)=0,NULL,arrayElement(quantilesTDigestMergeIf(0.50,0.95,0.99)(ttft_quantiles,ttft_eligible=1),2)) AS p95_ttft,
+ if(sumIf(requests,ttft_eligible=1)=0,NULL,arrayElement(quantilesTDigestMergeIf(0.50,0.95,0.99)(ttft_quantiles,ttft_eligible=1),3)) AS p99_ttft,
+ sum(stream_requests) AS stream_count, sumIf(requests,ttft_eligible=1) AS ttft_count,
+ if(sum(requests)=0,NULL,toUnixTimestamp64Milli(max(last_created_at))) AS last_ms
 FROM filtered FORMAT JSONEachRow`
 
-const dashboardDimensionsSQL = `SELECT 'status' kind, if(terminal_status='','unknown',terminal_status) key1, '' key2, '' key3, count() requests, 0 prompt, 0 completion, 0 tokens, 0 cost FROM filtered GROUP BY key1
-UNION ALL SELECT 'masking', if(masking_action='','none',masking_action), '', '', count(),0,0,0,0 FROM filtered GROUP BY masking_action
-UNION ALL SELECT 'safety', if(safety_outcome='','not_checked',safety_outcome), '', '', count(),0,0,0,0 FROM filtered GROUP BY safety_outcome
-UNION ALL SELECT 'cache', cache_outcome, '', '', count(),0,0,0,0 FROM filtered GROUP BY cache_outcome
-UNION ALL SELECT 'fallback', if(fallback_outcome='','not_called',fallback_outcome), '', '', count(),0,0,0,0 FROM filtered GROUP BY fallback_outcome
-UNION ALL SELECT 'budget', if(budget_outcome='','not_checked',budget_outcome), '', '', count(),0,0,0,0 FROM filtered GROUP BY budget_outcome
-UNION ALL SELECT 'routing', routing_category, routing_difficulty, routing_reason, count(),0,0,0,0 FROM filtered GROUP BY routing_category,routing_difficulty,routing_reason
-UNION ALL SELECT 'model', provider, model, '', count(),0,0,sum(total_tokens),sum(cost_micro_usd) FROM filtered WHERE provider!='' AND model!='' GROUP BY provider,model
-UNION ALL SELECT 'project', toString(project_id), '', '', count(),sum(prompt_tokens),sum(completion_tokens),sum(total_tokens),sum(cost_micro_usd) FROM filtered GROUP BY project_id
-UNION ALL SELECT 'application', toString(application_id), '', '', count(),0,0,0,sum(cost_micro_usd) FROM filtered GROUP BY application_id
-UNION ALL SELECT 'scope', budget_scope_type,budget_scope_id,budget_scope_resolved_by,count(),0,0,0,sum(cost_micro_usd) FROM filtered WHERE budget_scope_id!='' GROUP BY budget_scope_type,budget_scope_id,budget_scope_resolved_by
+const dashboardDimensionsSQL = `SELECT 'status' kind, if(terminal_status='','unknown',terminal_status) key1, '' key2, '' key3, sum(requests) requests, 0 prompt, 0 completion, 0 tokens, 0 cost FROM filtered GROUP BY key1
+UNION ALL SELECT 'masking', if(masking_action='','none',masking_action), '', '', sum(requests),0,0,0,0 FROM filtered GROUP BY masking_action
+UNION ALL SELECT 'safety', if(safety_outcome='','not_checked',safety_outcome), '', '', sum(requests),0,0,0,0 FROM filtered GROUP BY safety_outcome
+UNION ALL SELECT 'cache', cache_outcome, '', '', sum(requests),0,0,0,0 FROM filtered GROUP BY cache_outcome
+UNION ALL SELECT 'fallback', if(fallback_outcome='','not_called',fallback_outcome), '', '', sum(requests),0,0,0,0 FROM filtered GROUP BY fallback_outcome
+UNION ALL SELECT 'budget', if(budget_outcome='','not_checked',budget_outcome), '', '', sum(requests),0,0,0,0 FROM filtered GROUP BY budget_outcome
+UNION ALL SELECT 'routing', routing_category, routing_difficulty, routing_reason, sum(requests),0,0,0,0 FROM filtered GROUP BY routing_category,routing_difficulty,routing_reason
+UNION ALL SELECT 'model', provider, model, '', sum(requests),0,0,sum(total_tokens),sum(cost_micro_usd) FROM filtered WHERE provider!='' AND model!='' GROUP BY provider,model
+UNION ALL SELECT 'project', toString(project_id), '', '', sum(requests),sum(prompt_tokens),sum(completion_tokens),sum(total_tokens),sum(cost_micro_usd) FROM filtered GROUP BY project_id
+UNION ALL SELECT 'application', toString(application_id), '', '', sum(requests),0,0,0,sum(cost_micro_usd) FROM filtered GROUP BY application_id
+UNION ALL SELECT 'scope', budget_scope_type,budget_scope_id,budget_scope_resolved_by,sum(requests),0,0,0,sum(cost_micro_usd) FROM filtered WHERE budget_scope_id!='' GROUP BY budget_scope_type,budget_scope_id,budget_scope_resolved_by
 FORMAT JSONEachRow`
 
 func dashboardAggregate(row dashboardSummaryRow, dims []dashboardDimensionRow) invocationlog.DashboardOverviewAggregate {
@@ -423,19 +423,19 @@ type costRow struct {
 }
 
 func (r *ProjectReader) queryCostReport(ctx context.Context, filter invocationlog.CostReportFilter) (invocationlog.CostReportFields, error) {
-	where, params := projectWhere(filter.TenantID, filter.ProjectID, filter.From, filter.To)
+	where, params := rollupWhere(filter.TenantID, filter.ProjectID, filter.From, filter.To)
 	addUUIDFilter(&where, params, "application_id", "application_id", filter.ApplicationID)
 	addStringFilter(&where, params, "provider", "provider", filter.Provider)
 	addStringFilter(&where, params, "model", "model", filter.Model)
 	addScopeFilter(&where, params, filter.BudgetScope)
 	bucketConfig := costBucketConfig(filter)
-	bucketExpr := costBucketExpression(bucketConfig)
-	cte := fmt.Sprintf("WITH filtered AS (SELECT * FROM %s.%s FINAL WHERE %s)\n", r.client.database, r.client.table, strings.Join(where, " AND "))
-	query := cte + fmt.Sprintf(`SELECT 'bucket' kind,toUnixTimestamp(%s)*1000 bucket_ms,'' key1,'' key2,'' key3,count() requests,sum(prompt_tokens) prompt,sum(completion_tokens) completion,sum(total_tokens) tokens,sum(cost_micro_usd) cost,sum(ifNull(saved_cost_micro_usd,0)) saved,toUnixTimestamp64Milli(max(created_at)) last_ms FROM filtered GROUP BY %s
-UNION ALL SELECT 'project',0,toString(project_id),'','',count(),sum(prompt_tokens),sum(completion_tokens),sum(total_tokens),sum(cost_micro_usd),sum(ifNull(saved_cost_micro_usd,0)),NULL FROM filtered GROUP BY project_id
-UNION ALL SELECT 'application',0,toString(application_id),'','',count(),sum(prompt_tokens),sum(completion_tokens),sum(total_tokens),sum(cost_micro_usd),sum(ifNull(saved_cost_micro_usd,0)),NULL FROM filtered GROUP BY application_id
-UNION ALL SELECT 'model_bucket',toUnixTimestamp(%s)*1000,provider,model,'',count(),sum(prompt_tokens),sum(completion_tokens),sum(total_tokens),sum(cost_micro_usd),sum(ifNull(saved_cost_micro_usd,0)),NULL FROM filtered WHERE provider!='' AND model!='' GROUP BY %s,provider,model
-UNION ALL SELECT 'scope',0,budget_scope_type,budget_scope_id,budget_scope_resolved_by,count(),sum(prompt_tokens),sum(completion_tokens),sum(total_tokens),sum(cost_micro_usd),sum(ifNull(saved_cost_micro_usd,0)),NULL FROM filtered WHERE budget_scope_id!='' GROUP BY budget_scope_type,budget_scope_id,budget_scope_resolved_by
+	bucketExpr := costBucketExpressionForColumn(bucketConfig, "bucket")
+	cte := fmt.Sprintf("WITH filtered AS (SELECT * FROM %s.%s WHERE %s)\n", r.client.database, r.client.dashboardRollupTable(), strings.Join(where, " AND "))
+	query := cte + fmt.Sprintf(`SELECT 'bucket' kind,toUnixTimestamp(%s)*1000 bucket_ms,'' key1,'' key2,'' key3,sum(requests) requests,sum(prompt_tokens) prompt,sum(completion_tokens) completion,sum(total_tokens) tokens,sum(cost_micro_usd) cost,sum(saved_cost_micro_usd) saved,toUnixTimestamp64Milli(max(last_created_at)) last_ms FROM filtered GROUP BY %s
+UNION ALL SELECT 'project',0,toString(project_id),'','',sum(requests),sum(prompt_tokens),sum(completion_tokens),sum(total_tokens),sum(cost_micro_usd),sum(saved_cost_micro_usd),NULL FROM filtered GROUP BY project_id
+UNION ALL SELECT 'application',0,toString(application_id),'','',sum(requests),sum(prompt_tokens),sum(completion_tokens),sum(total_tokens),sum(cost_micro_usd),sum(saved_cost_micro_usd),NULL FROM filtered GROUP BY application_id
+UNION ALL SELECT 'model_bucket',toUnixTimestamp(%s)*1000,provider,model,'',sum(requests),sum(prompt_tokens),sum(completion_tokens),sum(total_tokens),sum(cost_micro_usd),sum(saved_cost_micro_usd),NULL FROM filtered WHERE provider!='' AND model!='' GROUP BY %s,provider,model
+UNION ALL SELECT 'scope',0,budget_scope_type,budget_scope_id,budget_scope_resolved_by,sum(requests),sum(prompt_tokens),sum(completion_tokens),sum(total_tokens),sum(cost_micro_usd),sum(saved_cost_micro_usd),NULL FROM filtered WHERE budget_scope_id!='' GROUP BY budget_scope_type,budget_scope_id,budget_scope_resolved_by
 FORMAT JSONEachRow`, bucketExpr, bucketExpr, bucketExpr, bucketExpr)
 	rows, err := queryJSONEachRow[costRow](ctx, r.client, query, params)
 	if err != nil {
@@ -523,6 +523,12 @@ func projectWhere(tenantID, projectID string, from, to time.Time) ([]string, map
 	addUUIDFilter(&where, params, "project_id", "project_id", projectID)
 	return where, params
 }
+func rollupWhere(tenantID, projectID string, from, to time.Time) ([]string, map[string]string) {
+	where := []string{"tenant_id={tenant_id:UUID}", "bucket>=parseDateTime64BestEffort({from:String},3,'UTC')", "bucket<parseDateTime64BestEffort({to:String},3,'UTC')"}
+	params := map[string]string{"tenant_id": tenantID, "from": from.UTC().Format(time.RFC3339Nano), "to": to.UTC().Format(time.RFC3339Nano)}
+	addUUIDFilter(&where, params, "project_id", "project_id", projectID)
+	return where, params
+}
 func addStringFilter(where *[]string, params map[string]string, column, name, value string) {
 	if strings.TrimSpace(value) != "" {
 		*where = append(*where, column+"={"+name+":String}")
@@ -541,21 +547,24 @@ func addScopeFilter(where *[]string, params map[string]string, scope budget.Scop
 	addStringFilter(where, params, "budget_scope_resolved_by", "scope_resolved_by", scope.ResolvedBy)
 }
 func costBucketExpression(config invocationlog.TimeSeriesBucketConfig) string {
+	return costBucketExpressionForColumn(config, "created_at")
+}
+func costBucketExpressionForColumn(config invocationlog.TimeSeriesBucketConfig, column string) string {
 	switch config.Unit {
 	case "second":
-		return "toStartOfSecond(created_at,'UTC')"
+		return fmt.Sprintf("toStartOfSecond(%s,'UTC')", column)
 	case "minute":
-		return "toStartOfMinute(created_at,'UTC')"
+		return fmt.Sprintf("toStartOfMinute(%s,'UTC')", column)
 	case "5minute":
-		return "toStartOfInterval(created_at,INTERVAL 5 MINUTE,'UTC')"
+		return fmt.Sprintf("toStartOfInterval(%s,INTERVAL 5 MINUTE,'UTC')", column)
 	case "hour":
-		return "toStartOfHour(created_at,'UTC')"
+		return fmt.Sprintf("toStartOfHour(%s,'UTC')", column)
 	case "week":
-		return "toStartOfWeek(created_at,1,'UTC')"
+		return fmt.Sprintf("toStartOfWeek(%s,1,'UTC')", column)
 	case "month":
-		return "toStartOfMonth(created_at,'UTC')"
+		return fmt.Sprintf("toStartOfMonth(%s,'UTC')", column)
 	default:
-		return "toStartOfDay(created_at,'UTC')"
+		return fmt.Sprintf("toStartOfDay(%s,'UTC')", column)
 	}
 }
 func costBucketConfig(filter invocationlog.CostReportFilter) invocationlog.TimeSeriesBucketConfig {

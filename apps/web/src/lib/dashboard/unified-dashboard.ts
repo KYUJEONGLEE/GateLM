@@ -367,11 +367,12 @@ export function mergeCostOverTime(
   projectApplication: CostOverTimeSummary,
   tenantChat: CostOverTimeSummary
 ): CostOverTimeSummary {
-  const points = new Map(projectApplication.points.map((point) => [point.bucket, { ...point }]));
-  for (const point of tenantChat.points) {
-    const existing = points.get(point.bucket);
-    points.set(point.bucket, {
-      bucket: point.bucket,
+  const points = new Map<string, CostOverTimeSummary["points"][number]>();
+  for (const point of [...projectApplication.points, ...tenantChat.points]) {
+    const bucket = normalizeCostBucket(point.bucket);
+    const existing = points.get(bucket);
+    points.set(bucket, {
+      bucket,
       label: existing?.label ?? point.label,
       spendUsd: (existing?.spendUsd ?? 0) + point.spendUsd
     });
@@ -390,6 +391,11 @@ export function mergeCostOverTime(
     period: projectApplication.period,
     points: sorted
   };
+}
+
+function normalizeCostBucket(value: string) {
+  const timestamp = Date.parse(value);
+  return Number.isNaN(timestamp) ? value : new Date(timestamp).toISOString();
 }
 
 function mergeCountRecords(

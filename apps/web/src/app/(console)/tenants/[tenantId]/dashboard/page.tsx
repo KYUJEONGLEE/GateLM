@@ -161,9 +161,8 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
       locale={locale}
       filters={scopedDashboardFilters}
       monthToDateSpendValue={
-        <Suspense fallback={formatDashboardMicroUsd(overview.totalCostMicroUsd)}>
+        <Suspense fallback="—">
           <MonthToDateSpendValue
-            fallbackMicroUsd={overview.totalCostMicroUsd}
             filters={scopedLiveFilters}
             surface={scopedDashboardFilters.surface}
             tenantId={effectiveTenantId}
@@ -179,12 +178,10 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
 }
 
 async function MonthToDateSpendValue({
-  fallbackMicroUsd,
   filters,
   surface,
   tenantId
 }: {
-  fallbackMicroUsd: number;
   filters: LiveDashboardOverviewFilters;
   surface: DashboardSurface;
   tenantId: string;
@@ -193,7 +190,11 @@ async function MonthToDateSpendValue({
   const [projectApplicationCostMicroUsd, tenantChat] = await Promise.all([
     surface === "tenant_chat"
       ? Promise.resolve(undefined)
-      : getLiveMonthToDateCostMicroUsd(tenantId, filters),
+      : getLiveMonthToDateCostMicroUsd(tenantId, {
+          ...filters,
+          from: monthToDateRange.from,
+          to: monthToDateRange.to
+        }),
     surface === "project_application"
       ? Promise.resolve(undefined)
       : getTenantChatDashboard(tenantId, monthToDateRange.from, monthToDateRange.to)
@@ -202,10 +203,10 @@ async function MonthToDateSpendValue({
     (projectApplicationCostMicroUsd ?? 0) +
     (tenantChat?.usage?.confirmedCostMicroUsd ?? 0);
   const hasCurrentData =
-    projectApplicationCostMicroUsd !== undefined ||
-    (tenantChat !== undefined && tenantChat !== null);
+    (surface === "tenant_chat" || projectApplicationCostMicroUsd !== undefined) &&
+    (surface === "project_application" || tenantChat !== undefined);
 
-  return <>{formatDashboardMicroUsd(hasCurrentData ? totalMicroUsd : fallbackMicroUsd)}</>;
+  return <>{hasCurrentData ? formatDashboardMicroUsd(totalMicroUsd) : "—"}</>;
 }
 
 function buildDashboardFilters(

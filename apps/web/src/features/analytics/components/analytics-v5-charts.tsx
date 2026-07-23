@@ -1,6 +1,10 @@
 "use client";
 
 import { useMemo } from "react";
+import {
+  ANALYTICS_OTHER_ROW_ID,
+  compactAnalyticsValueRows
+} from "@/features/analytics/analytics-chart-data";
 import type { AnalyticsV5Evidence } from "@/features/analytics/analytics-v5-evidence";
 import type { AnalyticsValueRow } from "@/features/analytics/analytics-read-model";
 import {
@@ -10,6 +14,10 @@ import {
   compactAxisNumber,
   useAnalyticsChartTheme
 } from "@/features/analytics/components/analytics-echart";
+import {
+  getProviderFamilyFromKey,
+  ProviderFamilyIcon
+} from "@/features/provider-connections/components/provider-family-icon";
 import { formatModelDisplayName } from "@/lib/formatting/display-identifiers";
 import type { LiveAnalyticsRange } from "@/lib/gateway/live-analytics-performance";
 import type { Locale } from "@/lib/i18n/locale";
@@ -120,29 +128,26 @@ export function AnalyticsV5ModelTrafficChart({
 
 export function AnalyticsV5ModelShareChart({
   ariaLabel,
+  locale,
   rows
 }: {
   ariaLabel: string;
+  locale: Locale;
   rows: AnalyticsValueRow[];
 }) {
   const theme = useAnalyticsChartTheme();
-  const visibleRows = useMemo(() => rows.filter((row) => row.value > 0).slice(0, 5), [rows]);
+  const visibleRows = useMemo(
+    () => compactAnalyticsValueRows(rows, 5, locale === "ko" ? "기타" : "Other"),
+    [locale, rows]
+  );
+  const totalRequests = useMemo(
+    () => visibleRows.reduce((sum, row) => sum + row.value, 0),
+    [visibleRows]
+  );
   const option = useMemo<AnalyticsEChartOption>(
     () => ({
       animationDuration: 420,
       color: palette,
-      legend: {
-        bottom: 0,
-        formatter: truncateModelLegendLabel,
-        icon: "circle",
-        itemGap: 16,
-        itemHeight: 12,
-        itemWidth: 12,
-        left: "center",
-        right: 0,
-        textStyle: { color: theme.label, fontSize: 19, fontWeight: 750 },
-        type: "scroll"
-      },
       series: [
         {
           avoidLabelOverlap: true,
@@ -156,8 +161,8 @@ export function AnalyticsV5ModelShareChart({
             borderWidth: 3
           },
           label: { show: false },
-          center: ["50%", "45%"],
-          radius: ["50%", "78%"],
+          center: ["50%", "50%"],
+          radius: ["55%", "82%"],
           type: "pie"
         }
       ],
@@ -169,7 +174,46 @@ export function AnalyticsV5ModelShareChart({
     [theme, visibleRows]
   );
 
-  return <AnalyticsEChart ariaLabel={ariaLabel} className="analytics-v5-model-share-chart" option={option} />;
+  return (
+    <div className="analytics-v5-model-share-layout">
+      <div className="analytics-v5-model-share-visual">
+        <AnalyticsEChart
+          ariaLabel={ariaLabel}
+          className="analytics-v5-model-share-chart"
+          option={option}
+        />
+        <div aria-hidden="true" className="analytics-v5-model-share-center">
+          <span>{locale === "ko" ? "전체 요청" : "Total requests"}</span>
+          <strong>{formatInteger(totalRequests)}</strong>
+        </div>
+      </div>
+      <div className="analytics-v5-model-share-list">
+        {visibleRows.map((row, index) => (
+          <div className="analytics-v5-model-share-row" key={row.id}>
+            <i style={{ backgroundColor: palette[index] }} />
+            {row.id === ANALYTICS_OTHER_ROW_ID ? (
+              <span
+                aria-hidden="true"
+                className="analytics-v5-model-share-provider"
+                data-family="other"
+              >
+                ···
+              </span>
+            ) : (
+              <ProviderFamilyIcon
+                className="analytics-v5-model-share-provider"
+                family={getProviderFamilyFromKey(modelRowProvider(row.id))}
+                size={18}
+              />
+            )}
+            <strong title={row.label}>{truncateModelLegendLabel(row.label)}</strong>
+            <span>{formatPercent(safeRatio(row.value, totalRequests))}</span>
+            <em>{formatInteger(row.value)}</em>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 export function AnalyticsV5RoutingDifficultyChart({
@@ -243,6 +287,15 @@ function truncateModelLegendLabel(value: string) {
   }
 
   return `${value.slice(0, MODEL_LEGEND_MAX_LENGTH - 3)}...`;
+}
+
+function modelRowProvider(id: string) {
+  try {
+    const value = JSON.parse(id) as unknown;
+    return Array.isArray(value) && typeof value[0] === "string" ? value[0] : "";
+  } catch {
+    return "";
+  }
 }
 
 export function AnalyticsV5ProjectUsageChart({
