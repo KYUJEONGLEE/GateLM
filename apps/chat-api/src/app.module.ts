@@ -28,9 +28,11 @@ import { RagQueryCredentialsService } from './rag/rag-query-credentials.service'
 import { RagQueryWorkloadSigner } from './rag/rag-query-workload-signer';
 import { RagRetrievalRepository } from './rag/rag-retrieval.repository';
 import { RagRetrievalService } from './rag/rag-retrieval.service';
+import { UsageRankingController } from './usage/usage-ranking.controller';
+import { UsageRankingService } from './usage/usage-ranking.service';
 
 @Module({
-  controllers: [AuthController, ConversationController, HealthController],
+  controllers: [AuthController, ConversationController, HealthController, UsageRankingController],
   imports: [ConfigModule.forRoot({ isGlobal: true, validate: validateEnv })],
   providers: [
     ActiveTurnRegistry,
@@ -53,6 +55,7 @@ import { RagRetrievalService } from './rag/rag-retrieval.service';
     RetentionService,
     SessionService,
     TenantContentKeyService,
+    UsageRankingService,
     WorkloadCredentialsService,
     WorkloadSigner,
     WrappingKeyProvider,
