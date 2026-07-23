@@ -29,9 +29,9 @@ export function nextAnalyticsLivePoll(
 
   const successCount = state.successCount + 1;
   const stableSuccessCount = outcome.changed ? 0 : state.stableSuccessCount + 1;
-  const delayMs = successCount <= 5
+  const delayMs = outcome.changed
     ? 2_000
-    : outcome.changed || stableSuccessCount < 2
+    : stableSuccessCount < 2
       ? 5_000
       : 10_000;
 

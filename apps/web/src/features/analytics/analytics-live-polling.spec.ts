@@ -6,16 +6,13 @@ import {
 } from "@/features/analytics/analytics-live-polling";
 import type { AnalyticsLiveUsage } from "@/features/analytics/analytics-live-usage-contract";
 
-test("keeps the first five successful live reads at two seconds", () => {
+test("keeps changing live reads at two seconds", () => {
   let state = initialAnalyticsLivePollingState;
-  for (let index = 0; index < 5; index += 1) {
+  for (let index = 0; index < 12; index += 1) {
     const next = nextAnalyticsLivePoll(state, { changed: true, status: "success" });
     expect(next.delayMs).toBe(2_000);
     state = next.state;
   }
-
-  const sixth = nextAnalyticsLivePoll(state, { changed: true, status: "success" });
-  expect(sixth.delayMs).toBe(5_000);
 });
 
 test("moves stable snapshots from five to ten seconds", () => {
@@ -35,7 +32,7 @@ test("moves stable snapshots from five to ten seconds", () => {
     changed: true,
     status: "success"
   });
-  expect(changed.delayMs).toBe(5_000);
+  expect(changed.delayMs).toBe(2_000);
   expect(changed.state.stableSuccessCount).toBe(0);
 });
 
