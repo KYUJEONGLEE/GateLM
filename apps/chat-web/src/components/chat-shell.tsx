@@ -3,6 +3,7 @@
 import { Badge, Button } from '@gatelm/ui';
 import {
   AlertTriangle,
+  ArrowDown,
   Building2,
   BookOpenText,
   Check,
@@ -23,13 +24,14 @@ import {
 } from 'lucide-react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
-import { type FormEvent, type KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type FormEvent, type KeyboardEvent, type UIEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { ChatSession } from '@/lib/auth-types';
 import { api, ChatApiError, streamApi } from '@/lib/browser-api';
 import { copyTextToClipboard } from '@/lib/clipboard.mjs';
 import { MarkdownMessage } from '@/components/markdown-message.mjs';
 import { getModelBrand } from '@/lib/model-brand.mjs';
+import { reduceScrollFollow } from '@/lib/scroll-follow.mjs';
 import {
   acceptedUserContentWasMasked,
   consumeTurnSse,
@@ -45,6 +47,8 @@ import {
 } from '@/lib/conversation-contract.mjs';
 
 const CONTEXT_MODE_STORAGE_KEY = 'gatelm.tenant-chat.context-mode';
+const SIDEBAR_COLLAPSED_STORAGE_KEY = 'gatelm.tenant-chat.sidebar-collapsed';
+const COMPACT_LAYOUT_QUERY = '(max-width: 1024px)';
 type ContextMode = 'conversation' | 'single_turn';
 type KnowledgeMode = 'off' | 'tenant';
 type KnowledgeModeToast = Readonly<{ title: string; description: string }>;
@@ -62,6 +66,9 @@ export function ChatShell() {
   const [newConversationKnowledgeMode, setNewConversationKnowledgeMode] = useState<KnowledgeMode>('off');
   const [knowledgeModeToast, setKnowledgeModeToast] = useState<KnowledgeModeToast | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [compactLayout, setCompactLayout] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [latestAnswerAvailable, setLatestAnswerAvailable] = useState(false);
   const [loading, setLoading] = useState(true);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [creatingConversation, setCreatingConversation] = useState(false);
@@ -85,6 +92,10 @@ export function ChatShell() {
   const drawerTriggerRef = useRef<HTMLButtonElement>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const logRef = useRef<HTMLOListElement>(null);
+  const followOutputRef = useRef(true);
+  const lastOutputVersionRef = useRef('');
+  const lastScrollTopRef = useRef<number | null>(null);
+  const touchPositionRef = useRef<number | null>(null);
   const renameReturnIdRef = useRef<string | null>(null);
   const streamControllerRef = useRef<AbortController | null>(null);
   const activeTurnIdRef = useRef<string | null>(null);
@@ -103,14 +114,51 @@ export function ChatShell() {
     if (returnFocus) requestAnimationFrame(() => drawerTriggerRef.current?.focus());
   }, []);
 
+  const resumeScrollFollowing = useCallback((reason: 'conversation-change' | 'initial-load' | 'jump-to-latest' | 'message-send') => {
+    followOutputRef.current = reduceScrollFollow(followOutputRef.current, { type: reason });
+    setLatestAnswerAvailable(false);
+  }, []);
+
+  const pauseScrollFollowing = useCallback(() => {
+    followOutputRef.current = reduceScrollFollow(followOutputRef.current, { type: 'scroll-up-intent' });
+  }, []);
+
+  const toggleNavigation = useCallback(() => {
+    if (compactLayout) {
+      setMenuOpen((current) => !current);
+      return;
+    }
+    setSidebarCollapsed((current) => {
+      const next = !current;
+      try {
+        window.localStorage.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, String(next));
+      } catch {
+        // A non-persistent sidebar is still usable when browser storage is unavailable.
+      }
+      return next;
+    });
+  }, [compactLayout]);
+
   useEffect(() => {
     try {
       if (window.localStorage.getItem(CONTEXT_MODE_STORAGE_KEY) === 'single_turn') {
         setContextMode('single_turn');
       }
+      setSidebarCollapsed(window.localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) === 'true');
     } catch {
       // Storage can be unavailable in hardened browser modes; the safe default keeps context.
     }
+  }, []);
+
+  useEffect(() => {
+    const media = window.matchMedia(COMPACT_LAYOUT_QUERY);
+    const applyLayout = () => {
+      setCompactLayout(media.matches);
+      setMenuOpen(false);
+    };
+    applyLayout();
+    media.addEventListener('change', applyLayout);
+    return () => media.removeEventListener('change', applyLayout);
   }, []);
 
   useEffect(() => {
@@ -155,6 +203,12 @@ export function ChatShell() {
   }, []);
 
   useEffect(() => {
+    resumeScrollFollowing('conversation-change');
+    lastOutputVersionRef.current = '';
+    lastScrollTopRef.current = null;
+  }, [resumeScrollFollowing, selectedId]);
+
+  useEffect(() => {
     if (!selectedId) {
       setMessages([]);
       setMessageCursor(null);
@@ -179,6 +233,7 @@ export function ChatShell() {
         ]);
         if (!active) return;
         setConversations((current) => current.map((item) => item.id === conversation.id ? conversation : item));
+        resumeScrollFollowing('initial-load');
         setMessages(page.items);
         setMessageCursor(page.nextCursor);
         setPolicyState('normal');
@@ -191,13 +246,30 @@ export function ChatShell() {
     }
     void loadConversation();
     return () => { active = false; };
-  }, [reportError, selectedId]);
+  }, [reportError, resumeScrollFollowing, selectedId]);
 
   useEffect(() => {
     if (!menuOpen) return;
     const focusTimer = window.setTimeout(() => drawerRef.current?.querySelector<HTMLButtonElement>('.mobile-close')?.focus(), 120);
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
-      if (event.key === 'Escape') closeDrawer(true);
+      if (event.key === 'Escape') {
+        closeDrawer(true);
+        return;
+      }
+      if (event.key !== 'Tab' || !drawerRef.current) return;
+      const focusable = [...drawerRef.current.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), a[href], input:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      )].filter((element) => !element.hasAttribute('hidden'));
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable.at(-1);
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last?.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
     };
     document.addEventListener('keydown', onKeyDown);
     return () => {
@@ -208,8 +280,48 @@ export function ChatShell() {
 
   useEffect(() => {
     const log = logRef.current;
-    if (log) log.scrollTop = log.scrollHeight;
+    if (!log) return;
+    const last = messages.at(-1);
+    const outputVersion = last?.role === 'assistant'
+      ? `${last.localId ?? last.id}:${last.content.length}`
+      : '';
+    const outputChanged = outputVersion !== lastOutputVersionRef.current;
+    lastOutputVersionRef.current = outputVersion;
+    if (followOutputRef.current) {
+      log.scrollTo({ top: log.scrollHeight, behavior: 'auto' });
+      setLatestAnswerAvailable(false);
+    } else if (outputChanged && last?.role === 'assistant' && Boolean(last.content)) {
+      setLatestAnswerAvailable(true);
+    }
   }, [messages, streaming]);
+
+  const handleLogScroll = useCallback((event: UIEvent<HTMLOListElement>) => {
+    const log = event.currentTarget;
+    const previousScrollTop = lastScrollTopRef.current;
+    lastScrollTopRef.current = log.scrollTop;
+    if (previousScrollTop !== null && log.scrollTop < previousScrollTop) {
+      pauseScrollFollowing();
+      return;
+    }
+    const following = reduceScrollFollow(followOutputRef.current, {
+      type: 'scroll',
+      metrics: {
+        clientHeight: log.clientHeight,
+        scrollHeight: log.scrollHeight,
+        scrollTop: log.scrollTop,
+      },
+    });
+    followOutputRef.current = following;
+    if (following) setLatestAnswerAvailable(false);
+  }, [pauseScrollFollowing]);
+
+  const jumpToLatestAnswer = useCallback(() => {
+    resumeScrollFollowing('jump-to-latest');
+    const log = logRef.current;
+    if (!log) return;
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    log.scrollTo({ top: log.scrollHeight, behavior: reduceMotion ? 'auto' : 'smooth' });
+  }, [resumeScrollFollowing]);
 
   async function logout() {
     try { await api('/api/tenant-chat/auth/logout', { body: '{}', method: 'POST' }); }
@@ -384,6 +496,7 @@ export function ChatShell() {
     const draftId = crypto.randomUUID();
     const now = new Date().toISOString();
     const baseSequence = messages.at(-1)?.sequence ?? 0;
+    resumeScrollFollowing('message-send');
     setComposer('');
     setError(null);
     setStreaming(true);
@@ -532,10 +645,10 @@ export function ChatShell() {
   const displayName = session.user.name || session.user.email.split('@')[0];
   const selected = conversations.find((conversation) => conversation.id === selectedId) ?? null;
   const policyCopy = policyText(policyState);
-  return <main className="chat-shell">
+  return <main className={`chat-shell${sidebarCollapsed ? ' is-sidebar-collapsed' : ''}`}>
     <p className="sr-only" role="status" aria-live="polite">{status}</p>
     {menuOpen && <button className="mobile-backdrop" aria-label="대화 메뉴 닫기" onClick={() => closeDrawer(true)} />}
-    <aside ref={drawerRef} className={`chat-sidebar${menuOpen ? ' is-open' : ''}`} aria-label="대화 탐색" tabIndex={-1}>
+    <aside id="tenant-chat-sidebar" ref={drawerRef} className={`chat-sidebar${menuOpen ? ' is-open' : ''}`} aria-label="대화 탐색" tabIndex={-1}>
       <div className="sidebar-scroll">
         <div className="sidebar-brand-row">
           <div className="brand"><span className="brand-mark"><MessageSquareText size={21} aria-hidden /></span>GateLM Chat</div>
@@ -574,8 +687,17 @@ export function ChatShell() {
     </aside>
     <section className="chat-main">
       <header className="chat-topbar">
-        <button ref={drawerTriggerRef} className="g-button g-button--ghost mobile-menu" aria-label="대화 메뉴 열기" aria-expanded={menuOpen} onClick={() => setMenuOpen(true)}><Menu size={21} aria-hidden /></button>
-        <div className="topbar-title"><strong>{selected?.title ?? 'GateLM Chat'}</strong><span>{session.selectedTenant.name}{selected ? ` · ${selected.knowledgeMode === 'tenant' ? '사내 지식 채팅' : '일반 채팅'}` : ''}</span></div>
+        <button
+          ref={drawerTriggerRef}
+          className="g-button g-button--ghost navigation-toggle"
+          aria-controls="tenant-chat-sidebar"
+          aria-label={compactLayout ? menuOpen ? '대화 메뉴 닫기' : '대화 메뉴 열기' : sidebarCollapsed ? '사이드바 펼치기' : '사이드바 접기'}
+          aria-expanded={compactLayout ? menuOpen : !sidebarCollapsed}
+          onClick={toggleNavigation}
+        >
+          <Menu size={21} aria-hidden />
+        </button>
+        <h1 className="sr-only">{selected?.title ?? 'GateLM Chat'}</h1>
         <div className="topbar-actions">
           <label className="context-setting" title={selected ? '이 대화의 다음 메시지에 사내 지식을 사용할지 선택합니다.' : '다음에 만들 새 대화에서 사내 지식을 사용할지 선택합니다.'}>
             <input
@@ -611,7 +733,29 @@ export function ChatShell() {
         <div className="message-stage">
           {!selected ? <div className="empty-chat"><div className="empty-chat-inner"><div className="empty-icon"><MessageSquareText size={30} aria-hidden /></div><h1>무엇을 함께 해결할까요?</h1><p>메시지를 보내면 새 대화를 만들고 조직의 정책 안에서 안전하게 답변합니다.</p></div></div>
             : messages.length === 0 && !historyLoading ? <div className="empty-chat"><div className="empty-chat-inner"><div className="empty-icon"><MessageSquareText size={30} aria-hidden /></div><h1>대화를 시작해 보세요</h1><p>업무 아이디어, 요약, 초안 작성을 요청할 수 있습니다. 메시지는 암호화된 대화 기록으로 복원됩니다.</p></div></div>
-              : <ol ref={logRef} className="message-log" role="log" aria-live="polite" aria-relevant="additions text" aria-busy={streaming || historyLoading}>
+              : <ol
+                  ref={logRef}
+                  className="message-log"
+                  role="log"
+                  aria-live="polite"
+                  aria-relevant="additions text"
+                  aria-busy={streaming || historyLoading}
+                  onKeyDown={(event) => {
+                    if (event.key === 'ArrowUp' || event.key === 'PageUp' || event.key === 'Home') pauseScrollFollowing();
+                  }}
+                  onScroll={handleLogScroll}
+                  onTouchStart={(event) => { touchPositionRef.current = event.touches[0]?.clientY ?? null; }}
+                  onTouchMove={(event) => {
+                    const currentY = event.touches[0]?.clientY;
+                    if (currentY !== undefined && touchPositionRef.current !== null && currentY > touchPositionRef.current) {
+                      pauseScrollFollowing();
+                    }
+                    touchPositionRef.current = currentY ?? null;
+                  }}
+                  onTouchEnd={() => { touchPositionRef.current = null; }}
+                  onWheel={(event) => { if (event.deltaY < 0) pauseScrollFollowing(); }}
+                  tabIndex={0}
+                >
                 {messages.map((message) => <li key={message.localId ?? message.id} className={`message-row message-${message.role}`}>
                   {message.role === 'user' ? <UserMessage content={message.content} createdAt={message.createdAt} maskingApplied={message.maskingApplied} /> : <>
                     <div className="message-avatar" aria-hidden><MessageSquareText size={17} /></div>
@@ -636,6 +780,9 @@ export function ChatShell() {
                 </li>)}
                 {historyLoading && <li className="history-loading"><LoaderCircle className="spin" size={18} aria-hidden />대화 기록을 불러오는 중…</li>}
               </ol>}
+          {selected && latestAnswerAvailable && <Button className="latest-answer" variant="secondary" onClick={jumpToLatestAnswer}>
+            <ArrowDown size={16} aria-hidden />최신 답변
+          </Button>}
           {selected && messageCursor && <Button className="history-more" variant="ghost" onClick={loadMoreMessages} disabled={historyLoading}>대화 기록 더 보기</Button>}
         </div>
         <form className="composer-area" onSubmit={sendMessage}>
