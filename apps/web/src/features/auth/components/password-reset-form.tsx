@@ -17,6 +17,7 @@ const resetText: Record<
     mismatch: string;
     newPassword: string;
     passwordHint: string;
+    passwordInvalid: string;
     passwordValid: string;
     passwordsMatch: string;
     submit: string;
@@ -32,6 +33,7 @@ const resetText: Record<
     mismatch: "The new passwords do not match.",
     newPassword: "New password",
     passwordHint: "Use 8 to 15 characters and include at least one uppercase letter, lowercase letter, number, and special character. Spaces are not allowed.",
+    passwordInvalid: "Password requirements are not met.",
     passwordValid: "Password requirements met.",
     passwordsMatch: "The new passwords match.",
     submit: "Change password",
@@ -46,6 +48,7 @@ const resetText: Record<
     mismatch: "새 비밀번호가 일치하지 않습니다.",
     newPassword: "새 비밀번호",
     passwordHint: "비밀번호는 8자 이상 15자 이하이며, 영문 대문자·소문자·숫자·특수문자를 각각 1개 이상 포함해야 합니다. 공백은 사용할 수 없습니다.",
+    passwordInvalid: "비밀번호 규칙을 충족하지 않습니다.",
     passwordValid: "비밀번호 규칙을 충족했습니다.",
     passwordsMatch: "새 비밀번호가 일치합니다.",
     submit: "비밀번호 변경",
@@ -63,8 +66,11 @@ export function PasswordResetForm({ locale }: { locale: Locale }) {
   const [isComplete, setIsComplete] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [newPassword, setNewPassword] = useState("");
+  const [hasNewPasswordBlurred, setHasNewPasswordBlurred] = useState(false);
   const [passwordConfirmation, setPasswordConfirmation] = useState("");
   const isNewPasswordValid = isPasswordPolicySatisfied(newPassword);
+  const showPasswordPolicyError =
+    hasNewPasswordBlurred && newPassword.length > 0 && !isNewPasswordValid;
   const isConfirmationValid =
     isNewPasswordValid &&
     passwordConfirmation.length > 0 &&
@@ -110,6 +116,7 @@ export function PasswordResetForm({ locale }: { locale: Locale }) {
       setToken(null);
       setIsComplete(true);
       setNewPassword("");
+      setHasNewPasswordBlurred(false);
       setPasswordConfirmation("");
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : text.unknownError);
@@ -154,7 +161,7 @@ export function PasswordResetForm({ locale }: { locale: Locale }) {
               <label htmlFor="reset-new-password">{text.newPassword}</label>
               <PasswordInput
                 id="reset-new-password"
-                aria-invalid={newPassword.length > 0 && !isNewPasswordValid}
+                aria-invalid={showPasswordPolicyError}
                 autoComplete="new-password"
                 isValid={isNewPasswordValid}
                 locale={locale}
@@ -162,12 +169,17 @@ export function PasswordResetForm({ locale }: { locale: Locale }) {
                 minLength={8}
                 name="newPassword"
                 native
+                onBlur={() => setHasNewPasswordBlurred(true)}
                 onChange={(event) => setNewPassword(event.currentTarget.value)}
                 required
                 value={newPassword}
               />
               <small>{text.passwordHint}</small>
-              {isNewPasswordValid ? (
+              {showPasswordPolicyError ? (
+                <span className="password-validation-message password-validation-message-error" role="alert">
+                  {text.passwordInvalid}
+                </span>
+              ) : isNewPasswordValid ? (
                 <span className="password-validation-message password-validation-message-success" role="status">
                   ✓ {text.passwordValid}
                 </span>

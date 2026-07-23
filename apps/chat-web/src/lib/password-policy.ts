@@ -2,6 +2,8 @@ export const PASSWORD_MIN_LENGTH = 8;
 export const PASSWORD_MAX_LENGTH = 15;
 export const PASSWORD_POLICY_MESSAGE_KO =
   '비밀번호는 8자 이상 15자 이하이며, 영문 대문자·소문자·숫자·특수문자를 각각 1개 이상 포함해야 합니다. 공백은 사용할 수 없습니다.';
+export const PASSWORD_POLICY_INVALID_MESSAGE_KO =
+  '비밀번호 규칙을 충족하지 않습니다.';
 
 export function isPasswordPolicySatisfied(password: string): boolean {
   const characterLength = Array.from(password).length;

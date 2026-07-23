@@ -25,6 +25,7 @@ const changePasswordText: Record<
     mismatch: string;
     newPassword: string;
     passwordHint: string;
+    passwordInvalid: string;
     passwordValid: string;
     passwordsMatch: string;
     submit: string;
@@ -40,6 +41,7 @@ const changePasswordText: Record<
     mismatch: "The password confirmation does not match.",
     newPassword: "New password",
     passwordHint: "Use 8 to 15 characters and include at least one uppercase letter, lowercase letter, number, and special character. Spaces are not allowed.",
+    passwordInvalid: "Password requirements are not met.",
     passwordValid: "Password requirements met.",
     passwordsMatch: "The new passwords match.",
     submit: "Change password",
@@ -54,6 +56,7 @@ const changePasswordText: Record<
     mismatch: "새 비밀번호가 일치하지 않습니다.",
     newPassword: "새 비밀번호",
     passwordHint: "비밀번호는 8자 이상 15자 이하이며, 영문 대문자·소문자·숫자·특수문자를 각각 1개 이상 포함해야 합니다. 공백은 사용할 수 없습니다.",
+    passwordInvalid: "비밀번호 규칙을 충족하지 않습니다.",
     passwordValid: "비밀번호 규칙을 충족했습니다.",
     passwordsMatch: "새 비밀번호가 일치합니다.",
     submit: "비밀번호 변경",
@@ -74,6 +77,7 @@ export function ChangePasswordDialog({
   const text = changePasswordText[locale];
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
+  const [hasNewPasswordBlurred, setHasNewPasswordBlurred] = useState(false);
   const [passwordConfirmation, setPasswordConfirmation] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -82,6 +86,8 @@ export function ChangePasswordDialog({
     newPassword.length > 0 &&
     currentPassword === newPassword;
   const meetsPolicy = isPasswordPolicySatisfied(newPassword);
+  const showPasswordPolicyError =
+    hasNewPasswordBlurred && newPassword.length > 0 && !meetsPolicy;
   const isNewPasswordValid = meetsPolicy && !sameAsCurrent;
   const isConfirmationValid =
     isNewPasswordValid &&
@@ -91,6 +97,7 @@ export function ChangePasswordDialog({
   function resetFormState() {
     setCurrentPassword("");
     setNewPassword("");
+    setHasNewPasswordBlurred(false);
     setPasswordConfirmation("");
     setError(null);
   }
@@ -177,7 +184,7 @@ export function ChangePasswordDialog({
           <div className="grid gap-1.5 text-sm font-medium">
             <label htmlFor="change-new-password">{text.newPassword}</label>
             <PasswordInput
-              aria-invalid={sameAsCurrent || (newPassword.length > 0 && !meetsPolicy)}
+              aria-invalid={sameAsCurrent || showPasswordPolicyError}
               autoComplete="new-password"
               id="change-new-password"
               isValid={isNewPasswordValid}
@@ -185,6 +192,7 @@ export function ChangePasswordDialog({
               maxLength={15}
               minLength={8}
               name="newPassword"
+              onBlur={() => setHasNewPasswordBlurred(true)}
               onChange={(event) => setNewPassword(event.currentTarget.value)}
               required
               value={newPassword}
@@ -192,6 +200,10 @@ export function ChangePasswordDialog({
             {sameAsCurrent ? (
               <span className="password-validation-message password-validation-message-error" role="alert">
                 {text.differentPassword}
+              </span>
+            ) : showPasswordPolicyError ? (
+              <span className="password-validation-message password-validation-message-error" role="alert">
+                {text.passwordInvalid}
               </span>
             ) : isNewPasswordValid ? (
               <span className="password-validation-message password-validation-message-success" role="status">

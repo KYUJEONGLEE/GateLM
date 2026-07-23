@@ -8,6 +8,7 @@ import { FormEvent, useState } from 'react';
 import { api } from '@/lib/browser-api';
 import {
   isPasswordPolicySatisfied,
+  PASSWORD_POLICY_INVALID_MESSAGE_KO,
   PASSWORD_POLICY_MESSAGE_KO,
 } from '@/lib/password-policy';
 import { PasswordInput } from './password-input';
@@ -18,12 +19,15 @@ export function PasswordChangeForm() {
   const [error, setError] = useState('');
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
+  const [hasNewPasswordBlurred, setHasNewPasswordBlurred] = useState(false);
   const [passwordConfirmation, setPasswordConfirmation] = useState('');
   const sameAsCurrent =
     currentPassword.length > 0 &&
     newPassword.length > 0 &&
     currentPassword === newPassword;
   const meetsPolicy = isPasswordPolicySatisfied(newPassword);
+  const showPasswordPolicyError =
+    hasNewPasswordBlurred && newPassword.length > 0 && !meetsPolicy;
   const isNewPasswordValid = meetsPolicy && !sameAsCurrent;
   const isConfirmationValid =
     isNewPasswordValid &&
@@ -93,13 +97,14 @@ export function PasswordChangeForm() {
         <div className="field">
           <label htmlFor="new-password">새 비밀번호</label>
           <PasswordInput
-            aria-invalid={sameAsCurrent || (newPassword.length > 0 && !meetsPolicy)}
+            aria-invalid={sameAsCurrent || showPasswordPolicyError}
             autoComplete="new-password"
             id="new-password"
             isValid={isNewPasswordValid}
             maxLength={15}
             minLength={8}
             name="newPassword"
+            onBlur={() => setHasNewPasswordBlurred(true)}
             onChange={(event) => setNewPassword(event.currentTarget.value)}
             required
             value={newPassword}
@@ -108,6 +113,10 @@ export function PasswordChangeForm() {
         {sameAsCurrent ? (
           <p className="password-validation-message password-validation-message-error" role="alert">
             현재 비밀번호와 다른 새 비밀번호를 입력해 주세요.
+          </p>
+        ) : showPasswordPolicyError ? (
+          <p className="password-validation-message password-validation-message-error" role="alert">
+            {PASSWORD_POLICY_INVALID_MESSAGE_KO}
           </p>
         ) : isNewPasswordValid ? (
           <p className="password-validation-message password-validation-message-success" role="status">

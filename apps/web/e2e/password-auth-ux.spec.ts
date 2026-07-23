@@ -37,3 +37,24 @@ test("password fields expose visibility controls and valid signup checks", async
   await signupConfirmation.fill("Valid1!Pass");
   await expect(dialog.locator(".password-input-valid-icon")).toHaveCount(2);
 });
+
+test("password reset stays public and warns after an invalid new password loses focus", async ({
+  page
+}) => {
+  await page.goto("/auth/reset-password#token=diagnostic-reset-token-with-32-characters");
+
+  const newPassword = page.locator("#reset-new-password");
+  await expect(newPassword).toBeVisible();
+  await newPassword.fill("weakpass");
+  await expect(page.locator(".password-validation-message-error")).toHaveCount(0);
+
+  await page.locator("#reset-password-confirmation").focus();
+  await expect(page.locator(".password-validation-message-error")).toContainText(
+    /비밀번호 규칙을 충족하지 않습니다|Password requirements are not met/
+  );
+
+  await newPassword.fill("Valid1!Pass");
+  await expect(page.locator(".password-validation-message-success")).toContainText(
+    /비밀번호 규칙을 충족했습니다|Password requirements met/
+  );
+});
