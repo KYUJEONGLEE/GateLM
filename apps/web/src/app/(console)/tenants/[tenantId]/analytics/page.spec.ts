@@ -244,3 +244,16 @@ test("usage omits employee reads and hides the employee selector", async () => {
   expect(pageSource).toContain('appendQuery(query, "employeeId", filters.employeeId)');
   expect(pageSource).not.toContain("departmentId");
 });
+
+test("usage defaults to 15 minutes without overriding an explicit range", async () => {
+  const pageSource = await readFile(pageSourceUrl, "utf8");
+
+  expect(pageSource).toContain("buildFilters(resolvedSearchParams, activeTab)");
+  expect(pageSource).toContain(
+    'normalizeRange(searchParams?.range, activeTab === "usage" ? "15m" : "1w")'
+  );
+  expect(pageSource).toContain(
+    'tab === "usage" && activeTab !== "usage" ? "15m" : filters.range'
+  );
+  expect(pageSource).toMatch(/\? value\s+: fallback;/);
+});

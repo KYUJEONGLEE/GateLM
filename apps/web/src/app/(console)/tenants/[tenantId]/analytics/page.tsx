@@ -166,7 +166,7 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
   const { tenantId } = await params;
   const resolvedSearchParams = await searchParams;
   const activeTab = normalizeTab(resolvedSearchParams?.tab);
-  const requestedFilters = buildFilters(resolvedSearchParams);
+  const requestedFilters = buildFilters(resolvedSearchParams, activeTab);
   const [locale, auth] = await Promise.all([
     getRequestLocale(),
     getCurrentConsoleAuth()
@@ -467,7 +467,7 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
               aria-current={tab.id === activePrimaryTab ? "page" : undefined}
               className="analytics-v3-tab"
               data-active={tab.id === activePrimaryTab}
-              href={tabHref(effectiveTenantId, tab.id, filters)}
+              href={tabHref(effectiveTenantId, tab.id, filters, activeTab)}
               key={tab.id}
             >
               <Icon aria-hidden="true" size={18} />
@@ -484,7 +484,7 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
               aria-current={tab === activeTab ? "page" : undefined}
               className="analytics-v3-subtab"
               data-active={tab === activeTab}
-              href={tabHref(effectiveTenantId, tab, filters)}
+              href={tabHref(effectiveTenantId, tab, filters, activeTab)}
               key={tab}
             >
               {text.tabs[tab]}
@@ -565,19 +565,23 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
 }
 
 function buildFilters(
-  searchParams: Awaited<AnalyticsPageProps["searchParams"]>
+  searchParams: Awaited<AnalyticsPageProps["searchParams"]>,
+  activeTab: AnalyticsTab
 ): AnalyticsFilterState {
   return {
     employeeId: normalizeText(searchParams?.employeeId),
     projectId: normalizeText(searchParams?.projectId),
-    range: normalizeRange(searchParams?.range)
+    range: normalizeRange(searchParams?.range, activeTab === "usage" ? "15m" : "1w")
   };
 }
 
-function normalizeRange(value: string | undefined): LiveAnalyticsRange {
+function normalizeRange(
+  value: string | undefined,
+  fallback: LiveAnalyticsRange
+): LiveAnalyticsRange {
   return value === "15m" || value === "1h" || value === "1d" || value === "1w"
     ? value
-    : "1w";
+    : fallback;
 }
 
 function normalizeTab(value: string | undefined): AnalyticsTab {
@@ -610,9 +614,11 @@ function normalizeText(value: string | undefined) {
 function tabHref(
   tenantId: string,
   tab: AnalyticsTab,
-  filters: AnalyticsFilterState
+  filters: AnalyticsFilterState,
+  activeTab: AnalyticsTab
 ) {
-  const query = new URLSearchParams({ range: filters.range, tab });
+  const range = tab === "usage" && activeTab !== "usage" ? "15m" : filters.range;
+  const query = new URLSearchParams({ range, tab });
   appendQuery(query, "projectId", filters.projectId);
   appendQuery(query, "employeeId", filters.employeeId);
   return `/tenants/${tenantId}/analytics?${query.toString()}`;
