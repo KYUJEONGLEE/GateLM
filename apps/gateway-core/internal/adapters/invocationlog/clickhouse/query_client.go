@@ -40,6 +40,14 @@ type queryClient struct {
 	metricsRegistry *metrics.Registry
 }
 
+func (c *queryClient) timeTable() string {
+	return c.table + "_by_time"
+}
+
+func (c *queryClient) dashboardRollupTable() string {
+	return c.table + "_dashboard_second_rollup"
+}
+
 func newQueryClient(cfg QueryConfig) (*queryClient, error) {
 	endpoint, err := url.Parse(strings.TrimSpace(cfg.EndpointURL))
 	if err != nil || endpoint.Scheme == "" || endpoint.Host == "" {

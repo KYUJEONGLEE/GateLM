@@ -125,13 +125,16 @@ func (r *AnalyticsPerformanceReader) querySummaries(ctx context.Context, filter 
 	rows, err := queryJSONEachRow[performanceSummaryRow](ctx, r.client, fmt.Sprintf(`
 %s
 SELECT
-  count() AS total_requests,
-  if(countIf(latency_eligible) = 0, NULL, avgIf(toFloat64(latency_ms), latency_eligible)) AS avg_latency_ms,
-  if(countIf(latency_eligible) = 0, NULL, quantileExactIf(0.95)(latency_ms, latency_eligible)) AS p95_latency_ms,
-  if(countIf(latency_eligible) = 0, NULL, quantileExactIf(0.99)(latency_ms, latency_eligible)) AS p99_latency_ms,
-  countIf(is_system_error) AS system_error_requests,
-  if(count() = 0, NULL, countIf(is_system_error) / count()) AS error_rate,
-  if(count() = 0, NULL, toUnixTimestamp64Milli(max(created_at))) AS last_event_at_ms
+  sum(requests) AS total_requests,
+  if(sumIf(requests, latency_eligible = 1) = 0, NULL,
+    sumIf(latency_sum_ms, latency_eligible = 1) / sumIf(requests, latency_eligible = 1)) AS avg_latency_ms,
+  if(sumIf(requests, latency_eligible = 1) = 0, NULL,
+    arrayElement(quantilesTDigestMergeIf(0.50, 0.95, 0.99)(latency_quantiles, latency_eligible = 1), 2)) AS p95_latency_ms,
+  if(sumIf(requests, latency_eligible = 1) = 0, NULL,
+    arrayElement(quantilesTDigestMergeIf(0.50, 0.95, 0.99)(latency_quantiles, latency_eligible = 1), 3)) AS p99_latency_ms,
+  sum(system_error_requests) AS system_error_requests,
+  if(sum(requests) = 0, NULL, sum(system_error_requests) / sum(requests)) AS error_rate,
+  if(sum(requests) = 0, NULL, toUnixTimestamp64Milli(max(last_created_at))) AS last_event_at_ms
 FROM filtered
 FORMAT JSONEachRow`, r.filteredCTE(filter)), performanceParameters(filter))
 	if err != nil {
@@ -174,13 +177,16 @@ func (r *AnalyticsPerformanceReader) queryProviderModels(ctx context.Context, fi
 SELECT
   provider,
   model,
-  count() AS requests,
-  if(countIf(latency_eligible) = 0, NULL, avgIf(toFloat64(latency_ms), latency_eligible)) AS avg_latency_ms,
-  if(countIf(latency_eligible) = 0, NULL, quantileExactIf(0.95)(latency_ms, latency_eligible)) AS p95_latency_ms,
-  if(countIf(latency_eligible) = 0, NULL, quantileExactIf(0.99)(latency_ms, latency_eligible)) AS p99_latency_ms,
-  countIf(is_system_error) / count() AS error_rate,
+  sum(requests) AS requests,
+  if(sumIf(requests, latency_eligible = 1) = 0, NULL,
+    sumIf(latency_sum_ms, latency_eligible = 1) / sumIf(requests, latency_eligible = 1)) AS avg_latency_ms,
+  if(sumIf(requests, latency_eligible = 1) = 0, NULL,
+    arrayElement(quantilesTDigestMergeIf(0.50, 0.95, 0.99)(latency_quantiles, latency_eligible = 1), 2)) AS p95_latency_ms,
+  if(sumIf(requests, latency_eligible = 1) = 0, NULL,
+    arrayElement(quantilesTDigestMergeIf(0.50, 0.95, 0.99)(latency_quantiles, latency_eligible = 1), 3)) AS p99_latency_ms,
+  sum(system_error_requests) / sum(requests) AS error_rate,
   sum(cost_micro_usd) AS total_cost_micro_usd,
-  countIf(cache_status = 'hit') / count() AS cache_hit_rate
+  sumIf(requests, cache_outcome = 'hit') / sum(requests) AS cache_hit_rate
 FROM filtered
 WHERE provider != '' AND model != ''
 GROUP BY provider, model
@@ -225,8 +231,9 @@ func (r *AnalyticsPerformanceReader) queryProviderLatencies(ctx context.Context,
 %s
 SELECT
   provider,
-  if(countIf(latency_eligible) = 0, NULL, quantileExactIf(0.95)(latency_ms, latency_eligible)) AS p95_latency_ms,
-  count() AS requests
+  if(sumIf(requests, latency_eligible = 1) = 0, NULL,
+    arrayElement(quantilesTDigestMergeIf(0.50, 0.95, 0.99)(latency_quantiles, latency_eligible = 1), 2)) AS p95_latency_ms,
+  sum(requests) AS requests
 FROM filtered
 WHERE provider != ''
 GROUP BY provider
@@ -257,15 +264,18 @@ type distributionRow struct {
 }
 
 func (r *AnalyticsPerformanceReader) queryDistribution(ctx context.Context, filter invocationlog.AnalyticsPerformanceFilter) ([]invocationlog.AnalyticsLatencyDistributionBucket, error) {
-	bucket := clickHouseBucketExpression(invocationlog.TimeSeriesBucketConfigForRange(filter.From, filter.To))
+	bucket := clickHouseBucketExpressionForColumn(invocationlog.TimeSeriesBucketConfigForRange(filter.From, filter.To), "bucket")
 	rows, err := queryJSONEachRow[distributionRow](ctx, r.client, fmt.Sprintf(`
 %s
 SELECT
   toInt64(toUnixTimestamp(%s)) * 1000 AS bucket_ms,
-  count() AS requests,
-  if(countIf(latency_eligible) = 0, NULL, quantileExactIf(0.50)(latency_ms, latency_eligible)) AS p50_latency_ms,
-  if(countIf(latency_eligible) = 0, NULL, quantileExactIf(0.95)(latency_ms, latency_eligible)) AS p95_latency_ms,
-  if(countIf(latency_eligible) = 0, NULL, quantileExactIf(0.99)(latency_ms, latency_eligible)) AS p99_latency_ms
+  sum(requests) AS requests,
+  if(sumIf(requests, latency_eligible = 1) = 0, NULL,
+    arrayElement(quantilesTDigestMergeIf(0.50, 0.95, 0.99)(latency_quantiles, latency_eligible = 1), 1)) AS p50_latency_ms,
+  if(sumIf(requests, latency_eligible = 1) = 0, NULL,
+    arrayElement(quantilesTDigestMergeIf(0.50, 0.95, 0.99)(latency_quantiles, latency_eligible = 1), 2)) AS p95_latency_ms,
+  if(sumIf(requests, latency_eligible = 1) = 0, NULL,
+    arrayElement(quantilesTDigestMergeIf(0.50, 0.95, 0.99)(latency_quantiles, latency_eligible = 1), 3)) AS p99_latency_ms
 FROM filtered
 GROUP BY %s
 ORDER BY bucket_ms
@@ -314,7 +324,7 @@ FROM filtered
 WHERE latency_eligible
 ORDER BY latency_ms DESC, created_at DESC, request_id DESC
 LIMIT 10
-FORMAT JSONEachRow`, r.filteredCTE(filter)), performanceParameters(filter))
+FORMAT JSONEachRow`, r.timeFilteredCTE(filter)), performanceParameters(filter))
 	if err != nil {
 		return nil, err
 	}
@@ -338,6 +348,28 @@ FORMAT JSONEachRow`, r.filteredCTE(filter)), performanceParameters(filter))
 func (r *AnalyticsPerformanceReader) filteredCTE(filter invocationlog.AnalyticsPerformanceFilter) string {
 	where := []string{
 		"tenant_id = {tenant_id:UUID}",
+		"bucket >= parseDateTime64BestEffort({from:String}, 3, 'UTC')",
+		"bucket < parseDateTime64BestEffort({to:String}, 3, 'UTC')",
+	}
+	if filter.ProjectID != "" {
+		where = append(where, "project_id = {project_id:UUID}")
+	}
+	if filter.Provider != "" {
+		where = append(where, "provider = {provider:String}")
+	}
+	if filter.Model != "" {
+		where = append(where, "model = {model:String}")
+	}
+	return fmt.Sprintf(`WITH filtered AS (
+  SELECT *
+  FROM %s.%s
+  WHERE %s
+)`, r.client.database, r.client.dashboardRollupTable(), strings.Join(where, "\n    AND "))
+}
+
+func (r *AnalyticsPerformanceReader) timeFilteredCTE(filter invocationlog.AnalyticsPerformanceFilter) string {
+	where := []string{
+		"tenant_id = {tenant_id:UUID}",
 		"created_at >= parseDateTime64BestEffort({from:String}, 3, 'UTC')",
 		"created_at < parseDateTime64BestEffort({to:String}, 3, 'UTC')",
 	}
@@ -359,14 +391,11 @@ func (r *AnalyticsPerformanceReader) filteredCTE(filter invocationlog.AnalyticsP
     terminal_status,
     http_status,
     latency_ms,
-    cost_micro_usd,
-    cache_status,
     created_at,
-    (http_status >= 500 OR terminal_status = 'failed') AS is_system_error,
-    (terminal_status IN ('success', 'failed')) AS latency_eligible
+    terminal_status IN ('success', 'failed') AS latency_eligible
   FROM %s.%s FINAL
   WHERE %s
-)`, r.client.database, r.client.table, strings.Join(where, "\n    AND "))
+)`, r.client.database, r.client.timeTable(), strings.Join(where, "\n    AND "))
 }
 
 func performanceParameters(filter invocationlog.AnalyticsPerformanceFilter) map[string]string {
@@ -388,19 +417,23 @@ func performanceParameters(filter invocationlog.AnalyticsPerformanceFilter) map[
 }
 
 func clickHouseBucketExpression(config invocationlog.TimeSeriesBucketConfig) string {
+	return clickHouseBucketExpressionForColumn(config, "created_at")
+}
+
+func clickHouseBucketExpressionForColumn(config invocationlog.TimeSeriesBucketConfig, column string) string {
 	switch config.Unit {
 	case "7second":
-		return "toDateTime64(intDiv(toUnixTimestamp(created_at), 7) * 7, 3, 'UTC')"
+		return fmt.Sprintf("toDateTime64(intDiv(toUnixTimestamp(%s), 7) * 7, 3, 'UTC')", column)
 	case "minute":
-		return "toStartOfMinute(created_at, 'UTC')"
+		return fmt.Sprintf("toStartOfMinute(%s, 'UTC')", column)
 	case "5minute":
-		return "toStartOfInterval(created_at, INTERVAL 5 MINUTE, 'UTC')"
+		return fmt.Sprintf("toStartOfInterval(%s, INTERVAL 5 MINUTE, 'UTC')", column)
 	case "hour":
-		return "toStartOfHour(created_at, 'UTC')"
+		return fmt.Sprintf("toStartOfHour(%s, 'UTC')", column)
 	case "day":
-		return "toStartOfDay(created_at, 'UTC')"
+		return fmt.Sprintf("toStartOfDay(%s, 'UTC')", column)
 	default:
-		return "toStartOfSecond(created_at, 'UTC')"
+		return fmt.Sprintf("toStartOfSecond(%s, 'UTC')", column)
 	}
 }
 

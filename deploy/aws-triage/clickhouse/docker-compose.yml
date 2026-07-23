@@ -14,6 +14,7 @@ services:
     volumes:
       - clickhouse-data:/var/lib/clickhouse
       - clickhouse-logs:/var/log/clickhouse-server
+      - ./config.d:/etc/clickhouse-server/config.d:ro
       - ./init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test:
