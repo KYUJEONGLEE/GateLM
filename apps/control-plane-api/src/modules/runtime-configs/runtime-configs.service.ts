@@ -69,7 +69,9 @@ const DEFAULT_RESPONSE_CAPTURE_MAX_CHARS = 8000;
 const BUILTIN_MOCK_MODEL_REF = 'mock-balanced';
 const BUILTIN_MOCK_PROVIDER_ID = '00000000-0000-4000-8000-000000000001';
 const BUILTIN_MOCK_PROVIDER_NAME = 'mock';
-const BUILTIN_MOCK_PROVIDER_BASE_URL = 'http://mock-provider:8090';
+const DEFAULT_BUILTIN_MOCK_PROVIDER_BASE_URL = 'http://mock-provider:8090';
+const BUILTIN_MOCK_PROVIDER_BASE_URL_ENV =
+  'GATELM_DEMO_MOCK_PROVIDER_BASE_URL';
 const ROUTING_DIFFICULTIES = ['simple', 'complex'] as const;
 const LEGACY_ROUTING_FIELDS = [
   'defaultProvider',
@@ -1961,7 +1963,7 @@ export class RuntimeConfigsService {
         displayName: 'Built-in Mock Provider',
         status: 'active',
         adapterType: 'mock',
-        baseUrl: BUILTIN_MOCK_PROVIDER_BASE_URL,
+        baseUrl: builtinMockProviderBaseURL(),
         timeoutMs: 30000,
         credentialRequired: false,
         credentialRef: null,
@@ -3722,5 +3724,29 @@ export class RuntimeConfigsService {
       error instanceof Prisma.PrismaClientKnownRequestError &&
       error.code === 'P2034'
     );
+  }
+}
+
+function builtinMockProviderBaseURL(): string {
+  const configured = process.env[BUILTIN_MOCK_PROVIDER_BASE_URL_ENV]?.trim();
+  if (!configured) {
+    return DEFAULT_BUILTIN_MOCK_PROVIDER_BASE_URL;
+  }
+
+  try {
+    const parsed = new URL(configured);
+    if (
+      (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') ||
+      parsed.username ||
+      parsed.password ||
+      parsed.search ||
+      parsed.hash
+    ) {
+      return DEFAULT_BUILTIN_MOCK_PROVIDER_BASE_URL;
+    }
+
+    return configured.replace(/\/+$/, '');
+  } catch {
+    return DEFAULT_BUILTIN_MOCK_PROVIDER_BASE_URL;
   }
 }
