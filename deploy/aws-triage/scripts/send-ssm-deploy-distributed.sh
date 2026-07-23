@@ -26,6 +26,8 @@ chat_url="${8:-}"
 operation="${9:-deploy}"
 gateway_secondary_instance_id="${10:-}"
 gateway_upstream_host="${11:-10.78.2.20}"
+pii_secondary_instance_id="${12:-}"
+pii_upstream_host="${13:-10.78.2.50}"
 aws_region="${AWS_REGION:-${AWS_DEFAULT_REGION:-}}"
 poll_interval_seconds="${GATELM_SSM_POLL_INTERVAL_SECONDS:-15}"
 max_polls="${GATELM_SSM_MAX_POLLS:-480}"
@@ -44,7 +46,13 @@ declare -A app_roles=(
   [ai]=ai
   [pii]=pii
 )
-deploy_order=(pii ai data)
+deploy_order=()
+if [[ -n "${pii_secondary_instance_id}" ]]; then
+  instance_ids[pii-secondary]="${pii_secondary_instance_id}"
+  app_roles[pii-secondary]=pii
+  deploy_order+=(pii-secondary)
+fi
+deploy_order+=(pii ai data)
 if [[ -n "${gateway_secondary_instance_id}" ]]; then
   instance_ids[gateway-secondary]="${gateway_secondary_instance_id}"
   app_roles[gateway-secondary]=gateway
@@ -61,6 +69,8 @@ done
 [[ "${operation}" == "deploy" || "${operation}" == "rollback" ]] || ssm_fail "Operation must be deploy or rollback."
 [[ "${gateway_upstream_host}" == "10.78.2.20" || "${gateway_upstream_host}" == "10.78.2.10" ]] || \
   ssm_fail "Gateway upstream host must be 10.78.2.20 or 10.78.2.10."
+[[ "${pii_upstream_host}" == "10.78.2.50" || "${pii_upstream_host}" == "10.78.2.11" ]] || \
+  ssm_fail "PII upstream host must be 10.78.2.50 or 10.78.2.11."
 [[ -n "${aws_region}" ]] || ssm_fail "AWS_REGION is required."
 [[ "${poll_interval_seconds}" =~ ^[0-9]+$ ]] || ssm_fail "Invalid poll interval."
 [[ "${max_polls}" =~ ^[1-9][0-9]*$ ]] || ssm_fail "Invalid poll count."
@@ -98,6 +108,7 @@ send_role_command() {
   printf -v role_q '%q' "${role}"
   printf -v mode_flag_q '%q' "${mode_flag}"
   printf -v gateway_upstream_host_q '%q' "${gateway_upstream_host}"
+  printf -v pii_upstream_host_q '%q' "${pii_upstream_host}"
 
   remote_script="$(cat <<EOF
 set -euo pipefail
@@ -105,6 +116,7 @@ deploy_sha=${deploy_sha_q}
 role=${role_q}
 mode_flag=${mode_flag_q}
 gateway_upstream_host=${gateway_upstream_host_q}
+pii_upstream_host=${pii_upstream_host_q}
 repo=/home/ubuntu/GateLM
 script_path=\$(mktemp /tmp/gatelm-production-distributed-deploy.XXXXXX)
 cleanup() { rm -f "\${script_path}"; }
@@ -116,7 +128,8 @@ sudo -u ubuntu git -C "\${repo}" show "\${deploy_sha}:deploy/aws-triage/scripts/
 chown ubuntu:ubuntu "\${script_path}"
 chmod 700 "\${script_path}"
 sudo -u ubuntu bash "\${script_path}" --role "\${role}" --sha "\${deploy_sha}" \
-  --gateway-upstream-host "\${gateway_upstream_host}" \${mode_flag}
+  --gateway-upstream-host "\${gateway_upstream_host}" \
+  --pii-upstream-host "\${pii_upstream_host}" \${mode_flag}
 EOF
 )"
 
@@ -125,7 +138,7 @@ EOF
   parameters_json="$(jq -cn --arg command "${remote_command}" \
     '{commands: [$command], executionTimeout: ["7200"]}')"
 
-  ssm_log "Sending ${mode} ${deploy_sha} to ${target} (${instance_id}) with Gateway upstream ${gateway_upstream_host}."
+  ssm_log "Sending ${mode} ${deploy_sha} to ${target} (${instance_id}) with Gateway upstream ${gateway_upstream_host} and PII upstream ${pii_upstream_host}."
   command_id="$(aws ssm send-command \
     --region "${aws_region}" \
     --instance-ids "${instance_id}" \
