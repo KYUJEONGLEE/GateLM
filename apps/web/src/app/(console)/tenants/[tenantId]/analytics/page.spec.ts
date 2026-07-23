@@ -69,10 +69,13 @@ test("all analytics tabs share one project-aware Tenant Chat scope", async () =>
   expect(pageSource).toContain("projectScoped");
 });
 
-test("usage, cost, cache, and security load Tenant Chat only for the shared all-projects scope", async () => {
+test("cost, cache, and security load Tenant Chat while usage remains project-only", async () => {
   const pageSource = await readFile(pageSourceUrl, "utf8");
 
   expect(pageSource).toContain(
+    '(activeTab === "cost" || activeTab === "cache" || activeTab === "security")'
+  );
+  expect(pageSource).not.toContain(
     '(activeTab === "usage" || activeTab === "cost" || activeTab === "cache" || activeTab === "security")'
   );
   expect(pageSource).toContain("shouldLoadTenantChatDashboard");
@@ -229,14 +232,15 @@ test("analytics preserves an unavailable selected project in the filter", async 
   expect(pageSource).toContain('projectUnavailable: "선택한 프로젝트를 사용할 수 없음"');
 });
 
-test("the shared employee selector loads tenant-scoped options for every analytics tab", async () => {
+test("usage omits employee reads and hides the employee selector", async () => {
   const pageSource = await readFile(pageSourceUrl, "utf8");
 
-  expect(pageSource).toContain('const needsEmployeeUsage = !projectScoped && activeTab !== "security"');
+  expect(pageSource).toContain('activeTab !== "security" && activeTab !== "usage"');
   expect(pageSource).toContain('const needsEmployeeSecurity = !projectScoped && activeTab === "security"');
   expect(pageSource).toContain("getAllEmployeeUsage({");
   expect(pageSource).toContain("getEmployeeSecurity({");
   expect(pageSource).toContain('name="employeeId"');
+  expect(pageSource).toContain('activeTab !== "usage" ? <label');
   expect(pageSource).toContain('appendQuery(query, "employeeId", filters.employeeId)');
   expect(pageSource).not.toContain("departmentId");
 });

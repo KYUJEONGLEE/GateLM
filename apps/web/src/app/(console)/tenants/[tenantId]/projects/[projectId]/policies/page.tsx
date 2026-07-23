@@ -11,16 +11,19 @@ import { getProjectEmployeeControlModel } from "@/lib/control-plane/employees-cl
 import { getProjectAdminsModel } from "@/lib/control-plane/project-admins-client";
 import { getProjectRuntimePolicyModel } from "@/lib/control-plane/project-runtime-client";
 import { getRequestLocale } from "@/lib/i18n/server-locale";
+import type { PolicySection } from "@/features/policies/components/runtime-policy-editor-types";
 
 type ProjectPoliciesPageProps = {
   params: Promise<{
     projectId: string;
     tenantId: string;
   }>;
+  searchParams?: Promise<{ tab?: string }>;
 };
 
-export default async function ProjectPoliciesPage({ params }: ProjectPoliciesPageProps) {
+export default async function ProjectPoliciesPage({ params, searchParams }: ProjectPoliciesPageProps) {
   const { projectId, tenantId } = await params;
+  const query = await searchParams;
   const [locale, auth] = await Promise.all([
     getRequestLocale(),
     getCurrentConsoleAuth()
@@ -54,6 +57,7 @@ export default async function ProjectPoliciesPage({ params }: ProjectPoliciesPag
       ]}
       fullWidth
       hideStreamingTab
+      initialPolicySection={normalizePolicySection(query?.tab)}
       locale={locale}
       model={projectRuntime.policyModel}
       generalBudgetPanelPlacement="childSlot"
@@ -75,4 +79,18 @@ export default async function ProjectPoliciesPage({ params }: ProjectPoliciesPag
       />
     </RuntimePolicyEditor>
   );
+}
+
+function normalizePolicySection(value: string | undefined): PolicySection | undefined {
+  const sectionByQuery: Record<string, PolicySection> = {
+    budget: "budget",
+    cache: "cache",
+    employees: "employees",
+    general: "general",
+    "rate-limit": "rateLimit",
+    routing: "routing",
+    safety: "safety",
+    streaming: "streaming"
+  };
+  return value ? sectionByQuery[value] : undefined;
 }

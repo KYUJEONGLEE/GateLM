@@ -19,6 +19,7 @@ export type RuntimePolicyEditorProps = {
   generalFooter?: ReactNode;
   generalBudgetPanelPlacement?: "afterChildren" | "childSlot";
   hideStreamingTab?: boolean;
+  initialPolicySection?: PolicySection;
   locale: Locale;
   model: RuntimePolicyModel;
   moveBudgetToGeneral?: boolean;

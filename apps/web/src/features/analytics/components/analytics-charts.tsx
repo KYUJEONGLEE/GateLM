@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { compactAnalyticsValueRows } from "@/features/analytics/analytics-chart-data";
 import type { AnalyticsValueRow } from "@/features/analytics/analytics-read-model";
+import type { AnalyticsLiveUsageBucket } from "@/features/analytics/analytics-live-usage-contract";
 import type { AnalyticsRequestVolumePoint } from "@/features/analytics/analytics-usage-merge";
 import {
   AnalyticsEChart,
@@ -798,6 +799,153 @@ export function AnalyticsRequestVolumeChart({
   );
 
   return <AnalyticsEChart ariaLabel={ariaLabel} className="analytics-v3-main-chart" option={option} />;
+}
+
+export function AnalyticsLiveRequestTrendChart({
+  ariaLabel,
+  buckets,
+  locale,
+  rateLimitStartedAt,
+  showBreakdown = true
+}: {
+  ariaLabel: string;
+  buckets: AnalyticsLiveUsageBucket[];
+  locale: "en" | "ko";
+  rateLimitStartedAt: string | null;
+  showBreakdown?: boolean;
+}) {
+  const theme = useAnalyticsChartTheme();
+  const labels = useMemo(
+    () => buckets.map((bucket) => formatLiveBucket(bucket.periodStart, locale)),
+    [buckets, locale]
+  );
+  const markerIndex = rateLimitStartedAt
+    ? buckets.findIndex((bucket) => bucket.periodStart === rateLimitStartedAt)
+    : -1;
+  const option = useMemo<AnalyticsEChartOption>(
+    () => ({
+      animationDuration: 220,
+      grid: { bottom: 46, left: 72, right: 26, top: 58 },
+      legend: {
+        itemGap: 20,
+        textStyle: { color: theme.label, fontSize: 16, fontWeight: 700 },
+        top: 6
+      },
+      tooltip: analyticsTooltip(" req/s", theme),
+      xAxis: {
+        axisLabel: {
+          color: theme.axis,
+          fontSize: 16,
+          fontWeight: 700,
+          hideOverlap: true
+        },
+        axisLine: { lineStyle: { color: theme.border } },
+        axisTick: { show: false },
+        boundaryGap: false,
+        data: labels,
+        type: "category"
+      },
+      yAxis: {
+        axisLabel: {
+          color: theme.axis,
+          fontSize: 16,
+          fontWeight: 700,
+          formatter: compactAxisNumber
+        },
+        axisLine: { show: false },
+        axisTick: { show: false },
+        min: 0,
+        splitLine: { lineStyle: { color: theme.grid } },
+        type: "value"
+      },
+      series: [
+        liveUsageSeries(
+          locale === "ko" ? "수신" : "Incoming",
+          buckets.map((bucket) => bucket.incomingRps),
+          "var(--primary)",
+          markerIndex,
+          locale
+        ),
+        ...(showBreakdown ? [liveUsageSeries(
+          locale === "ko" ? "처리됨" : "Processed",
+          buckets.map((bucket) => bucket.processedRps),
+          "var(--success)",
+          -1,
+          locale
+        ),
+        liveUsageSeries(
+          locale === "ko" ? "제한됨" : "Rate limited",
+          buckets.map((bucket) => bucket.rateLimitedRps),
+          "var(--warning-indicator)",
+          -1,
+          locale
+        )] : [])
+      ]
+    }),
+    [buckets, labels, locale, markerIndex, showBreakdown, theme]
+  );
+
+  return (
+    <AnalyticsEChart
+      ariaLabel={ariaLabel}
+      className="analytics-live-request-chart"
+      option={option}
+    />
+  );
+}
+
+function liveUsageSeries(
+  name: string,
+  data: number[],
+  color: string,
+  markerIndex: number,
+  locale: "en" | "ko"
+) {
+  return {
+    data,
+    itemStyle: { color },
+    lineStyle: { color, width: 3 },
+    markLine: markerIndex >= 0
+      ? {
+          data: [{
+            label: {
+              color: "var(--warning)",
+              fontSize: 16,
+              fontWeight: 800,
+              formatter: locale === "ko" ? "제한 발생 시작" : "Rate limiting observed"
+            },
+            lineStyle: {
+              color: "var(--warning-indicator)",
+              type: "dashed",
+              width: 2
+            },
+            xAxis: markerIndex
+          }],
+          silent: true,
+          symbol: "none"
+        }
+      : undefined,
+    name,
+    showSymbol: data.length <= 18,
+    smooth: 0.12,
+    symbolSize: 6,
+    type: "line"
+  };
+}
+
+function formatLiveBucket(value: string, locale: "en" | "ko") {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+  return new Intl.DateTimeFormat(locale === "ko" ? "ko-KR" : "en-US", {
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    month: "numeric",
+    second: "2-digit",
+    timeZone: "UTC"
+  }).format(date);
 }
 
 function latencySeries(name: string, data: Array<number | null>, color: string) {

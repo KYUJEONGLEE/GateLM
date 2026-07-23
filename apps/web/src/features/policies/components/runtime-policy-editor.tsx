@@ -525,6 +525,7 @@ export function RuntimePolicyEditor({
   generalBudgetPanelPlacement = "afterChildren",
   generalFooter,
   hideStreamingTab = false,
+  initialPolicySection,
   locale,
   model,
   moveBudgetToGeneral = false
@@ -552,7 +553,7 @@ export function RuntimePolicyEditor({
     status: "idle"
   });
   const [activePolicySection, setActivePolicySection] = useState<PolicySection>(
-    () => getDefaultPolicySection(hasGeneralSection, hasEmployeeSection)
+    () => initialPolicySection ?? getDefaultPolicySection(hasGeneralSection, hasEmployeeSection)
   );
   const [isIssuingApiKey, setIsIssuingApiKey] = useState(false);
   const [oneTimeApiKey, setOneTimeApiKey] = useState<OneTimeApiKeyState | null>(null);
@@ -578,17 +579,10 @@ export function RuntimePolicyEditor({
     [hasEmployeeSection, hasGeneralSection, hideStreamingTab, shouldMoveBudgetToGeneral]
   );
   useEffect(() => {
-    const activeSectionUnavailable =
-      (!hasGeneralSection && activePolicySection === "general") ||
-      (!hasEmployeeSection && activePolicySection === "employees") ||
-      (shouldMoveBudgetToGeneral && activePolicySection === "budget");
-
-    if (activeSectionUnavailable) {
-      setActivePolicySection(
-        getDefaultPolicySection(hasGeneralSection, hasEmployeeSection)
-      );
+    if (!visiblePolicySections.includes(activePolicySection)) {
+      setActivePolicySection(visiblePolicySections[0] ?? "routing");
     }
-  }, [activePolicySection, hasEmployeeSection, hasGeneralSection, shouldMoveBudgetToGeneral]);
+  }, [activePolicySection, visiblePolicySections]);
   useEffect(() => {
     const nextDraftValues = getWritableRuntimePolicyDraftValues(model.activeConfig);
     setDraftValues(nextDraftValues);
@@ -872,6 +866,17 @@ export function RuntimePolicyEditor({
     }
   }
 
+  function selectPolicySection(section: PolicySection) {
+    setActivePolicySection(section);
+    const nextUrl = new URL(window.location.href);
+    nextUrl.searchParams.set("tab", policySectionQueryValue(section));
+    window.history.replaceState(
+      window.history.state,
+      "",
+      `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`
+    );
+  }
+
   return (
     <RuntimePolicyPageFrame
       breadcrumbItems={breadcrumbItems}
@@ -945,7 +950,7 @@ export function RuntimePolicyEditor({
                 data-active={isActive}
                 id={getPolicyTabId(section)}
                 key={section}
-                onClick={() => setActivePolicySection(section)}
+                onClick={() => selectPolicySection(section)}
                 role="tab"
                 type="button"
               >
@@ -1017,4 +1022,8 @@ export function RuntimePolicyEditor({
       {renderActivePolicyPanel()}
     </RuntimePolicyPageFrame>
   );
+}
+
+function policySectionQueryValue(section: PolicySection) {
+  return section === "rateLimit" ? "rate-limit" : section;
 }
