@@ -182,6 +182,22 @@ export function compactAxisNumber(value: number) {
   return `${Math.round(value)}`;
 }
 
+export function formatAnalyticsRps(value: number) {
+  if (!Number.isFinite(value) || value === 0) {
+    return "0";
+  }
+  if (Math.abs(value) >= 1_000) {
+    return compactAxisNumber(value);
+  }
+  if (Math.abs(value) < 0.0001) {
+    return value > 0 ? "<0.0001" : ">-0.0001";
+  }
+  return new Intl.NumberFormat("en-US", {
+    maximumFractionDigits: 4,
+    maximumSignificantDigits: 3
+  }).format(value);
+}
+
 export function formatChartNumber(value: number) {
   if (!Number.isFinite(value)) {
     return "0";

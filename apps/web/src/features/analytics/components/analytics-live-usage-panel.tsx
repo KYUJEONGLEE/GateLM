@@ -172,9 +172,9 @@ export function AnalyticsLiveUsagePanel({
     [fallback.requestVolume, range]
   );
   const displayBuckets = snapshot?.buckets ?? fallbackBuckets;
-  const visibleBuckets = displayBuckets.slice(
-    analyticsLiveChartStartIndex(displayBuckets)
-  );
+  const visibleBuckets = displayBuckets.slice(snapshot
+    ? analyticsLiveChartStartIndex(displayBuckets)
+    : 0);
   const visiblePeakRps = Math.max(
     0,
     ...visibleBuckets.map((bucket) => bucket.incomingRps)
@@ -280,6 +280,7 @@ export function AnalyticsLiveUsagePanel({
               buckets={displayBuckets}
               locale={locale}
               rateLimitStartedAt={snapshot?.rateLimitStartedAt ?? null}
+              rollingWindow={Boolean(snapshot)}
               showBreakdown={Boolean(snapshot)}
             />
           ) : (

@@ -29,3 +29,12 @@ test("live usage uses project policy links, safe Korean wrapping, and reduced mo
   expect(styles).toContain("@media (max-width: 820px)");
   expect(styles).not.toContain("overflow-x: auto");
 });
+
+test("static usage keeps the selected range while live usage uses the rolling window", async () => {
+  const source = await readFile(panelUrl, "utf8");
+
+  expect(source).toContain("rollingWindow={Boolean(snapshot)}");
+  expect(source).toMatch(
+    /displayBuckets\.slice\(snapshot\s+\? analyticsLiveChartStartIndex\(displayBuckets\)\s+: 0\)/
+  );
+});

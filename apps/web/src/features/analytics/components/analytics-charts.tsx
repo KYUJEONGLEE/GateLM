@@ -14,6 +14,7 @@ import {
   type AnalyticsEChartOption,
   analyticsTooltip,
   compactAxisNumber,
+  formatAnalyticsRps,
   useAnalyticsChartTheme
 } from "@/features/analytics/components/analytics-echart";
 import type { CostOverTimePoint } from "@/lib/gateway/cost-over-time-types";
@@ -810,12 +811,14 @@ export function AnalyticsLiveRequestTrendChart({
   buckets,
   locale,
   rateLimitStartedAt,
+  rollingWindow = true,
   showBreakdown = true
 }: {
   ariaLabel: string;
   buckets: AnalyticsLiveUsageBucket[];
   locale: "en" | "ko";
   rateLimitStartedAt: string | null;
+  rollingWindow?: boolean;
   showBreakdown?: boolean;
 }) {
   const theme = useAnalyticsChartTheme();
@@ -828,8 +831,8 @@ export function AnalyticsLiveRequestTrendChart({
     [buckets, rateLimitStartedAt]
   );
   const visibleStartIndex = useMemo(
-    () => analyticsLiveChartStartIndex(buckets),
-    [buckets]
+    () => rollingWindow ? analyticsLiveChartStartIndex(buckets) : 0,
+    [buckets, rollingWindow]
   );
   const option = useMemo<AnalyticsEChartOption>(
     () => ({
@@ -840,7 +843,11 @@ export function AnalyticsLiveRequestTrendChart({
         textStyle: { color: theme.label, fontSize: 16, fontWeight: 700 },
         top: 6
       },
-      tooltip: analyticsTooltip(" req/s", theme),
+      tooltip: {
+        ...analyticsTooltip("", theme),
+        valueFormatter: (value: unknown) =>
+          `${formatAnalyticsRps(Number(value ?? 0))} req/s`
+      },
       xAxis: {
         axisLabel: {
           color: theme.axis,
@@ -860,7 +867,7 @@ export function AnalyticsLiveRequestTrendChart({
           color: theme.axis,
           fontSize: 16,
           fontWeight: 700,
-          formatter: compactAxisNumber
+          formatter: formatAnalyticsRps
         },
         axisLine: { show: false },
         axisTick: { show: false },
