@@ -18,7 +18,10 @@
   --analytics-v3-lead-value-min-size: 36px;
   --analytics-v3-lead-value-max-size: 46px;
   --analytics-v3-metric-value-size: 36px;
-  gap: 0;
+}
+
+.console-content.analytics-v5-page {
+  gap: 8px;
 }
 
 .analytics-v5-page .analytics-v3-command-header {
@@ -32,6 +35,10 @@
 
 .analytics-v5-page .analytics-v3-tabs {
   background: transparent;
+}
+
+.analytics-v5-page .analytics-v3-subtabs {
+  padding-top: 6px;
 }
 
 .analytics-v5-page .analytics-v3-tab {
@@ -58,11 +65,12 @@
   color: var(--analytics-v5-green);
 }
 
+.analytics-v5-page .analytics-v3-panel,
 .analytics-v5-overview {
   display: grid;
   min-width: 0;
   gap: 16px;
-  padding: 20px 0 48px;
+  padding: 12px 0 48px;
   animation: analytics-v3-enter 260ms ease-out both;
 }
 

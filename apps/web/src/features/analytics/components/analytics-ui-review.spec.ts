@@ -103,6 +103,20 @@ test("new analytics summaries keep responsive one-column fallbacks", async () =>
   );
 });
 
+test("analytics category tabs keep compact vertical spacing", async () => {
+  const styles = await readFile(v5StylesSourceUrl, "utf8");
+
+  expect(styles).toMatch(
+    /\.console-content\.analytics-v5-page \{\s*gap: 8px;\s*\}/
+  );
+  expect(styles).toMatch(
+    /\.analytics-v5-page \.analytics-v3-subtabs \{\s*padding-top: 6px;\s*\}/
+  );
+  expect(styles).toMatch(
+    /\.analytics-v5-page \.analytics-v3-panel,[\s\S]*?\.analytics-v5-overview \{[\s\S]*?padding: 12px 0 48px;/
+  );
+});
+
 test("all analytics panels reuse the policy impact card language", async () => {
   const styles = await readFile(v3StylesSourceUrl, "utf8");
 
