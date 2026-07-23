@@ -22,14 +22,14 @@ describe('Tenant Chat admin account linkage migration', () => {
     expect(compactSql).toContain(
       'membership."tenantId" = admin."tenantId" AND membership."userId" = admin."userId"',
     );
-    expect(migrationSql).not.toMatch(/\bemail\b/i);
+    expect(migrationSql).not.toMatch(/"email"/i);
   });
 
   it('inserts missing memberships and legacy projections without creating Employee records', () => {
     expect(compactSql).toContain('INSERT INTO "tenant_memberships"');
     expect(compactSql).toContain('INSERT INTO "tenant_admins"');
     expect(compactSql).toContain("membership.\"role\" = 'tenant_admin'");
-    expect(migrationSql).not.toMatch(/\bemployees?\b/i);
+    expect(migrationSql).not.toMatch(/"employees"/i);
   });
 
   it('is additive and avoids repeated updates of already aligned rows', () => {

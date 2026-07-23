@@ -51,6 +51,7 @@
 | 호환성 | 기존 User credential, Dashboard session, Employee entitlement와 API wire는 변경하지 않는다. |
 | migration | 기존 관리자 관계를 양방향 동기화하고 신규 조직 소유자 생성 시 두 관계를 같은 transaction에서 기록한다. |
 | acceptance | Dashboard 관리자 credential로 Tenant Chat 로그인 가능, `actorKind=tenant_admin`, `employeeId=null`, migration 멱등성, 이메일 기반 권한 생성 금지를 검증한다. |
+
 ### 2.2 Browser auth와 session 계약
 
 Browser auth wire는 [Chat auth OpenAPI](./openapi/chat-auth.openapi.json)를 따른다.
