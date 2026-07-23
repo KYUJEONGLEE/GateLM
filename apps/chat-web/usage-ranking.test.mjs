@@ -166,6 +166,8 @@ test('local runner preserves existing data and applies only deploy migrations', 
   assert.match(runner, /node_modules\/prisma\/build\/index\.js migrate deploy/);
   assert.match(runner, /GATELM_PROVIDER_CREDENTIAL_ENCRYPTION_KEY/);
   assert.match(runner, /existing PostgreSQL and Redis data were preserved/i);
+  assert.match(runner, /CHAT_WEB_ORIGIN="http:\/\/chat\.localhost:3002"/);
+  assert.match(runner, /fetch\('http:\/\/gateway-core:8080\/readyz'\)/);
   assert.doesNotMatch(runner, /^.*"\$\{compose\[@\]\}".*\bdown\b.*$/m);
   assert.doesNotMatch(runner, /^\s*(docker|"\$\{compose\[@\]\}")\s+volume\s+(rm|prune)\b/m);
   assert.doesNotMatch(runner, /^\s*(pnpm|corepack)\s+.*\bdev\b/m);

@@ -68,7 +68,7 @@ a { color: inherit; }
 .chat-sidebar { min-width: 0; min-height: 0; display: flex; flex-direction: column; justify-content: space-between; gap: 20px; overflow: hidden; border-right: 1px solid var(--g-border); outline: 0; background: var(--g-surface); padding: 20px 16px 16px; }
 .sidebar-scroll { min-height: 0; display: flex; flex: 1; flex-direction: column; overflow: hidden; }
 .sidebar-brand-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-inline: 4px; }
-.mobile-close { display: none; }
+.sidebar-collapse-toggle { display: inline-grid; min-width: 38px; min-height: 38px; flex: 0 0 auto; place-items: center; padding: 7px; }
 .sidebar-primary-nav { display: grid; gap: 4px; margin-top: 20px; padding-bottom: 14px; border-bottom: 1px solid var(--g-border); }
 .sidebar-primary-nav button { display: flex; min-width: 0; min-height: 40px; align-items: center; gap: 10px; border: 0; border-radius: 9px; background: transparent; padding: 9px 10px; color: var(--g-text-muted); font: inherit; font-size: 14px; text-align: left; cursor: pointer; }
 .sidebar-primary-nav button:hover { background: var(--g-surface-subtle); color: var(--g-text); }
@@ -109,8 +109,8 @@ a { color: inherit; }
 .knowledge-mode-toast button { display: inline-grid; place-items: center; width: 32px; height: 32px; border: 0; border-radius: 8px; color: var(--g-text-muted); background: transparent; cursor: pointer; }
 .knowledge-mode-toast button:hover { color: var(--g-text); background: #f0f2f6; }
 @keyframes knowledge-mode-toast-in { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
-.chat-topbar { z-index: 4; display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 16px; border-bottom: 1px solid var(--g-border); background: rgb(255 255 255 / 88%); padding: 11px 24px; backdrop-filter: blur(14px); }
-.topbar-actions { display: flex; min-width: 0; align-items: center; justify-self: end; gap: 10px; }
+.chat-topbar { z-index: 4; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 16px; border-bottom: 1px solid var(--g-border); background: rgb(255 255 255 / 88%); padding: 11px 24px; backdrop-filter: blur(14px); }
+.topbar-actions { grid-column: 2; display: flex; min-width: 0; align-items: center; justify-self: end; gap: 10px; }
 .context-setting { position: relative; display: inline-flex; min-height: 44px; align-items: center; gap: 9px; border: 1px solid var(--g-border); border-radius: 10px; background: var(--g-surface); padding: 6px 10px; cursor: pointer; }
 .context-setting:hover { background: var(--g-surface-subtle); }
 .context-setting input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
@@ -124,6 +124,7 @@ a { color: inherit; }
 .context-setting-copy strong { color: var(--g-text); font-size: 12px; }
 .context-setting-copy span { color: var(--g-text-muted); font-size: 11px; }
 .navigation-toggle { display: inline-grid; min-width: 42px; min-height: 42px; place-items: center; padding: 9px; }
+.navigation-open-toggle { display: none; justify-self: start; }
 .mobile-backdrop { display: none; }
 .conversation-workspace { min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
 .conversation-workspace.is-empty .message-stage { flex: 0 0 auto; margin-top: auto; overflow: visible; }
@@ -283,12 +284,15 @@ a { color: inherit; }
 @media (min-width: 1025px) {
   .chat-shell.is-sidebar-collapsed { grid-template-columns: 0 minmax(0, 1fr); }
   .chat-shell.is-sidebar-collapsed .chat-sidebar { visibility: hidden; opacity: 0; padding-inline: 0; pointer-events: none; }
+  .chat-shell.is-sidebar-collapsed .navigation-open-toggle { display: inline-grid; }
 }
 @media (max-width: 1024px) {
   .chat-shell { min-height: 0; grid-template-columns: minmax(0, 1fr); }
   .chat-sidebar { position: fixed; z-index: 30; inset: 0 auto 0 0; width: min(88vw, 330px); visibility: hidden; transform: translateX(-105%); box-shadow: 18px 0 50px rgb(19 23 35 / 18%); transition: transform 180ms ease, visibility 180ms ease; }
   .chat-sidebar.is-open { visibility: visible; transform: translateX(0); }
-  .mobile-close { display: inline-grid; }
+  .sidebar-collapse-toggle { min-width: 42px; min-height: 42px; padding: 9px; }
+  .navigation-open-toggle { display: inline-grid; }
+  .chat-main.is-drawer-open .navigation-open-toggle { display: none; }
   .mobile-backdrop { position: fixed; z-index: 20; inset: 0; display: block; width: 100%; border: 0; background: rgb(17 20 29 / 46%); }
   .chat-topbar { padding-inline: 12px; }
 }

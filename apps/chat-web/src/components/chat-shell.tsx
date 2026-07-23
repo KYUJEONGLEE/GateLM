@@ -9,11 +9,12 @@ import {
   BookOpenText,
   Check,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   Copy,
   Gauge,
   LoaderCircle,
   LogOut,
-  Menu,
   MessageSquareText,
   Pencil,
   Plus,
@@ -132,16 +133,18 @@ export function ChatShell() {
       setMenuOpen((current) => !current);
       return;
     }
-    setSidebarCollapsed((current) => {
-      const next = !current;
-      try {
-        window.localStorage.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, String(next));
-      } catch {
-        // A non-persistent sidebar is still usable when browser storage is unavailable.
-      }
-      return next;
+    const next = !sidebarCollapsed;
+    setSidebarCollapsed(next);
+    try {
+      window.localStorage.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, String(next));
+    } catch {
+      // A non-persistent sidebar is still usable when browser storage is unavailable.
+    }
+    requestAnimationFrame(() => {
+      if (next) drawerTriggerRef.current?.focus();
+      else drawerRef.current?.querySelector<HTMLButtonElement>('.sidebar-collapse-toggle')?.focus();
     });
-  }, [compactLayout]);
+  }, [compactLayout, sidebarCollapsed]);
 
   useEffect(() => {
     try {
@@ -254,7 +257,7 @@ export function ChatShell() {
 
   useEffect(() => {
     if (!menuOpen) return;
-    const focusTimer = window.setTimeout(() => drawerRef.current?.querySelector<HTMLButtonElement>('.mobile-close')?.focus(), 120);
+    const focusTimer = window.setTimeout(() => drawerRef.current?.querySelector<HTMLButtonElement>('.sidebar-collapse-toggle')?.focus(), 120);
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
       if (event.key === 'Escape') {
         closeDrawer(true);
@@ -657,7 +660,16 @@ export function ChatShell() {
       <div className="sidebar-scroll">
         <div className="sidebar-brand-row">
           <div className="brand"><span className="brand-mark"><MessageSquareText size={21} aria-hidden /></span>GateLM Chat</div>
-          <Button className="mobile-close" variant="ghost" aria-label="대화 메뉴 닫기" onClick={() => closeDrawer(true)}><X size={20} aria-hidden /></Button>
+          <button
+            className="g-button g-button--ghost sidebar-collapse-toggle"
+            aria-controls="tenant-chat-sidebar"
+            aria-label={compactLayout ? '대화 메뉴 닫기' : '사이드바 접기'}
+            aria-expanded="true"
+            onClick={compactLayout ? () => closeDrawer(true) : toggleNavigation}
+            type="button"
+          >
+            <ChevronLeft size={20} aria-hidden />
+          </button>
         </div>
         <nav className="sidebar-primary-nav" aria-label="Tenant Chat">
           <button
@@ -714,17 +726,18 @@ export function ChatShell() {
         <Button variant="ghost" onClick={logout}><LogOut size={17} aria-hidden />로그아웃</Button>
       </div>
     </aside>
-    <section className="chat-main">
+    <section className={`chat-main${menuOpen ? ' is-drawer-open' : ''}`}>
       <header className="chat-topbar">
         <button
           ref={drawerTriggerRef}
-          className="g-button g-button--ghost navigation-toggle"
+          className="g-button g-button--ghost navigation-toggle navigation-open-toggle"
           aria-controls="tenant-chat-sidebar"
-          aria-label={compactLayout ? menuOpen ? '대화 메뉴 닫기' : '대화 메뉴 열기' : sidebarCollapsed ? '사이드바 펼치기' : '사이드바 접기'}
+          aria-label={compactLayout ? '대화 메뉴 열기' : '사이드바 펼치기'}
           aria-expanded={compactLayout ? menuOpen : !sidebarCollapsed}
-          onClick={toggleNavigation}
+          onClick={compactLayout ? () => setMenuOpen(true) : toggleNavigation}
+          type="button"
         >
-          <Menu size={21} aria-hidden />
+          <ChevronRight size={21} aria-hidden />
         </button>
         <h1 className="sr-only">{activeView === 'usage-ranking' ? '사용량 순위' : selected?.title ?? 'GateLM Chat'}</h1>
         {activeView === 'chat' && <div className="topbar-actions">

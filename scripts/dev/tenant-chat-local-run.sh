@@ -10,12 +10,13 @@ set -Eeuo pipefail
 
 PROJECT="gatelm-cache-manual"
 SKIP_BUILD=false
+CHAT_WEB_ORIGIN="http://chat.localhost:3002"
 
 usage() {
   printf '%s\n' \
     'Usage: bash scripts/dev/tenant-chat-local-run.sh [options]' \
     '' \
-    'Build and start Tenant Chat at http://127.0.0.1:3002 using the existing' \
+    "Build and start Tenant Chat at $CHAT_WEB_ORIGIN using the existing" \
     'local Compose project and data volumes.' \
     '' \
     'Options:' \
@@ -82,6 +83,18 @@ wait_for_chat_api() {
     sleep 1
   done
   die 'Chat API did not become ready'
+}
+
+wait_for_gateway() {
+  for _ in {1..60}; do
+    if "${compose[@]}" exec -T control-plane-api node -e \
+      "fetch('http://gateway-core:8080/readyz').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))" \
+      >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 1
+  done
+  die 'Gateway did not become ready'
 }
 
 while [[ $# -gt 0 ]]; do
@@ -168,13 +181,14 @@ printf '[5/6] Recreating application services without dependencies or data volum
 "${compose[@]}" up -d --no-deps --force-recreate control-plane-api
 wait_for_http_200 'http://127.0.0.1:3001/healthz' 'Control Plane'
 "${compose[@]}" up -d --no-deps --force-recreate gateway-core
+wait_for_gateway
 "${compose[@]}" up -d --no-deps --force-recreate chat-api
 wait_for_chat_api
 "${compose[@]}" up -d --no-deps --force-recreate chat-web
 
 printf '[6/6] Waiting for Tenant Chat Web\n'
-wait_for_http_200 'http://127.0.0.1:3002' 'Tenant Chat Web'
+wait_for_http_200 "$CHAT_WEB_ORIGIN" 'Tenant Chat Web'
 
-printf '\nTenant Chat is ready: http://127.0.0.1:3002\n'
+printf '\nTenant Chat is ready: %s\n' "$CHAT_WEB_ORIGIN"
 printf 'Existing PostgreSQL and Redis data were preserved.\n'
 printf 'Logs: docker compose -p %s logs -f chat-web chat-api\n' "$PROJECT"
