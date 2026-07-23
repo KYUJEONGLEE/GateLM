@@ -4,6 +4,7 @@ import { Badge, Button } from '@gatelm/ui';
 import {
   AlertTriangle,
   ArrowDown,
+  BarChart3,
   Building2,
   BookOpenText,
   Check,
@@ -32,6 +33,7 @@ import { copyTextToClipboard } from '@/lib/clipboard.mjs';
 import { MarkdownMessage } from '@/components/markdown-message.mjs';
 import { getModelBrand } from '@/lib/model-brand.mjs';
 import { reduceScrollFollow } from '@/lib/scroll-follow.mjs';
+import { UsageRankingView } from '@/components/usage-ranking-view';
 import {
   acceptedUserContentWasMasked,
   consumeTurnSse,
@@ -52,6 +54,7 @@ const COMPACT_LAYOUT_QUERY = '(max-width: 1024px)';
 type ContextMode = 'conversation' | 'single_turn';
 type KnowledgeMode = 'off' | 'tenant';
 type KnowledgeModeToast = Readonly<{ title: string; description: string }>;
+type ChatView = 'chat' | 'usage-ranking';
 
 export function ChatShell() {
   const router = useRouter();
@@ -69,6 +72,7 @@ export function ChatShell() {
   const [compactLayout, setCompactLayout] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [latestAnswerAvailable, setLatestAnswerAvailable] = useState(false);
+  const [activeView, setActiveView] = useState<ChatView>('chat');
   const [loading, setLoading] = useState(true);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [creatingConversation, setCreatingConversation] = useState(false);
@@ -293,7 +297,7 @@ export function ChatShell() {
     } else if (outputChanged && last?.role === 'assistant' && Boolean(last.content)) {
       setLatestAnswerAvailable(true);
     }
-  }, [messages, streaming]);
+  }, [activeView, messages, streaming]);
 
   const handleLogScroll = useCallback((event: UIEvent<HTMLOListElement>) => {
     const log = event.currentTarget;
@@ -330,6 +334,7 @@ export function ChatShell() {
 
   async function createConversation(): Promise<Conversation | null> {
     if (streaming || creatingConversation) return null;
+    setActiveView('chat');
     const requestedKnowledgeMode = newConversationKnowledgeMode;
     setCreatingConversation(true);
     setError(null);
@@ -654,6 +659,30 @@ export function ChatShell() {
           <div className="brand"><span className="brand-mark"><MessageSquareText size={21} aria-hidden /></span>GateLM Chat</div>
           <Button className="mobile-close" variant="ghost" aria-label="대화 메뉴 닫기" onClick={() => closeDrawer(true)}><X size={20} aria-hidden /></Button>
         </div>
+        <nav className="sidebar-primary-nav" aria-label="Tenant Chat">
+          <button
+            aria-current={activeView === 'chat' ? 'page' : undefined}
+            className={activeView === 'chat' ? 'is-active' : ''}
+            onClick={() => {
+              setActiveView('chat');
+              closeDrawer(false);
+            }}
+            type="button"
+          >
+            <MessageSquareText size={17} aria-hidden /><span>채팅</span>
+          </button>
+          <button
+            aria-current={activeView === 'usage-ranking' ? 'page' : undefined}
+            className={activeView === 'usage-ranking' ? 'is-active' : ''}
+            onClick={() => {
+              setActiveView('usage-ranking');
+              closeDrawer(false);
+            }}
+            type="button"
+          >
+            <BarChart3 size={17} aria-hidden /><span>사용량 순위</span>
+          </button>
+        </nav>
         <Button className="new-conversation" onClick={createConversation} disabled={streaming || creatingConversation}><Plus size={17} aria-hidden />새 대화</Button>
         <div className="conversation-heading"><span>내 대화</span><span>{conversations.length}</span></div>
         <ul className="conversation-list" aria-label="대화 목록">
@@ -663,7 +692,7 @@ export function ChatShell() {
               <input id={`rename-${conversation.id}`} value={renameTitle} maxLength={120} autoFocus onChange={(event) => setRenameTitle(event.target.value)} onKeyDown={(event) => { if (event.key === 'Escape') cancelRename(); }} />
               <div><Button type="submit" variant="secondary">저장</Button><Button type="button" variant="ghost" onClick={cancelRename}>취소</Button></div>
             </form> : <>
-              <button className="conversation-select" aria-current={conversation.id === selectedId ? 'page' : undefined} onClick={() => { setSelectedId(conversation.id); closeDrawer(false); }}>
+              <button className="conversation-select" aria-current={activeView === 'chat' && conversation.id === selectedId ? 'page' : undefined} onClick={() => { setActiveView('chat'); setSelectedId(conversation.id); closeDrawer(false); }}>
                 <MessageSquareText size={16} aria-hidden /><span>{conversation.title}</span>
               </button>
               <div className="conversation-actions">
@@ -697,8 +726,8 @@ export function ChatShell() {
         >
           <Menu size={21} aria-hidden />
         </button>
-        <h1 className="sr-only">{selected?.title ?? 'GateLM Chat'}</h1>
-        <div className="topbar-actions">
+        <h1 className="sr-only">{activeView === 'usage-ranking' ? '사용량 순위' : selected?.title ?? 'GateLM Chat'}</h1>
+        {activeView === 'chat' && <div className="topbar-actions">
           <label className="context-setting" title={selected ? '이 대화의 다음 메시지에 사내 지식을 사용할지 선택합니다.' : '다음에 만들 새 대화에서 사내 지식을 사용할지 선택합니다.'}>
             <input
               aria-label={selected ? '이 대화에 사내 지식 사용' : '다음 새 대화에 사내 지식 사용'}
@@ -722,9 +751,9 @@ export function ChatShell() {
             <span className="context-setting-copy"><strong>컨텍스트 유지</strong><span>{contextMode === 'conversation' ? '켜짐' : '꺼짐'}</span></span>
           </label>
           <Button variant="secondary" aria-label="새 대화 만들기" onClick={createConversation} disabled={streaming || creatingConversation}><Plus size={17} aria-hidden /><span className="desktop-label">새 대화</span></Button>
-        </div>
+        </div>}
       </header>
-      <div className={`conversation-workspace${selected ? '' : ' is-empty'}`}>
+      <div hidden={activeView !== 'chat'} className={`conversation-workspace${selected ? '' : ' is-empty'}`}>
         <div className={`policy-banner policy-${policyState}`} role={policyState === 'blocked' ? 'alert' : 'status'}>
           {policyState === 'normal' ? <ShieldCheck size={18} aria-hidden /> : policyState === 'blocked' ? <AlertTriangle size={18} aria-hidden /> : <Gauge size={18} aria-hidden />}
           <div><strong>{policyCopy.label}</strong><span>{policyCopy.description}</span></div>
@@ -800,6 +829,7 @@ export function ChatShell() {
           <p className="composer-note">Enter로 전송 · Shift+Enter로 줄바꿈 · 답변은 확인이 필요할 수 있습니다.</p>
         </form>
       </div>
+      <UsageRankingView active={activeView === 'usage-ranking'} />
     </section>
   </main>;
 

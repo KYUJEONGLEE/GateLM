@@ -46,6 +46,9 @@ const server = createServer(async (request, response) => {
     }
     if (!authorized(request)) return json(response, 401, { code: 'CHAT_AUTH_REQUIRED' });
 
+    if (url.pathname === '/internal/v1/tenant-chat/usage-ranking' && request.method === 'GET') {
+      return json(response, 200, usageRanking(url.searchParams));
+    }
     if (url.pathname === '/internal/v1/tenant-chat/conversations' && request.method === 'GET') {
       return json(response, 200, { items: conversations, nextCursor: null });
     }
@@ -54,7 +57,15 @@ const server = createServer(async (request, response) => {
       const replay = createKeys.get(input.idempotencyKey);
       if (replay) return json(response, 200, replay);
       const now = new Date().toISOString();
-      const conversation = { id: randomUUID(), title: input.title, version: 1, historyRetentionDays: 30, createdAt: now, updatedAt: now };
+      const conversation = {
+        id: randomUUID(),
+        title: input.title,
+        knowledgeMode: input.knowledgeMode,
+        version: 1,
+        historyRetentionDays: 30,
+        createdAt: now,
+        updatedAt: now,
+      };
       conversations.unshift(conversation);
       messages.set(conversation.id, []);
       createKeys.set(input.idempotencyKey, conversation);
@@ -200,4 +211,42 @@ function json(response, status, payload) {
 
 function delay(milliseconds) {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+function usageRanking(search) {
+  const range = search.get('range') ?? '30d';
+  const metric = search.get('metric') ?? 'cost';
+  const to = new Date();
+  const duration = range === '24h' ? 1 : range === '7d' ? 7 : 30;
+  const from = new Date(to.getTime() - duration * 24 * 60 * 60 * 1_000);
+  const items = Array.from({ length: 20 }, (_, index) => ({
+    confirmedTotalTokens: (21 - index) * 12_345,
+    department: index === 1 ? '엔터프라이즈 플랫폼 운영 및 신뢰성 엔지니어링' : '플랫폼',
+    displayName: index === 1 ? '아주 긴 한글 이름을 가진 품질 검증 담당자' : `QA 직원 ${index + 1}`,
+    estimatedCostMicroUsd: (21 - index) * 12_345,
+    rank: index + 1,
+  }));
+  return {
+    items,
+    metric,
+    period: {
+      from: from.toISOString(),
+      timezone: 'UTC',
+      to: to.toISOString(),
+    },
+    provenance: {
+      generatedAt: to.toISOString(),
+      lastSourceAt: new Date(to.getTime() - 1_000).toISOString(),
+      source: 'raw',
+    },
+    range,
+    rankedEmployeeCount: 21,
+    viewer: {
+      confirmedTotalTokens: 12_345,
+      department: '제품 운영',
+      displayName: 'QA 직원',
+      estimatedCostMicroUsd: 12_345,
+      rank: 21,
+    },
+  };
 }

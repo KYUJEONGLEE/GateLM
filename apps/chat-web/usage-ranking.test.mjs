@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 import {
@@ -121,6 +122,23 @@ test('ranking upstream aborts a timed-out read and returns only the safe error',
       error.status === 503 &&
       error.payload.code === 'CHAT_USAGE_UNAVAILABLE',
   );
+});
+
+test('ranking view caches filters, aborts stale reads, and keeps ChatShell mounted', () => {
+  const rankingView = readFileSync(
+    new URL('./src/components/usage-ranking-view.tsx', import.meta.url),
+    'utf8',
+  );
+  const chatShell = readFileSync(
+    new URL('./src/components/chat-shell.tsx', import.meta.url),
+    'utf8',
+  );
+  assert.match(rankingView, /cacheRef\.current\.get\(cacheKey\)/);
+  assert.match(rankingView, /requestRef\.current\?\.abort\(\)/);
+  assert.match(rankingView, /return \(\) => controller\.abort\(\)/);
+  assert.doesNotMatch(rankingView, /setInterval|setTimeout/);
+  assert.match(chatShell, /hidden=\{activeView !== 'chat'\}/);
+  assert.match(chatShell, /<UsageRankingView active=\{activeView === 'usage-ranking'\} \/>/);
 });
 
 function ranking() {
