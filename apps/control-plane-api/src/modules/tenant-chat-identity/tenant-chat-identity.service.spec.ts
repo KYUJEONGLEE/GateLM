@@ -51,14 +51,14 @@ describe('TenantChatIdentityService', () => {
     ).resolves.toEqual({ accepted: true });
     await expect(
       service.confirmPasswordReset({
-        newPassword: 'a-secure-tenant-chat-passphrase',
+        newPassword: 'Reset1!Pass',
         token: 'reset-token-with-at-least-32-characters',
       }),
     ).resolves.toEqual({ passwordReset: true });
     await expect(
       service.changePassword({
         currentPassword: 'current-password',
-        newPassword: 'a-new-tenant-chat-passphrase',
+        newPassword: 'Tenant2!Pass',
         userId: existingLocalUser.id,
       }),
     ).resolves.toEqual({ passwordChanged: true });
@@ -69,7 +69,7 @@ describe('TenantChatIdentityService', () => {
     );
     expect(auth.changePasswordForUser).toHaveBeenCalledWith(
       existingLocalUser.id,
-      expect.objectContaining({ newPassword: 'a-new-tenant-chat-passphrase' }),
+      expect.objectContaining({ newPassword: 'Tenant2!Pass' }),
     );
   });
 
@@ -87,7 +87,7 @@ describe('TenantChatIdentityService', () => {
       user: { create: jest.fn(), findMany: jest.fn().mockResolvedValue([existingLocalUser]) },
     };
     const prisma = { $transaction: jest.fn((callback: Function) => callback(tx)) };
-    await expect(makeService(prisma).acceptInvitationWithPassword({ name: '사용자', password: 'long-password-for-test', token: 'invitation-token-value' })).rejects.toBeInstanceOf(HttpException);
+    await expect(makeService(prisma).acceptInvitationWithPassword({ name: '사용자', password: 'Invite1!Pass', token: 'invitation-token-value' })).rejects.toBeInstanceOf(HttpException);
     expect(tx.user.create).not.toHaveBeenCalled();
   });
 
@@ -163,7 +163,7 @@ describe('TenantChatIdentityService', () => {
 
     await service.acceptInvitationWithPassword({
       name: '새 조직 사용자',
-      password: 'long-password-for-test',
+      password: 'Invite1!Pass',
       token: 'invitation-token-value',
     });
 

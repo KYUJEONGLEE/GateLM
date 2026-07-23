@@ -279,3 +279,15 @@ a { color: inherit; }
 }
 @media (hover: none) { .message-user-actions { opacity: 1; pointer-events: auto; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; animation-duration: .01ms !important; } }
+
+/* Password input visibility and validation */
+.password-input-wrapper { position: relative; width: 100%; }
+.password-input-wrapper .g-input { width: 100%; padding-right: 4.75rem; }
+.password-input-valid-icon, .password-visibility-toggle { position: absolute; top: 50%; transform: translateY(-50%); }
+.password-input-valid-icon { right: 2.65rem; display: inline-flex; color: #16a34a; pointer-events: none; }
+button.password-visibility-toggle { right: .35rem; display: inline-flex; width: 2rem; min-width: 2rem; height: 2rem; min-height: 2rem; align-items: center; justify-content: center; margin: 0; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--g-text-muted); box-shadow: none; cursor: pointer; }
+button.password-visibility-toggle:hover { background: rgb(148 163 184 / 16%); color: var(--g-text); }
+button.password-visibility-toggle:focus-visible { outline: 2px solid var(--g-primary); outline-offset: 1px; }
+.password-validation-message { display: inline-flex; align-items: center; gap: 5px; margin: -7px 0 0; font-size: 13px; font-weight: 650; line-height: 1.5; }
+.password-validation-message-success { color: #15803d; }
+.password-validation-message-error { color: var(--g-danger); }

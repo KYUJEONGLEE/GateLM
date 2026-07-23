@@ -6,6 +6,7 @@ import { FormEvent, useState } from 'react';
 
 import type { ChatSession } from '@/lib/auth-types';
 import { api, ChatApiError } from '@/lib/browser-api';
+import { PasswordInput } from './password-input';
 
 type LoginMode = 'login' | 'recovery';
 
@@ -118,13 +119,12 @@ export function LoginForm() {
           </div>
           <div className="field">
             <label htmlFor="password">비밀번호</label>
-            <Input
+            <PasswordInput
               autoComplete="current-password"
               id="password"
               maxLength={256}
               name="password"
               required
-              type="password"
             />
           </div>
           <p className="field-help">로그인 아이디는 초대받거나 가입할 때 사용한 이메일입니다.</p>

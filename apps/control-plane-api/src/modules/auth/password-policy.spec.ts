@@ -6,41 +6,35 @@ import {
 } from './password-policy';
 
 describe('password policy', () => {
-  it('requires at least 15 Unicode characters', () => {
-    expect(getPasswordPolicyViolation('12345678901234')).toBe('length');
-    expect(getPasswordPolicyViolation('가나다라마바사아자차카타파하')).toBe(
-      'length',
-    );
-    expect(
-      getPasswordPolicyViolation('가나다라마바사아자차카타파하늘'),
-    ).toBeNull();
-    expect(PASSWORD_MIN_LENGTH).toBe(15);
+  it('requires between 8 and 15 Unicode characters', () => {
+    expect(getPasswordPolicyViolation('Abcd1!x')).toBe('length');
+    expect(getPasswordPolicyViolation('Abcdefghijklmn1!')).toBe('length');
+    expect(getPasswordPolicyViolation('Abcdef1!')).toBeNull();
+    expect(getPasswordPolicyViolation('Abcdefghijklm1!')).toBeNull();
+    expect(PASSWORD_MIN_LENGTH).toBe(8);
+    expect(PASSWORD_MAX_LENGTH).toBe(15);
   });
 
-  it('keeps a bounded maximum without truncating', () => {
-    expect(
-      getPasswordPolicyViolation('a'.repeat(PASSWORD_MAX_LENGTH + 1)),
-    ).toBe('length');
+  it('requires uppercase, lowercase, number, and ASCII special characters', () => {
+    expect(getPasswordPolicyViolation('abcdef1!')).toBe('uppercase');
+    expect(getPasswordPolicyViolation('ABCDEF1!')).toBe('lowercase');
+    expect(getPasswordPolicyViolation('Abcdefg!')).toBe('number');
+    expect(getPasswordPolicyViolation('Abcdefg1')).toBe('special');
+    expect(getPasswordPolicyViolation('Abcdef1가')).toBe('special');
   });
 
-  it('rejects common and repeated passwords even when they are long enough', () => {
-    expect(getPasswordPolicyViolation('111111111111111')).toBe('common');
-    expect(getPasswordPolicyViolation('passwordpassword')).toBe('common');
-    expect(getPasswordPolicyViolation('abcdabcdabcdabcd')).toBe('common');
+  it('rejects every whitespace character', () => {
+    expect(getPasswordPolicyViolation('Abcd 1!x')).toBe('whitespace');
+    expect(getPasswordPolicyViolation('Abcd\t1!x')).toBe('whitespace');
   });
 
-  it('allows long passphrases without composition requirements', () => {
-    expect(
-      getPasswordPolicyViolation('잔잔한 호수 위를 걷는 푸른 고래'),
-    ).toBeNull();
-    expect(
-      getPasswordPolicyViolation('four calm words make a private phrase'),
-    ).toBeNull();
+  it('allows repeated patterns when every explicit rule is satisfied', () => {
+    expect(getPasswordPolicyViolation('Aa1!Aa1!')).toBeNull();
   });
 
   it('returns a stable public error without echoing the password', () => {
-    expect(() => assertPasswordMeetsPolicy('111111111111111')).toThrow(
-      'Use at least 15 characters and avoid common or repeated passwords.',
+    expect(() => assertPasswordMeetsPolicy('abcdefgh')).toThrow(
+      'Use 8 to 15 characters and include at least one uppercase letter, lowercase letter, number, and special character. Spaces are not allowed.',
     );
   });
 });

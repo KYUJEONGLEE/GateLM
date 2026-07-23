@@ -60,7 +60,7 @@ describe('SessionService', () => {
     await expect(
       sessions.confirmPasswordReset(
         'reset-token-with-at-least-32-characters',
-        'a-new-secure-chat-passphrase',
+        'ChatNew1!Pass',
       ),
     ).resolves.toEqual({ passwordReset: true });
   });
@@ -77,13 +77,13 @@ describe('SessionService', () => {
       service(prisma, controlPlane).changePassword(
         accessToken(),
         'current-password',
-        'a-new-secure-chat-passphrase',
+        'ChatNew1!Pass',
       ),
     ).resolves.toEqual({ passwordChanged: true });
     expect(controlPlane.changePassword).toHaveBeenCalledWith(
       session.userId,
       'current-password',
-      'a-new-secure-chat-passphrase',
+      'ChatNew1!Pass',
     );
   });
 

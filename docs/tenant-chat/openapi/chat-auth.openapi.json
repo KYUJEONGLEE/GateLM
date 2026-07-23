@@ -373,7 +373,7 @@
         "type": "object",
         "properties": {
           "token": { "type": "string", "minLength": 32, "maxLength": 512, "writeOnly": true },
-          "newPassword": { "type": "string", "minLength": 15, "maxLength": 256, "writeOnly": true }
+          "newPassword": { "type": "string", "minLength": 8, "maxLength": 15, "description": "Includes at least one ASCII uppercase letter, lowercase letter, number, and special character; whitespace is prohibited.", "writeOnly": true }
         },
         "required": ["token", "newPassword"],
         "additionalProperties": false
@@ -382,7 +382,7 @@
         "type": "object",
         "properties": {
           "currentPassword": { "type": "string", "minLength": 1, "maxLength": 256, "writeOnly": true },
-          "newPassword": { "type": "string", "minLength": 15, "maxLength": 256, "writeOnly": true }
+          "newPassword": { "type": "string", "minLength": 8, "maxLength": 15, "description": "Includes at least one ASCII uppercase letter, lowercase letter, number, and special character; whitespace is prohibited.", "writeOnly": true }
         },
         "required": ["currentPassword", "newPassword"],
         "additionalProperties": false
@@ -392,7 +392,7 @@
         "properties": {
           "userId": { "type": "string", "format": "uuid" },
           "currentPassword": { "type": "string", "minLength": 1, "maxLength": 256, "writeOnly": true },
-          "newPassword": { "type": "string", "minLength": 15, "maxLength": 256, "writeOnly": true }
+          "newPassword": { "type": "string", "minLength": 8, "maxLength": 15, "description": "Includes at least one ASCII uppercase letter, lowercase letter, number, and special character; whitespace is prohibited.", "writeOnly": true }
         },
         "required": ["userId", "currentPassword", "newPassword"],
         "additionalProperties": false
@@ -425,7 +425,7 @@
         "type": "object",
         "properties": {
           "name": { "type": "string", "minLength": 1, "maxLength": 120 },
-          "password": { "type": "string", "minLength": 15, "maxLength": 256 }
+          "password": { "type": "string", "minLength": 8, "maxLength": 15, "description": "Includes at least one ASCII uppercase letter, lowercase letter, number, and special character; whitespace is prohibited.", "writeOnly": true }
         },
         "required": ["name", "password"],
         "additionalProperties": false

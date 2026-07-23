@@ -129,7 +129,7 @@ describe('Auth HTTP API', () => {
 
   async function createVerifiedAccount(
     email: string,
-    password = 'correct-horse-battery-staple',
+    password = 'Valid1!Pass',
   ) {
     const agent = request.agent(app.getHttpServer());
     await agent
@@ -162,7 +162,7 @@ describe('Auth HTTP API', () => {
       .send({
         email: 'Admin@Example.com',
         name: 'Kim Admin',
-        password: 'correct-horse-battery-staple',
+        password: 'Valid1!Pass',
       })
       .expect(201);
 
@@ -201,7 +201,7 @@ describe('Auth HTTP API', () => {
         email: 'employee@example.com',
         employeeInviteToken: 'invalid-employee-invite-token',
         name: 'Employee',
-        password: 'correct-horse-battery-staple',
+        password: 'Valid1!Pass',
       })
       .expect(401);
   });
@@ -217,7 +217,7 @@ describe('Auth HTTP API', () => {
         email: 'employee@example.com',
         employeeInviteToken: 'employee-invite-token',
         name: 'Employee',
-        password: 'correct-horse-battery-staple',
+        password: 'Valid1!Pass',
       })
       .expect(500);
   });
@@ -231,7 +231,7 @@ describe('Auth HTTP API', () => {
       .send({
         email: 'dev-owner@example.com',
         name: 'Dev Owner',
-        password: 'correct-horse-battery-staple',
+        password: 'Valid1!Pass',
       })
       .expect(201);
 
@@ -262,7 +262,7 @@ describe('Auth HTTP API', () => {
       .send({
         email: 'default-fake-owner@example.com',
         name: 'Default Fake Owner',
-        password: 'correct-horse-battery-staple',
+        password: 'Valid1!Pass',
       })
       .expect(201);
 
@@ -289,7 +289,7 @@ describe('Auth HTTP API', () => {
       .send({
         email: 'retry-owner@example.com',
         name: 'Retry Owner',
-        password: 'correct-horse-battery-staple',
+        password: 'Valid1!Pass',
       })
       .expect(201);
 
@@ -298,7 +298,7 @@ describe('Auth HTTP API', () => {
       .send({
         email: 'retry-owner@example.com',
         name: 'Retry Owner',
-        password: 'correct-horse-battery-staple',
+        password: 'Valid1!Pass',
       })
       .expect(201);
 
@@ -332,7 +332,7 @@ describe('Auth HTTP API', () => {
       .send({
         email: 'resume-owner@example.com',
         name: 'Resume Owner',
-        password: 'correct-horse-battery-staple',
+        password: 'Valid1!Pass',
       })
       .expect(201);
 
@@ -341,7 +341,7 @@ describe('Auth HTTP API', () => {
       .send({
         email: 'resume-owner@example.com',
         name: 'Resume Owner',
-        password: 'correct-horse-battery-staple',
+        password: 'Valid1!Pass',
       })
       .expect(201);
 
@@ -368,7 +368,7 @@ describe('Auth HTTP API', () => {
     await agent.post('/api/auth/signup').send({
       email: 'owner@example.com',
       name: 'Owner User',
-      password: 'correct-horse-battery-staple',
+      password: 'Valid1!Pass',
     });
     const code = emailSender.sent[0]?.code;
     expect(repository.dump().users).toHaveLength(0);
@@ -428,7 +428,7 @@ describe('Auth HTTP API', () => {
     await agent.post('/api/auth/signup').send({
       email: 'project-admin@example.com',
       name: 'Project Admin',
-      password: 'correct-horse-battery-staple',
+      password: 'Valid1!Pass',
       projectInviteToken: 'project-admin-invite-token',
     });
 
@@ -482,7 +482,7 @@ describe('Auth HTTP API', () => {
     await agent.post('/api/auth/signup').send({
       email: 'limited@example.com',
       name: 'Limited User',
-      password: 'correct-horse-battery-staple',
+      password: 'Valid1!Pass',
     });
     const code = emailSender.sent[0]?.code;
     const invalidCode = code === '000000' ? '000001' : '000000';
@@ -509,7 +509,7 @@ describe('Auth HTTP API', () => {
     await agent.post('/api/auth/signup').send({
       email: 'login@example.com',
       name: 'Login User',
-      password: 'correct-horse-battery-staple',
+      password: 'Valid1!Pass',
     });
     await agent
       .post('/api/auth/email/verify')
@@ -522,7 +522,7 @@ describe('Auth HTTP API', () => {
       .post('/api/auth/login')
       .send({
         email: 'login@example.com',
-        password: 'correct-horse-battery-staple',
+        password: 'Valid1!Pass',
       })
       .expect(200);
 
@@ -538,13 +538,35 @@ describe('Auth HTTP API', () => {
     expect(JSON.stringify(loginResponse.body)).not.toContain('refreshToken');
   });
 
-  it('rejects common repeated passwords even when they meet the minimum length', async () => {
+  it('allows an existing verified account to log in with a legacy password outside the new policy', async () => {
+    const email = 'legacy-login@example.com';
+    const legacyPassword = 'legacy password longer than fifteen';
+    const user = await repository.createUser({
+      authProvider: 'local',
+      email,
+      emailVerifiedAt: new Date(),
+      name: 'Legacy Login',
+      passwordHash: await hashPassword(legacyPassword),
+      status: 'active',
+    });
+    await repository.createTenantAndMembership({
+      organizationName: 'Legacy Tenant',
+      userId: user.id,
+    });
+
+    await request(app.getHttpServer())
+      .post('/api/auth/login')
+      .send({ email, password: legacyPassword })
+      .expect(200);
+  });
+
+  it('rejects passwords missing a required character class', async () => {
     const response = await request(app.getHttpServer())
       .post('/api/auth/signup')
       .send({
         email: 'weak-password@example.com',
         name: 'Weak Password',
-        password: '111111111111111',
+        password: 'alllower1!',
       })
       .expect(400);
 
@@ -555,8 +577,8 @@ describe('Auth HTTP API', () => {
 
   it('resets a local password with a hashed single-use token and revokes old sessions', async () => {
     const email = 'reset-owner@example.com';
-    const oldPassword = 'correct-horse-battery-staple';
-    const newPassword = 'a-new-secure-passphrase';
+    const oldPassword = 'Valid1!Pass';
+    const newPassword = 'NewValid2!Pass';
     const existingAgent = await createVerifiedAccount(email, oldPassword);
 
     const resetResponse = await request(app.getHttpServer())
@@ -586,7 +608,7 @@ describe('Auth HTTP API', () => {
       .expect(200);
     await request(app.getHttpServer())
       .post('/api/auth/password-reset/confirm')
-      .send({ newPassword: 'one-more-secure-passphrase', token: resetToken })
+      .send({ newPassword: 'Other3!Pass', token: resetToken })
       .expect(400);
 
     await existingAgent.get('/api/auth/me').expect(401);
@@ -603,7 +625,7 @@ describe('Auth HTTP API', () => {
 
   it('rejects an expired reset token without changing the password or session', async () => {
     const email = 'expired-reset@example.com';
-    const password = 'correct-horse-battery-staple';
+    const password = 'Valid1!Pass';
     const accountAgent = await createVerifiedAccount(email, password);
     const user = repository.dump().users.find((item) => item.email === email);
     expect(user).toBeDefined();
@@ -618,7 +640,7 @@ describe('Auth HTTP API', () => {
     const response = await request(app.getHttpServer())
       .post('/api/auth/password-reset/confirm')
       .send({
-        newPassword: 'another-secure-passphrase',
+        newPassword: 'Other4!Pass',
         token: expiredToken,
       })
       .expect(400);
@@ -651,8 +673,8 @@ describe('Auth HTTP API', () => {
 
   it('changes a Tenant Chat authenticated user password and revokes every existing session', async () => {
     const email = 'tenant-chat-change@example.com';
-    const oldPassword = 'correct-horse-battery-staple';
-    const newPassword = 'tenant-chat-new-secure-passphrase';
+    const oldPassword = 'Valid1!Pass';
+    const newPassword = 'Tenant2!Pass';
     const currentAgent = await createVerifiedAccount(email, oldPassword);
     const user = repository.dump().users.find((item) => item.email === email);
     expect(user).toBeDefined();
@@ -682,8 +704,8 @@ describe('Auth HTTP API', () => {
 
   it('changes a signed-in local password and revokes every existing session', async () => {
     const email = 'change-owner@example.com';
-    const oldPassword = 'correct-horse-battery-staple';
-    const newPassword = 'changed-to-a-safe-passphrase';
+    const oldPassword = 'Valid1!Pass';
+    const newPassword = 'Changed3!Pass';
     const currentAgent = await createVerifiedAccount(email, oldPassword);
     const otherAgent = request.agent(app.getHttpServer());
     await otherAgent
@@ -715,6 +737,20 @@ describe('Auth HTTP API', () => {
     expect(emailSender.passwordChangesSent).toHaveLength(1);
   });
 
+  it('rejects reusing the current password without revoking the active session', async () => {
+    const email = 'unchanged-password@example.com';
+    const password = 'Valid1!Pass';
+    const agent = await createVerifiedAccount(email, password);
+
+    const response = await agent
+      .post('/api/auth/password/change')
+      .send({ currentPassword: password, newPassword: password })
+      .expect(400);
+
+    expect(response.body).toMatchObject({ code: 'PASSWORD_UNCHANGED' });
+    await agent.get('/api/auth/me').expect(200);
+  });
+
   it('does not log in a legacy pending local signup without tenant membership', async () => {
     await app.close();
     await createAuthTestApp({ devAutoVerify: true });
@@ -723,7 +759,7 @@ describe('Auth HTTP API', () => {
       email: 'pending-login@example.com',
       emailVerifiedAt: null,
       name: 'Pending Login',
-      passwordHash: await hashPassword('correct-horse-battery-staple'),
+      passwordHash: await hashPassword('Valid1!Pass'),
       status: 'pending_email_verification',
     });
 
@@ -731,7 +767,7 @@ describe('Auth HTTP API', () => {
       .post('/api/auth/login')
       .send({
         email: 'pending-login@example.com',
-        password: 'correct-horse-battery-staple',
+        password: 'Valid1!Pass',
       })
       .expect(401);
     expect(repository.dump().users[0]?.emailVerifiedAt).toBeNull();

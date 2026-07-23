@@ -8,6 +8,12 @@ import {
   MinLength,
 } from 'class-validator';
 
+import {
+  PASSWORD_MAX_LENGTH,
+  PASSWORD_MIN_LENGTH,
+  PASSWORD_POLICY_MESSAGE,
+} from '../password-policy';
+
 function trimString(value: unknown): unknown {
   return typeof value === 'string' ? value.trim() : value;
 }
@@ -25,8 +31,8 @@ export class SignupDto {
   name!: string;
 
   @IsString()
-  @MinLength(15, { message: 'Use at least 15 characters and avoid common or repeated passwords.' })
-  @MaxLength(256)
+  @MinLength(PASSWORD_MIN_LENGTH, { message: PASSWORD_POLICY_MESSAGE })
+  @MaxLength(PASSWORD_MAX_LENGTH, { message: PASSWORD_POLICY_MESSAGE })
   password!: string;
 
   @Transform(({ value }) => trimString(value))
@@ -105,8 +111,8 @@ export class ConfirmPasswordResetDto {
   token!: string;
 
   @IsString()
-  @MinLength(15, { message: 'Use at least 15 characters and avoid common or repeated passwords.' })
-  @MaxLength(256)
+  @MinLength(PASSWORD_MIN_LENGTH, { message: PASSWORD_POLICY_MESSAGE })
+  @MaxLength(PASSWORD_MAX_LENGTH, { message: PASSWORD_POLICY_MESSAGE })
   newPassword!: string;
 }
 
@@ -117,7 +123,7 @@ export class ChangePasswordDto {
   currentPassword!: string;
 
   @IsString()
-  @MinLength(15, { message: 'Use at least 15 characters and avoid common or repeated passwords.' })
-  @MaxLength(256)
+  @MinLength(PASSWORD_MIN_LENGTH, { message: PASSWORD_POLICY_MESSAGE })
+  @MaxLength(PASSWORD_MAX_LENGTH, { message: PASSWORD_POLICY_MESSAGE })
   newPassword!: string;
 }

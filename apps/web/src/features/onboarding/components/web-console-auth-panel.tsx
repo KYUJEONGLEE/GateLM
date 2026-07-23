@@ -10,7 +10,10 @@ import {
   UserPlus,
   X
 } from "lucide-react";
-import type { FormEvent } from "react";
+import { useState, type FormEvent } from "react";
+import { PasswordInput } from "@/features/auth/components/password-input";
+import { isPasswordPolicySatisfied } from "@/features/auth/password-policy";
+import type { Locale } from "@/lib/i18n/locale";
 import type { AuthMode, SignupStepId, WebConsoleInitText } from "./web-console-init-view";
 
 const signupStepOrder: SignupStepId[] = ["account", "verify", "organization", "ready"];
@@ -28,6 +31,7 @@ export type WebConsoleAuthPanelProps = {
   authNotice: string | null;
   isProjectInviteSignup: boolean;
   isSubmitting: boolean;
+  locale: Locale;
   signupStep: SignupStepId;
   text: WebConsoleInitText;
   onClose: () => void;
@@ -44,6 +48,7 @@ export function WebConsoleAuthPanel({
   authNotice,
   isProjectInviteSignup,
   isSubmitting,
+  locale,
   onClose,
   onGoogleLogin,
   onLoginSubmit,
@@ -121,6 +126,7 @@ export function WebConsoleAuthPanel({
         {authMode === "login" ? (
           <LoginForm
             isSubmitting={isSubmitting}
+            locale={locale}
             text={text}
             onForgotPassword={() => onSelectAuthMode("recovery")}
             onGoogleLogin={onGoogleLogin}
@@ -137,6 +143,7 @@ export function WebConsoleAuthPanel({
           <SignupFlow
             isProjectInviteSignup={isProjectInviteSignup}
             isSubmitting={isSubmitting}
+            locale={locale}
             signupStep={signupStep}
             text={text}
             onGoogleLogin={onGoogleLogin}
@@ -150,12 +157,14 @@ export function WebConsoleAuthPanel({
 
 function LoginForm({
   isSubmitting,
+  locale,
   onForgotPassword,
   onGoogleLogin,
   onSubmit,
   text
 }: {
   isSubmitting: boolean;
+  locale: Locale;
   onForgotPassword: () => void;
   onGoogleLogin: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>;
@@ -179,16 +188,18 @@ function LoginForm({
         <span>{text.auth.email}</span>
         <input autoComplete="email" name="email" required type="email" />
       </label>
-      <label>
-        <span>{text.auth.password}</span>
-        <input
+      <div className="landing-auth-field">
+        <label htmlFor="landing-login-password">{text.auth.password}</label>
+        <PasswordInput
           autoComplete="current-password"
+          id="landing-login-password"
+          locale={locale}
           maxLength={256}
           name="password"
+          native
           required
-          type="password"
         />
-      </label>
+      </div>
       <p className="landing-auth-help">{text.auth.accountEmailHelp}</p>
       <button
         className="landing-auth-text-button"
@@ -238,6 +249,7 @@ function RecoveryForm({
 function SignupFlow({
   isProjectInviteSignup,
   isSubmitting,
+  locale,
   onGoogleLogin,
   onSubmit,
   signupStep,
@@ -245,11 +257,19 @@ function SignupFlow({
 }: {
   isProjectInviteSignup: boolean;
   isSubmitting: boolean;
+  locale: Locale;
   onGoogleLogin: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>;
   signupStep: SignupStepId;
   text: WebConsoleInitText;
 }) {
+  const [password, setPassword] = useState("");
+  const [passwordConfirmation, setPasswordConfirmation] = useState("");
+  const isPasswordValid = isPasswordPolicySatisfied(password);
+  const isConfirmationValid =
+    isPasswordValid &&
+    passwordConfirmation.length > 0 &&
+    password === passwordConfirmation;
   const visibleSignupSteps = isProjectInviteSignup
     ? signupStepOrder.filter((step) => step !== "organization")
     : signupStepOrder;
@@ -286,15 +306,62 @@ function SignupFlow({
             <span>{text.auth.email}</span>
             <input autoComplete="email" name="email" required type="email" />
           </label>
-          <label>
-            <span>{text.auth.password}</span>
-            <input autoComplete="new-password" maxLength={256} minLength={15} name="password" required type="password" />
+          <div className="landing-auth-field">
+            <label htmlFor="landing-signup-password">{text.auth.password}</label>
+            <PasswordInput
+              id="landing-signup-password"
+              aria-invalid={password.length > 0 && !isPasswordValid}
+              autoComplete="new-password"
+              isValid={isPasswordValid}
+              locale={locale}
+              maxLength={15}
+              minLength={8}
+              name="password"
+              native
+              onChange={(event) => setPassword(event.currentTarget.value)}
+              required
+              value={password}
+            />
             <small className="landing-auth-help">{text.auth.passwordHint}</small>
-          </label>
-          <label>
-            <span>{text.auth.confirmPassword}</span>
-            <input autoComplete="new-password" maxLength={256} minLength={15} name="passwordConfirmation" required type="password" />
-          </label>
+            {isPasswordValid ? (
+              <small className="password-validation-message password-validation-message-success" role="status">
+                ✓ {locale === "ko" ? "비밀번호 규칙을 충족했습니다." : "Password requirements met."}
+              </small>
+            ) : null}
+          </div>
+          <div className="landing-auth-field">
+            <label htmlFor="landing-signup-password-confirmation">{text.auth.confirmPassword}</label>
+            <PasswordInput
+              id="landing-signup-password-confirmation"
+              aria-invalid={passwordConfirmation.length > 0 && !isConfirmationValid}
+              autoComplete="new-password"
+              isValid={isConfirmationValid}
+              locale={locale}
+              maxLength={15}
+              minLength={8}
+              name="passwordConfirmation"
+              native
+              onChange={(event) => setPasswordConfirmation(event.currentTarget.value)}
+              required
+              value={passwordConfirmation}
+            />
+            {passwordConfirmation.length > 0 ? (
+              <small
+                className={`password-validation-message ${
+                  isConfirmationValid
+                    ? "password-validation-message-success"
+                    : "password-validation-message-error"
+                }`}
+                role={isConfirmationValid ? "status" : "alert"}
+              >
+                {isConfirmationValid
+                  ? locale === "ko"
+                    ? "✓ 비밀번호가 일치합니다."
+                    : "✓ The passwords match."
+                  : text.auth.passwordMismatch}
+              </small>
+            ) : null}
+          </div>
         </>
       ) : null}
 

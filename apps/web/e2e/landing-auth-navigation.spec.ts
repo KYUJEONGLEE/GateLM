@@ -84,7 +84,11 @@ test("successful login goes directly to the tenant dashboard", async ({ page }) 
 
   const loginDialog = page.getByRole("dialog");
   await loginDialog.locator('input[name="email"]').fill("admin@example.com");
-  await loginDialog.locator('input[name="password"]').fill("local-test-password");
+  const loginPassword = loginDialog.locator('input[name="password"]');
+  await loginPassword.fill("local-test-password");
+  await expect(loginPassword).toHaveAttribute("type", "password");
+  await loginDialog.locator(".password-visibility-toggle").click();
+  await expect(loginPassword).toHaveAttribute("type", "text");
   await loginDialog.locator('button[type="submit"]').click();
 
   await expect(page).toHaveURL(new RegExp(`${dashboardPath}$`));
@@ -170,8 +174,13 @@ test("email signup opens the tenant Projects management page", async ({ page }) 
   const signupDialog = page.getByRole("dialog");
   await signupDialog.locator('input[name="name"]').fill("Owner User");
   await signupDialog.locator('input[name="email"]').fill("owner@example.com");
-  await signupDialog.locator('input[name="password"]').fill("correct-horse-battery-staple");
-  await signupDialog.locator('input[name="passwordConfirmation"]').fill("correct-horse-battery-staple");
+  const signupPassword = signupDialog.locator('input[name="password"]');
+  const signupConfirmation = signupDialog.locator('input[name="passwordConfirmation"]');
+  await expect(signupPassword).toHaveAttribute("minlength", "8");
+  await expect(signupPassword).toHaveAttribute("maxlength", "15");
+  await signupPassword.fill("Valid1!Pass");
+  await signupConfirmation.fill("Valid1!Pass");
+  await expect(signupDialog.locator(".password-input-valid-icon")).toHaveCount(2);
   await signupDialog.locator('button[type="submit"]').click();
 
   await expect(signupDialog.locator(".landing-signup-steps li")).toHaveCount(4);

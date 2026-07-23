@@ -325,7 +325,7 @@ const initText: Record<
       organizationPlaceholder: "Acme AI Operations",
       password: "Password",
       passwordChangedNotice: "Password changed. Sign in again with your new password.",
-      passwordHint: "Use at least 15 characters. Passphrases are welcome; common or repeated passwords are blocked.",
+      passwordHint: "Use 8 to 15 characters and include at least one uppercase letter, lowercase letter, number, and special character. Spaces are not allowed.",
       passwordMismatch: "The password confirmation does not match.",
       readyBody: "The tenant is ready and your account has Owner/Admin access.",
       readyTitle: "Owner/Admin granted",
@@ -474,7 +474,7 @@ const initText: Record<
       organizationPlaceholder: "Acme AI 운영팀",
       password: "비밀번호",
       passwordChangedNotice: "비밀번호를 변경했습니다. 새 비밀번호로 다시 로그인하세요.",
-      passwordHint: "15자 이상 입력하세요. 긴 문구를 사용할 수 있으며 흔하거나 반복된 비밀번호는 사용할 수 없습니다.",
+      passwordHint: "비밀번호는 8자 이상 15자 이하이며, 영문 대문자·소문자·숫자·특수문자를 각각 1개 이상 포함해야 합니다. 공백은 사용할 수 없습니다.",
       passwordMismatch: "비밀번호 확인이 일치하지 않습니다.",
       readyBody: "Tenant가 생성되고 이 계정에 Owner/Admin 권한이 부여된 상태입니다.",
       readyTitle: "Owner/Admin 권한 부여",
@@ -1055,6 +1055,7 @@ export function WebConsoleInitView({
           authNotice={authNotice}
           isProjectInviteSignup={Boolean(projectInviteToken || employeeInviteToken)}
           isSubmitting={isAuthSubmitting}
+          locale={locale}
           signupStep={signupStep}
           text={text}
           onClose={closeAuthPanel}

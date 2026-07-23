@@ -1,26 +1,22 @@
 import { BadRequestException } from '@nestjs/common';
 
-export const PASSWORD_MIN_LENGTH = 15;
-export const PASSWORD_MAX_LENGTH = 256;
+export const PASSWORD_MIN_LENGTH = 8;
+export const PASSWORD_MAX_LENGTH = 15;
 
 export const PASSWORD_POLICY_MESSAGE =
-  'Use at least 15 characters and avoid common or repeated passwords.';
+  'Use 8 to 15 characters and include at least one uppercase letter, lowercase letter, number, and special character. Spaces are not allowed.';
 
-const BLOCKED_PASSWORDS = new Set([
-  '123456789012345',
-  'adminadminadmin',
-  'correcthorsebatterystaple',
-  'gatelmgatelmgatelm',
-  'letmeinletmeinletmein',
-  'passwordpassword',
-  'passwordpasswordpassword',
-  'qwertyuiopasdfg',
-  'welcome123456789',
-]);
+export type PasswordPolicyViolation =
+  | 'length'
+  | 'lowercase'
+  | 'number'
+  | 'special'
+  | 'uppercase'
+  | 'whitespace';
 
 export function getPasswordPolicyViolation(
   password: string,
-): 'common' | 'length' | null {
+): PasswordPolicyViolation | null {
   const characterLength = Array.from(password).length;
   if (
     characterLength < PASSWORD_MIN_LENGTH ||
@@ -29,13 +25,20 @@ export function getPasswordPolicyViolation(
     return 'length';
   }
 
-  const normalized = password.normalize('NFC').toLocaleLowerCase('en-US');
-  if (
-    BLOCKED_PASSWORDS.has(normalized) ||
-    /^(.)\1+$/u.test(normalized) ||
-    /^(.{1,4})\1{2,}$/u.test(normalized)
-  ) {
-    return 'common';
+  if (/\s/u.test(password)) {
+    return 'whitespace';
+  }
+  if (!/[A-Z]/u.test(password)) {
+    return 'uppercase';
+  }
+  if (!/[a-z]/u.test(password)) {
+    return 'lowercase';
+  }
+  if (!/[0-9]/u.test(password)) {
+    return 'number';
+  }
+  if (!/[\x21-\x2f\x3a-\x40\x5b-\x60\x7b-\x7e]/u.test(password)) {
+    return 'special';
   }
 
   return null;
