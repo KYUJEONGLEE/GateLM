@@ -12,7 +12,7 @@ import type { Request, Response } from 'express';
 
 import { DataEnvelope } from '@/common/types/envelope';
 
-import { AuthService, SessionIssue } from './auth.service';
+import { AuthService } from './auth.service';
 import { AUTH_COOKIE_NAMES } from './auth.tokens';
 import {
   ChangePasswordDto,
@@ -55,26 +55,14 @@ export class PasswordAccountController {
     @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
   ): Promise<DataEnvelope<unknown>> {
-    const session = await this.authService.changePassword(
+    const result = await this.authService.changePassword(
       this.readCookie(request, AUTH_COOKIE_NAMES.full),
       body,
     );
+    this.clearCookie(response, AUTH_COOKIE_NAMES.full);
     this.clearCookie(response, AUTH_COOKIE_NAMES.onboarding);
     this.clearCookie(response, AUTH_COOKIE_NAMES.signup);
-    this.setSessionCookie(response, session);
-    return {
-      data: {
-        passwordChanged: true,
-        session: this.toSessionResponse(session),
-      },
-    };
-  }
-
-  private setSessionCookie(response: Response, session: SessionIssue): void {
-    response.cookie(AUTH_COOKIE_NAMES.full, session.token, {
-      ...this.baseCookieOptions(),
-      expires: session.expiresAt,
-    });
+    return { data: result };
   }
 
   private clearCookie(response: Response, cookieName: string): void {
@@ -113,15 +101,5 @@ export class PasswordAccountController {
     }
 
     return undefined;
-  }
-
-  private toSessionResponse(session: SessionIssue): {
-    expiresAt: string;
-    kind: string;
-  } {
-    return {
-      expiresAt: session.expiresAt.toISOString(),
-      kind: session.kind,
-    };
   }
 }

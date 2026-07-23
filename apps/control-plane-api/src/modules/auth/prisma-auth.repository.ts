@@ -710,69 +710,6 @@ export class PrismaAuthRepository implements AuthRepository {
     });
   }
 
-  async rotatePasswordAndSession(input: {
-    changedAt: Date;
-    currentSessionId: string;
-    expectedPasswordHash: string;
-    passwordHash: string;
-    session: {
-      expiresAt: Date;
-      kind: AuthSessionKind;
-      sessionTokenHash: string;
-    };
-    userId: string;
-  }): Promise<AuthSession | null> {
-    return this.prisma.$transaction(async (tx) => {
-      const currentSession = await tx.authSession.findFirst({
-        where: {
-          expiresAt: { gt: input.changedAt },
-          id: input.currentSessionId,
-          kind: 'full',
-          revokedAt: null,
-          userId: input.userId,
-        },
-      });
-      if (!currentSession) {
-        return null;
-      }
-
-      const updatedUser = await tx.user.updateMany({
-        data: {
-          actorAuthzVersion: { increment: 1 },
-          passwordHash: input.passwordHash,
-        },
-        where: {
-          deletedAt: null,
-          id: input.userId,
-          passwordHash: input.expectedPasswordHash,
-          status: 'active',
-        },
-      });
-      if (updatedUser.count !== 1) {
-        return null;
-      }
-      await tx.passwordResetToken.updateMany({
-        data: { consumedAt: input.changedAt },
-        where: { consumedAt: null, userId: input.userId },
-      });
-      await tx.authSession.updateMany({
-        data: { revokedAt: input.changedAt },
-        where: { revokedAt: null, userId: input.userId },
-      });
-      await tx.tenantChatRefreshToken.updateMany({
-        data: { revokedAt: input.changedAt },
-        where: { revokedAt: null, session: { userId: input.userId } },
-      });
-      await tx.tenantChatSession.updateMany({
-        data: { revokeReason: 'password_changed', revokedAt: input.changedAt },
-        where: { revokedAt: null, userId: input.userId },
-      });
-      return tx.authSession.create({
-        data: { ...input.session, userId: input.userId },
-      });
-    });
-  }
-
   async changePasswordAndRevokeSessions(input: {
     changedAt: Date;
     expectedPasswordHash: string;

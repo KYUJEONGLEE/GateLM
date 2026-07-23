@@ -222,6 +222,7 @@ const initText: Record<
       organization: string;
       organizationPlaceholder: string;
       password: string;
+      passwordChangedNotice: string;
       passwordHint: string;
       passwordMismatch: string;
       readyBody: string;
@@ -323,6 +324,7 @@ const initText: Record<
       organization: "Tenant name",
       organizationPlaceholder: "Acme AI Operations",
       password: "Password",
+      passwordChangedNotice: "Password changed. Sign in again with your new password.",
       passwordHint: "Use at least 15 characters. Passphrases are welcome; common or repeated passwords are blocked.",
       passwordMismatch: "The password confirmation does not match.",
       readyBody: "The tenant is ready and your account has Owner/Admin access.",
@@ -471,6 +473,7 @@ const initText: Record<
       organization: "Tenant 이름",
       organizationPlaceholder: "Acme AI 운영팀",
       password: "비밀번호",
+      passwordChangedNotice: "비밀번호를 변경했습니다. 새 비밀번호로 다시 로그인하세요.",
       passwordHint: "15자 이상 입력하세요. 긴 문구를 사용할 수 있으며 흔하거나 반복된 비밀번호는 사용할 수 없습니다.",
       passwordMismatch: "비밀번호 확인이 일치하지 않습니다.",
       readyBody: "Tenant가 생성되고 이 계정에 Owner/Admin 권한이 부여된 상태입니다.",
@@ -628,8 +631,10 @@ export function WebConsoleInitView({
     const params = new URLSearchParams(window.location.search);
     const nextPath = getSafeNextPath(params);
     if (params.get("auth") === "login") {
+      const passwordChanged = params.get("passwordChanged") === "1";
       window.history.replaceState(null, "", "/");
       setAuthMode("login");
+      setAuthNotice(passwordChanged ? text.auth.passwordChangedNotice : null);
       setIsAuthPanelOpen(true);
     }
     if (params.get("auth") === "organization" || params.get("auth") === "tenant") {
@@ -728,7 +733,11 @@ export function WebConsoleInitView({
     return () => {
       isMounted = false;
     };
-  }, [initialAuthStatus, initialDashboardTenantIdForAuth]);
+  }, [
+    initialAuthStatus,
+    initialDashboardTenantIdForAuth,
+    text.auth.passwordChangedNotice
+  ]);
 
   function openAuthPanel(mode: AuthMode) {
     setAuthError(null);

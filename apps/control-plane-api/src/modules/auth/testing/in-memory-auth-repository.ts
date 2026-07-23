@@ -5,7 +5,6 @@ import {
   AuthProjectAdminInvitation,
   AuthRepository,
   AuthSession,
-  AuthSessionKind,
   AuthSessionWithUser,
   AuthTenant,
   AuthTenantAdmin,
@@ -640,54 +639,6 @@ export function createInMemoryAuthRepository(): AuthRepository & {
       user.passwordHash = input.passwordHash;
       user.updatedAt = input.changedAt;
       return user;
-    },
-
-    async rotatePasswordAndSession(input) {
-      const currentSession = state.authSessions.find(
-        (item) =>
-          item.id === input.currentSessionId &&
-          item.userId === input.userId &&
-          item.kind === 'full' &&
-          item.revokedAt === null &&
-          item.expiresAt > input.changedAt,
-      );
-      const user = state.users.find(
-        (item) => item.id === input.userId && item.deletedAt === null,
-      );
-      if (
-        !currentSession ||
-        !user ||
-        user.passwordHash !== input.expectedPasswordHash ||
-        user.status !== 'active'
-      ) {
-        return null;
-      }
-
-      for (const resetToken of state.passwordResetTokens) {
-        if (resetToken.userId === input.userId && resetToken.consumedAt === null) {
-          resetToken.consumedAt = input.changedAt;
-        }
-      }
-      for (const session of state.authSessions) {
-        if (session.userId === input.userId && session.revokedAt === null) {
-          session.revokedAt = input.changedAt;
-        }
-      }
-      user.actorAuthzVersion += 1;
-      user.passwordHash = input.passwordHash;
-      user.updatedAt = input.changedAt;
-
-      const replacementSession: AuthSession = {
-        createdAt: input.changedAt,
-        expiresAt: input.session.expiresAt,
-        id: id(),
-        kind: input.session.kind,
-        revokedAt: null,
-        sessionTokenHash: input.session.sessionTokenHash,
-        userId: input.userId,
-      };
-      state.authSessions.push(replacementSession);
-      return replacementSession;
     },
 
     async changePasswordAndRevokeSessions(input) {

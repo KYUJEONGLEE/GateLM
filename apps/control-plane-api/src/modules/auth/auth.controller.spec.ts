@@ -680,7 +680,7 @@ describe('Auth HTTP API', () => {
     ).toBe(actorVersionBefore + 1);
   });
 
-  it('changes a signed-in local password, rotates its session, and revokes other sessions', async () => {
+  it('changes a signed-in local password and revokes every existing session', async () => {
     const email = 'change-owner@example.com';
     const oldPassword = 'correct-horse-battery-staple';
     const newPassword = 'changed-to-a-safe-passphrase';
@@ -696,13 +696,13 @@ describe('Auth HTTP API', () => {
       .send({ currentPassword: oldPassword, newPassword })
       .expect(200);
 
-    expect(changeResponse.body).toMatchObject({
-      data: { passwordChanged: true, session: { kind: 'full' } },
+    expect(changeResponse.body).toEqual({
+      data: { passwordChanged: true },
     });
     expect(String(changeResponse.headers['set-cookie'])).toContain(
-      'gatelm_session=',
+      'gatelm_session=;',
     );
-    await currentAgent.get('/api/auth/me').expect(200);
+    await currentAgent.get('/api/auth/me').expect(401);
     await otherAgent.get('/api/auth/me').expect(401);
     await request(app.getHttpServer())
       .post('/api/auth/login')

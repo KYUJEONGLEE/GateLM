@@ -280,18 +280,6 @@ export interface AuthRepository {
     tokenId: string;
     userId: string;
   }): Promise<AuthUser | null>;
-  rotatePasswordAndSession(input: {
-    changedAt: Date;
-    currentSessionId: string;
-    expectedPasswordHash: string;
-    passwordHash: string;
-    session: {
-      expiresAt: Date;
-      kind: AuthSessionKind;
-      sessionTokenHash: string;
-    };
-    userId: string;
-  }): Promise<AuthSession | null>;
   changePasswordAndRevokeSessions(input: {
     changedAt: Date;
     expectedPasswordHash: string;

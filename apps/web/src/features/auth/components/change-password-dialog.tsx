@@ -24,7 +24,6 @@ const changePasswordText: Record<
     newPassword: string;
     passwordHint: string;
     submit: string;
-    success: string;
     title: string;
     unknownError: string;
   }
@@ -37,7 +36,6 @@ const changePasswordText: Record<
     newPassword: "New password",
     passwordHint: "Use at least 15 characters. Common or repeated passwords are blocked.",
     submit: "Change password",
-    success: "Password changed. Your other GateLM sessions were signed out.",
     title: "Change password",
     unknownError: "The password could not be changed."
   },
@@ -49,7 +47,6 @@ const changePasswordText: Record<
     newPassword: "새 비밀번호",
     passwordHint: "15자 이상 입력하세요. 흔하거나 반복된 비밀번호는 사용할 수 없습니다.",
     submit: "비밀번호 변경",
-    success: "비밀번호를 변경했습니다. 다른 GateLM 로그인 세션은 로그아웃되었습니다.",
     title: "비밀번호 변경",
     unknownError: "비밀번호를 변경하지 못했습니다."
   }
@@ -67,13 +64,11 @@ export function ChangePasswordDialog({
   const text = changePasswordText[locale];
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [success, setSuccess] = useState<string | null>(null);
 
   function changeOpen(nextOpen: boolean) {
     if (!isSubmitting) {
       if (!nextOpen) {
         setError(null);
-        setSuccess(null);
       }
       onOpenChange(nextOpen);
     }
@@ -92,12 +87,10 @@ export function ChangePasswordDialog({
     const passwordConfirmation = readFormValue(formData, "passwordConfirmation");
     if (newPassword !== passwordConfirmation) {
       setError(text.mismatch);
-      setSuccess(null);
       return;
     }
 
     setError(null);
-    setSuccess(null);
     setIsSubmitting(true);
     try {
       const response = await fetch("/api/auth/password/change", {
@@ -114,7 +107,7 @@ export function ChangePasswordDialog({
       }
 
       form.reset();
-      setSuccess(text.success);
+      window.location.replace("/?auth=login&passwordChanged=1");
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : text.unknownError);
     } finally {
@@ -133,11 +126,6 @@ export function ChangePasswordDialog({
         {error ? (
           <Alert variant="destructive">
             <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        ) : null}
-        {success ? (
-          <Alert variant="success">
-            <AlertDescription>{success}</AlertDescription>
           </Alert>
         ) : null}
 

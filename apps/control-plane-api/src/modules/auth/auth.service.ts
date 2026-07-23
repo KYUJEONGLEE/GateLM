@@ -598,7 +598,7 @@ export class AuthService {
   async changePassword(
     token: string | undefined,
     dto: ChangePasswordDto,
-  ): Promise<SessionIssue> {
+  ): Promise<{ passwordChanged: true }> {
     const currentSession = await this.requireSession(token, 'full');
     if (!currentSession.user.passwordHash) {
       throw new BadRequestException({
@@ -624,26 +624,18 @@ export class AuthService {
     }
 
     const changedAt = new Date();
-    const replacementToken = createOpaqueToken();
-    const expiresAt = addDays(changedAt, 7);
-    const replacementSession = await this.repository.rotatePasswordAndSession({
+    const updatedUser = await this.repository.changePasswordAndRevokeSessions({
       changedAt,
-      currentSessionId: currentSession.id,
       expectedPasswordHash: currentSession.user.passwordHash,
       passwordHash: await hashPassword(dto.newPassword),
-      session: {
-        expiresAt,
-        kind: 'full',
-        sessionTokenHash: hashSecret(replacementToken),
-      },
       userId: currentSession.user.id,
     });
-    if (!replacementSession) {
+    if (!updatedUser) {
       throw new UnauthorizedException('Authentication is required.');
     }
 
-    await this.notifyPasswordChanged(currentSession.user.email, changedAt);
-    return { expiresAt, kind: 'full', token: replacementToken };
+    await this.notifyPasswordChanged(updatedUser.email, changedAt);
+    return { passwordChanged: true };
   }
 
   async changePasswordForUser(
