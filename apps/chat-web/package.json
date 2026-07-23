@@ -9,7 +9,7 @@
     "start": "next start --hostname 0.0.0.0 --port 3002",
     "lint": "eslint . --max-warnings=0",
     "qa:mock-api": "node test/mock-chat-api.mjs",
-    "test": "node --test clipboard.test.mjs content-security-policy.test.mjs conversation-contract.test.mjs conversation-upstream.test.mjs markdown-message.test.mjs model-brand.test.mjs",
+    "test": "node --test canonical-origin.test.mjs clipboard.test.mjs content-security-policy.test.mjs conversation-contract.test.mjs conversation-upstream.test.mjs markdown-message.test.mjs model-brand.test.mjs scroll-follow.test.mjs usage-ranking.test.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

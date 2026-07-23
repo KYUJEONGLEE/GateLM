@@ -48,6 +48,30 @@ export class SessionService {
     );
   }
 
+  requestPasswordReset(email: string): Promise<{ accepted: true }> {
+    return this.controlPlane.requestPasswordReset(email);
+  }
+
+  confirmPasswordReset(
+    token: string,
+    newPassword: string,
+  ): Promise<{ passwordReset: true }> {
+    return this.controlPlane.confirmPasswordReset(token, newPassword);
+  }
+
+  async changePassword(
+    accessToken: string,
+    currentPassword: string,
+    newPassword: string,
+  ): Promise<{ passwordChanged: true }> {
+    const current = await this.requireSession(accessToken);
+    return this.controlPlane.changePassword(
+      current.claims.sub,
+      currentPassword,
+      newPassword,
+    );
+  }
+
   createInvitationIntent(token: string): string {
     return sealIntent(
       JSON.stringify({ exp: Date.now() + INVITATION_INTENT_TTL_MS, token }),
@@ -335,6 +359,7 @@ export class SessionService {
       tenants: identity.tenants.map((item) => this.publicTenant(item)),
       user: {
         email: identity.user.email,
+        hasLocalPassword: identity.user.hasLocalPassword,
         id: identity.user.id,
         name: identity.user.name,
       },

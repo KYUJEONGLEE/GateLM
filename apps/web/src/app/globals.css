@@ -1190,6 +1190,15 @@ html:not([data-theme="dark"])
   padding: 6px;
 }
 
+.console-user-menu-note {
+  margin: 0;
+  padding: 8px 10px;
+  color: var(--text-muted);
+  font-size: calc(var(--font-size-xs) + var(--global-font-lift));
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.45;
+}
+
 .console-user-settings {
   display: grid;
   gap: 10px;
@@ -2148,6 +2157,7 @@ html:not([data-theme="dark"])
 
 .dashboard-cost-over-time-title {
   grid-area: title;
+  flex: 1 1 auto;
   min-width: 0;
 }
 
@@ -2159,6 +2169,7 @@ html:not([data-theme="dark"])
   flex: 0 0 auto;
   flex-direction: column;
   gap: var(--space-4);
+  margin-left: auto;
   min-width: 0;
   max-width: 100%;
 }
@@ -2184,6 +2195,8 @@ html:not([data-theme="dark"])
   display: inline-flex;
   align-items: center;
   flex: 0 0 auto;
+  margin-left: auto;
+  max-width: 100%;
   padding: 3px;
   background: var(--surface-subtle);
   border: 1px solid var(--border);
@@ -2320,7 +2333,7 @@ html[data-theme="dark"] .dashboard-cost-over-time-metrics > div[data-kind="avera
 
 .dashboard-cost-chart-stack {
   display: grid;
-  grid-template-rows: minmax(210px, 1fr) 112px;
+  grid-template-rows: minmax(180px, 1fr) 112px;
   gap: 8px;
   min-width: 0;
   min-height: 0;
@@ -2332,7 +2345,7 @@ html[data-theme="dark"] .dashboard-cost-over-time-metrics > div[data-kind="avera
   min-width: 0;
   height: 100%;
   max-height: 100%;
-  min-height: 210px;
+  min-height: 180px;
   overflow: hidden;
 }
 
@@ -13697,6 +13710,16 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
     overflow: visible;
   }
 
+  .dashboard-cost-over-time-metrics > div {
+    min-width: 0;
+    flex: 1 1 0;
+  }
+
+  .dashboard-cost-over-time-metrics > div + div {
+    margin-left: 20px;
+    padding-left: 20px;
+  }
+
   .dashboard-project-spend-panel {
     grid-column: 1;
     height: auto;
@@ -13998,9 +14021,17 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
   }
 
   .dashboard-cost-over-time-legend {
-    align-items: flex-start;
-    justify-content: flex-start;
-    gap: 20px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: stretch;
+    justify-content: stretch;
+    gap: 10px;
+    width: 100%;
+  }
+
+  .dashboard-cost-over-time-legend span {
+    width: 100%;
+    line-height: 1.35;
   }
 
   .dashboard-cost-over-time-legend strong {
@@ -14051,9 +14082,23 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
     gap: var(--space-4);
   }
 
+  .dashboard-provider-usage-chart,
+  .dashboard-provider-usage-chart-shell,
   .dashboard-provider-usage-chart .dashboard-pie-chart {
     height: 220px;
+    max-height: 220px;
     min-height: 220px;
+  }
+
+  .dashboard-provider-usage-center {
+    max-width: 72%;
+    min-width: 0;
+  }
+
+  .dashboard-provider-usage-center strong {
+    max-width: 100%;
+    font-size: calc(18px + var(--global-font-lift));
+    white-space: nowrap;
   }
 
   .dashboard-provider-usage-row {
@@ -15646,6 +15691,32 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
   padding-bottom: 4px;
 }
 
+.landing-auth-help {
+  margin: 0;
+  color: #64748b;
+  font-size: calc(var(--font-size-xs) + var(--global-font-lift));
+  font-weight: var(--font-weight-medium);
+  line-height: 1.5;
+}
+
+.landing-auth-text-button {
+  width: fit-content;
+  min-height: auto;
+  justify-self: start;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  color: var(--primary);
+  font-size: calc(var(--font-size-sm) + var(--global-font-lift));
+  font-weight: var(--font-weight-bold);
+}
+
+.landing-auth-text-button:hover {
+  color: var(--brand-blue-strong);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 .landing-auth-divider {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
@@ -15858,11 +15929,135 @@ html[data-theme="dark"] .landing-google-button:hover {
 .landing-auth-submit:focus-visible,
 .landing-google-button:focus-visible,
 .landing-auth-close:focus-visible,
+.landing-auth-text-button:focus-visible,
 .landing-auth-tabs button:focus-visible,
 .landing-nav-links a:focus-visible,
 .landing-brand:focus-visible {
   outline: 2px solid var(--ring);
   outline-offset: 3px;
+}
+
+.password-reset-page {
+  display: grid;
+  min-height: 100vh;
+  padding: 24px;
+  place-items: center;
+  background:
+    radial-gradient(circle at top left, rgba(37, 99, 235, 0.14), transparent 34%),
+    #f8fafc;
+}
+
+.password-reset-card {
+  display: grid;
+  width: min(460px, 100%);
+  gap: 20px;
+  padding: 30px;
+  background: #ffffff;
+  border: 1px solid #d8e2ed;
+  border-radius: 12px;
+  box-shadow: 0 24px 72px rgba(16, 32, 51, 0.16);
+}
+
+.password-reset-brand {
+  width: fit-content;
+}
+
+.password-reset-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #102033;
+}
+
+.password-reset-heading h1 {
+  margin: 0;
+  font-size: 1.5rem;
+  line-height: 1.25;
+}
+
+.password-reset-form,
+.password-reset-form label {
+  display: grid;
+}
+
+.password-reset-form {
+  gap: 15px;
+}
+
+.password-reset-form label {
+  gap: 7px;
+  color: #24344a;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+}
+
+.password-reset-form small {
+  color: #64748b;
+  font-weight: var(--font-weight-medium);
+  line-height: 1.5;
+}
+
+.password-reset-form input {
+  min-height: 44px;
+  padding: 0 12px;
+  background: #f8fafc;
+  border: 1px solid #d8e2ed;
+  border-radius: 8px;
+  color: #102033;
+  outline: none;
+}
+
+.password-reset-form input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.14);
+}
+
+.password-reset-form button {
+  min-height: 46px;
+  margin-top: 2px;
+  background: var(--primary);
+  border: 1px solid var(--primary);
+  color: #ffffff;
+  font-weight: var(--font-weight-bold);
+}
+
+.password-reset-result {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 8px;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.5;
+}
+
+.password-reset-result[data-status="success"] {
+  display: flex;
+  gap: 9px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1d4ed8;
+}
+
+.password-reset-result[data-status="success"] p {
+  margin: 0;
+}
+
+.password-reset-result[data-status="error"] {
+  background: #fff1f1;
+  border: 1px solid #ffd0d0;
+  color: #a33434;
+}
+
+.password-reset-login {
+  width: fit-content;
+  color: var(--primary);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+}
+
+.password-reset-login:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 @media (max-width: 1080px) {
@@ -26106,4 +26301,80 @@ html:not([data-theme="dark"]) .console-shell {
   .analytics-v5-metric-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
+}
+
+/* Password input visibility and validation */
+.landing-auth-field,
+.password-reset-field {
+  display: grid;
+  gap: 7px;
+}
+
+.password-input-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+.password-input-wrapper > input {
+  padding-right: 4.75rem;
+}
+
+.password-input-valid-icon,
+.password-visibility-toggle {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.password-input-valid-icon {
+  right: 2.65rem;
+  display: inline-flex;
+  color: #16a34a;
+  pointer-events: none;
+}
+
+button.password-visibility-toggle {
+  right: 0.35rem;
+  display: inline-flex;
+  width: 2rem;
+  min-width: 2rem;
+  height: 2rem;
+  min-height: 2rem;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0.375rem;
+  background: transparent;
+  color: #64748b;
+  box-shadow: none;
+  cursor: pointer;
+}
+
+button.password-visibility-toggle:hover {
+  background: rgba(148, 163, 184, 0.16);
+  color: #334155;
+}
+
+button.password-visibility-toggle:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+}
+
+.password-validation-message {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.password-validation-message-success {
+  color: #15803d;
+}
+
+.password-validation-message-error {
+  color: #b91c1c;
 }

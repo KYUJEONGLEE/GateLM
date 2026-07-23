@@ -7,7 +7,12 @@ export type ChatSession = {
   sessionVersion: number;
   state: 'authenticated' | 'tenant_selection_required';
   tenants: TenantOption[];
-  user: { email: string; id: string; name: string | null };
+  user: {
+    email: string;
+    hasLocalPassword: boolean;
+    id: string;
+    name: string | null;
+  };
 };
 
 export type TenantOption = {

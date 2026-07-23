@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { createContentSecurityPolicy } from '../content-security-policy.mjs';
+import { canonicalLocalBrowserUrl } from './lib/canonical-origin.mjs';
 
 const CSRF_COOKIE = 'gatelm_chat_csrf';
 const INVITATION_COOKIE = 'gatelm_chat_invitation_intent';
@@ -8,6 +9,14 @@ const INVITATION_COOKIE = 'gatelm_chat_invitation_intent';
 export async function middleware(request: NextRequest) {
   const nonce = Buffer.from(crypto.randomUUID()).toString('base64');
   const contentSecurityPolicy = createContentSecurityPolicy(process.env.NODE_ENV, nonce);
+  const canonicalBrowserUrl = canonicalLocalBrowserUrl(
+    request.url,
+    process.env.GATELM_CHAT_WEB_ORIGIN?.trim(),
+    request.headers.get('host')?.trim() || undefined,
+  );
+  if (canonicalBrowserUrl && ['GET', 'HEAD'].includes(request.method)) {
+    return secureResponse(NextResponse.redirect(canonicalBrowserUrl, 307), contentSecurityPolicy);
+  }
 
   if (request.nextUrl.pathname === '/invitations/accept' && request.nextUrl.searchParams.has('token')) {
     const token = request.nextUrl.searchParams.get('token') ?? '';

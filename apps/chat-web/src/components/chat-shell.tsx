@@ -3,16 +3,20 @@
 import { Badge, Button } from '@gatelm/ui';
 import {
   AlertTriangle,
+  ArrowDown,
+  BarChart3,
   Building2,
   BookOpenText,
   Check,
   CheckCircle2,
   Copy,
   Gauge,
+  KeyRound,
   LoaderCircle,
   LogOut,
-  Menu,
   MessageSquareText,
+  PanelLeftClose,
+  PanelLeftOpen,
   Pencil,
   Plus,
   Send,
@@ -23,13 +27,15 @@ import {
 } from 'lucide-react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
-import { type FormEvent, type KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type FormEvent, type KeyboardEvent, type UIEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { ChatSession } from '@/lib/auth-types';
 import { api, ChatApiError, streamApi } from '@/lib/browser-api';
 import { copyTextToClipboard } from '@/lib/clipboard.mjs';
 import { MarkdownMessage } from '@/components/markdown-message.mjs';
 import { getModelBrand } from '@/lib/model-brand.mjs';
+import { reduceScrollFollow } from '@/lib/scroll-follow.mjs';
+import { UsageRankingView } from '@/components/usage-ranking-view';
 import {
   acceptedUserContentWasMasked,
   consumeTurnSse,
@@ -45,9 +51,12 @@ import {
 } from '@/lib/conversation-contract.mjs';
 
 const CONTEXT_MODE_STORAGE_KEY = 'gatelm.tenant-chat.context-mode';
+const SIDEBAR_COLLAPSED_STORAGE_KEY = 'gatelm.tenant-chat.sidebar-collapsed';
+const COMPACT_LAYOUT_QUERY = '(max-width: 1024px)';
 type ContextMode = 'conversation' | 'single_turn';
 type KnowledgeMode = 'off' | 'tenant';
 type KnowledgeModeToast = Readonly<{ title: string; description: string }>;
+type ChatView = 'chat' | 'usage-ranking';
 
 export function ChatShell() {
   const router = useRouter();
@@ -62,6 +71,10 @@ export function ChatShell() {
   const [newConversationKnowledgeMode, setNewConversationKnowledgeMode] = useState<KnowledgeMode>('off');
   const [knowledgeModeToast, setKnowledgeModeToast] = useState<KnowledgeModeToast | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [compactLayout, setCompactLayout] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [latestAnswerAvailable, setLatestAnswerAvailable] = useState(false);
+  const [activeView, setActiveView] = useState<ChatView>('chat');
   const [loading, setLoading] = useState(true);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [creatingConversation, setCreatingConversation] = useState(false);
@@ -85,6 +98,10 @@ export function ChatShell() {
   const drawerTriggerRef = useRef<HTMLButtonElement>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const logRef = useRef<HTMLOListElement>(null);
+  const followOutputRef = useRef(true);
+  const lastOutputVersionRef = useRef('');
+  const lastScrollTopRef = useRef<number | null>(null);
+  const touchPositionRef = useRef<number | null>(null);
   const renameReturnIdRef = useRef<string | null>(null);
   const streamControllerRef = useRef<AbortController | null>(null);
   const activeTurnIdRef = useRef<string | null>(null);
@@ -103,14 +120,53 @@ export function ChatShell() {
     if (returnFocus) requestAnimationFrame(() => drawerTriggerRef.current?.focus());
   }, []);
 
+  const resumeScrollFollowing = useCallback((reason: 'conversation-change' | 'initial-load' | 'jump-to-latest' | 'message-send') => {
+    followOutputRef.current = reduceScrollFollow(followOutputRef.current, { type: reason });
+    setLatestAnswerAvailable(false);
+  }, []);
+
+  const pauseScrollFollowing = useCallback(() => {
+    followOutputRef.current = reduceScrollFollow(followOutputRef.current, { type: 'scroll-up-intent' });
+  }, []);
+
+  const toggleNavigation = useCallback(() => {
+    if (compactLayout) {
+      setMenuOpen((current) => !current);
+      return;
+    }
+    const next = !sidebarCollapsed;
+    setSidebarCollapsed(next);
+    try {
+      window.localStorage.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, String(next));
+    } catch {
+      // A non-persistent sidebar is still usable when browser storage is unavailable.
+    }
+    requestAnimationFrame(() => {
+      if (next) drawerTriggerRef.current?.focus();
+      else drawerRef.current?.querySelector<HTMLButtonElement>('.sidebar-collapse-toggle')?.focus();
+    });
+  }, [compactLayout, sidebarCollapsed]);
+
   useEffect(() => {
     try {
       if (window.localStorage.getItem(CONTEXT_MODE_STORAGE_KEY) === 'single_turn') {
         setContextMode('single_turn');
       }
+      setSidebarCollapsed(window.localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) === 'true');
     } catch {
       // Storage can be unavailable in hardened browser modes; the safe default keeps context.
     }
+  }, []);
+
+  useEffect(() => {
+    const media = window.matchMedia(COMPACT_LAYOUT_QUERY);
+    const applyLayout = () => {
+      setCompactLayout(media.matches);
+      setMenuOpen(false);
+    };
+    applyLayout();
+    media.addEventListener('change', applyLayout);
+    return () => media.removeEventListener('change', applyLayout);
   }, []);
 
   useEffect(() => {
@@ -155,6 +211,12 @@ export function ChatShell() {
   }, []);
 
   useEffect(() => {
+    resumeScrollFollowing('conversation-change');
+    lastOutputVersionRef.current = '';
+    lastScrollTopRef.current = null;
+  }, [resumeScrollFollowing, selectedId]);
+
+  useEffect(() => {
     if (!selectedId) {
       setMessages([]);
       setMessageCursor(null);
@@ -179,6 +241,7 @@ export function ChatShell() {
         ]);
         if (!active) return;
         setConversations((current) => current.map((item) => item.id === conversation.id ? conversation : item));
+        resumeScrollFollowing('initial-load');
         setMessages(page.items);
         setMessageCursor(page.nextCursor);
         setPolicyState('normal');
@@ -191,13 +254,30 @@ export function ChatShell() {
     }
     void loadConversation();
     return () => { active = false; };
-  }, [reportError, selectedId]);
+  }, [reportError, resumeScrollFollowing, selectedId]);
 
   useEffect(() => {
     if (!menuOpen) return;
-    const focusTimer = window.setTimeout(() => drawerRef.current?.querySelector<HTMLButtonElement>('.mobile-close')?.focus(), 120);
+    const focusTimer = window.setTimeout(() => drawerRef.current?.querySelector<HTMLButtonElement>('.sidebar-collapse-toggle')?.focus(), 120);
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
-      if (event.key === 'Escape') closeDrawer(true);
+      if (event.key === 'Escape') {
+        closeDrawer(true);
+        return;
+      }
+      if (event.key !== 'Tab' || !drawerRef.current) return;
+      const focusable = [...drawerRef.current.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), a[href], input:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      )].filter((element) => !element.hasAttribute('hidden'));
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable.at(-1);
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last?.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
     };
     document.addEventListener('keydown', onKeyDown);
     return () => {
@@ -208,8 +288,48 @@ export function ChatShell() {
 
   useEffect(() => {
     const log = logRef.current;
-    if (log) log.scrollTop = log.scrollHeight;
-  }, [messages, streaming]);
+    if (!log) return;
+    const last = messages.at(-1);
+    const outputVersion = last?.role === 'assistant'
+      ? `${last.localId ?? last.id}:${last.content.length}`
+      : '';
+    const outputChanged = outputVersion !== lastOutputVersionRef.current;
+    lastOutputVersionRef.current = outputVersion;
+    if (followOutputRef.current) {
+      log.scrollTo({ top: log.scrollHeight, behavior: 'auto' });
+      setLatestAnswerAvailable(false);
+    } else if (outputChanged && last?.role === 'assistant' && Boolean(last.content)) {
+      setLatestAnswerAvailable(true);
+    }
+  }, [activeView, messages, streaming]);
+
+  const handleLogScroll = useCallback((event: UIEvent<HTMLOListElement>) => {
+    const log = event.currentTarget;
+    const previousScrollTop = lastScrollTopRef.current;
+    lastScrollTopRef.current = log.scrollTop;
+    if (previousScrollTop !== null && log.scrollTop < previousScrollTop) {
+      pauseScrollFollowing();
+      return;
+    }
+    const following = reduceScrollFollow(followOutputRef.current, {
+      type: 'scroll',
+      metrics: {
+        clientHeight: log.clientHeight,
+        scrollHeight: log.scrollHeight,
+        scrollTop: log.scrollTop,
+      },
+    });
+    followOutputRef.current = following;
+    if (following) setLatestAnswerAvailable(false);
+  }, [pauseScrollFollowing]);
+
+  const jumpToLatestAnswer = useCallback(() => {
+    resumeScrollFollowing('jump-to-latest');
+    const log = logRef.current;
+    if (!log) return;
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    log.scrollTo({ top: log.scrollHeight, behavior: reduceMotion ? 'auto' : 'smooth' });
+  }, [resumeScrollFollowing]);
 
   async function logout() {
     try { await api('/api/tenant-chat/auth/logout', { body: '{}', method: 'POST' }); }
@@ -218,6 +338,7 @@ export function ChatShell() {
 
   async function createConversation(): Promise<Conversation | null> {
     if (streaming || creatingConversation) return null;
+    setActiveView('chat');
     const requestedKnowledgeMode = newConversationKnowledgeMode;
     setCreatingConversation(true);
     setError(null);
@@ -384,6 +505,7 @@ export function ChatShell() {
     const draftId = crypto.randomUUID();
     const now = new Date().toISOString();
     const baseSequence = messages.at(-1)?.sequence ?? 0;
+    resumeScrollFollowing('message-send');
     setComposer('');
     setError(null);
     setStreaming(true);
@@ -532,15 +654,48 @@ export function ChatShell() {
   const displayName = session.user.name || session.user.email.split('@')[0];
   const selected = conversations.find((conversation) => conversation.id === selectedId) ?? null;
   const policyCopy = policyText(policyState);
-  return <main className="chat-shell">
+  return <main className={`chat-shell${sidebarCollapsed ? ' is-sidebar-collapsed' : ''}`}>
     <p className="sr-only" role="status" aria-live="polite">{status}</p>
     {menuOpen && <button className="mobile-backdrop" aria-label="대화 메뉴 닫기" onClick={() => closeDrawer(true)} />}
-    <aside ref={drawerRef} className={`chat-sidebar${menuOpen ? ' is-open' : ''}`} aria-label="대화 탐색" tabIndex={-1}>
+    <aside id="tenant-chat-sidebar" ref={drawerRef} className={`chat-sidebar${menuOpen ? ' is-open' : ''}`} aria-label="대화 탐색" tabIndex={-1}>
       <div className="sidebar-scroll">
         <div className="sidebar-brand-row">
           <div className="brand"><span className="brand-mark"><MessageSquareText size={21} aria-hidden /></span>GateLM Chat</div>
-          <Button className="mobile-close" variant="ghost" aria-label="대화 메뉴 닫기" onClick={() => closeDrawer(true)}><X size={20} aria-hidden /></Button>
+          <button
+            className="g-button g-button--ghost sidebar-collapse-toggle"
+            aria-controls="tenant-chat-sidebar"
+            aria-label={compactLayout ? '대화 메뉴 닫기' : '사이드바 접기'}
+            aria-expanded="true"
+            onClick={compactLayout ? () => closeDrawer(true) : toggleNavigation}
+            type="button"
+          >
+            <PanelLeftClose size={19} strokeWidth={2.2} aria-hidden />
+          </button>
         </div>
+        <nav className="sidebar-primary-nav" aria-label="Tenant Chat">
+          <button
+            aria-current={activeView === 'chat' ? 'page' : undefined}
+            className={activeView === 'chat' ? 'is-active' : ''}
+            onClick={() => {
+              setActiveView('chat');
+              closeDrawer(false);
+            }}
+            type="button"
+          >
+            <MessageSquareText size={17} aria-hidden /><span>채팅</span>
+          </button>
+          <button
+            aria-current={activeView === 'usage-ranking' ? 'page' : undefined}
+            className={activeView === 'usage-ranking' ? 'is-active' : ''}
+            onClick={() => {
+              setActiveView('usage-ranking');
+              closeDrawer(false);
+            }}
+            type="button"
+          >
+            <BarChart3 size={17} aria-hidden /><span>사용량 순위</span>
+          </button>
+        </nav>
         <Button className="new-conversation" onClick={createConversation} disabled={streaming || creatingConversation}><Plus size={17} aria-hidden />새 대화</Button>
         <div className="conversation-heading"><span>내 대화</span><span>{conversations.length}</span></div>
         <ul className="conversation-list" aria-label="대화 목록">
@@ -550,7 +705,7 @@ export function ChatShell() {
               <input id={`rename-${conversation.id}`} value={renameTitle} maxLength={120} autoFocus onChange={(event) => setRenameTitle(event.target.value)} onKeyDown={(event) => { if (event.key === 'Escape') cancelRename(); }} />
               <div><Button type="submit" variant="secondary">저장</Button><Button type="button" variant="ghost" onClick={cancelRename}>취소</Button></div>
             </form> : <>
-              <button className="conversation-select" aria-current={conversation.id === selectedId ? 'page' : undefined} onClick={() => { setSelectedId(conversation.id); closeDrawer(false); }}>
+              <button className="conversation-select" aria-current={activeView === 'chat' && conversation.id === selectedId ? 'page' : undefined} onClick={() => { setActiveView('chat'); setSelectedId(conversation.id); closeDrawer(false); }}>
                 <MessageSquareText size={16} aria-hidden /><span>{conversation.title}</span>
               </button>
               <div className="conversation-actions">
@@ -569,14 +724,29 @@ export function ChatShell() {
       <div className="sidebar-account">
         <Badge><Building2 className="badge-leading-icon" size={14} aria-hidden />{session.selectedTenant.name}</Badge>
         <div><div className="account-name">{displayName}</div><div className="account-email">{session.user.email}</div></div>
+        {session.user.hasLocalPassword ? (
+          <Button variant="ghost" onClick={() => router.push('/change-password')}>
+            <KeyRound size={17} aria-hidden />비밀번호 변경
+          </Button>
+        ) : null}
         <Button variant="ghost" onClick={logout}><LogOut size={17} aria-hidden />로그아웃</Button>
       </div>
     </aside>
-    <section className="chat-main">
+    <section className={`chat-main${menuOpen ? ' is-drawer-open' : ''}`}>
       <header className="chat-topbar">
-        <button ref={drawerTriggerRef} className="g-button g-button--ghost mobile-menu" aria-label="대화 메뉴 열기" aria-expanded={menuOpen} onClick={() => setMenuOpen(true)}><Menu size={21} aria-hidden /></button>
-        <div className="topbar-title"><strong>{selected?.title ?? 'GateLM Chat'}</strong><span>{session.selectedTenant.name}{selected ? ` · ${selected.knowledgeMode === 'tenant' ? '사내 지식 채팅' : '일반 채팅'}` : ''}</span></div>
-        <div className="topbar-actions">
+        <button
+          ref={drawerTriggerRef}
+          className="g-button g-button--ghost navigation-toggle navigation-open-toggle"
+          aria-controls="tenant-chat-sidebar"
+          aria-label={compactLayout ? '대화 메뉴 열기' : '사이드바 펼치기'}
+          aria-expanded={compactLayout ? menuOpen : !sidebarCollapsed}
+          onClick={compactLayout ? () => setMenuOpen(true) : toggleNavigation}
+          type="button"
+        >
+          <PanelLeftOpen size={19} strokeWidth={2.2} aria-hidden />
+        </button>
+        <h1 className="sr-only">{activeView === 'usage-ranking' ? '사용량 순위' : selected?.title ?? 'GateLM Chat'}</h1>
+        {activeView === 'chat' && <div className="topbar-actions">
           <label className="context-setting" title={selected ? '이 대화의 다음 메시지에 사내 지식을 사용할지 선택합니다.' : '다음에 만들 새 대화에서 사내 지식을 사용할지 선택합니다.'}>
             <input
               aria-label={selected ? '이 대화에 사내 지식 사용' : '다음 새 대화에 사내 지식 사용'}
@@ -600,9 +770,9 @@ export function ChatShell() {
             <span className="context-setting-copy"><strong>컨텍스트 유지</strong><span>{contextMode === 'conversation' ? '켜짐' : '꺼짐'}</span></span>
           </label>
           <Button variant="secondary" aria-label="새 대화 만들기" onClick={createConversation} disabled={streaming || creatingConversation}><Plus size={17} aria-hidden /><span className="desktop-label">새 대화</span></Button>
-        </div>
+        </div>}
       </header>
-      <div className={`conversation-workspace${selected ? '' : ' is-empty'}`}>
+      <div hidden={activeView !== 'chat'} className={`conversation-workspace${selected ? '' : ' is-empty'}`}>
         <div className={`policy-banner policy-${policyState}`} role={policyState === 'blocked' ? 'alert' : 'status'}>
           {policyState === 'normal' ? <ShieldCheck size={18} aria-hidden /> : policyState === 'blocked' ? <AlertTriangle size={18} aria-hidden /> : <Gauge size={18} aria-hidden />}
           <div><strong>{policyCopy.label}</strong><span>{policyCopy.description}</span></div>
@@ -611,7 +781,29 @@ export function ChatShell() {
         <div className="message-stage">
           {!selected ? <div className="empty-chat"><div className="empty-chat-inner"><div className="empty-icon"><MessageSquareText size={30} aria-hidden /></div><h1>무엇을 함께 해결할까요?</h1><p>메시지를 보내면 새 대화를 만들고 조직의 정책 안에서 안전하게 답변합니다.</p></div></div>
             : messages.length === 0 && !historyLoading ? <div className="empty-chat"><div className="empty-chat-inner"><div className="empty-icon"><MessageSquareText size={30} aria-hidden /></div><h1>대화를 시작해 보세요</h1><p>업무 아이디어, 요약, 초안 작성을 요청할 수 있습니다. 메시지는 암호화된 대화 기록으로 복원됩니다.</p></div></div>
-              : <ol ref={logRef} className="message-log" role="log" aria-live="polite" aria-relevant="additions text" aria-busy={streaming || historyLoading}>
+              : <ol
+                  ref={logRef}
+                  className="message-log"
+                  role="log"
+                  aria-live="polite"
+                  aria-relevant="additions text"
+                  aria-busy={streaming || historyLoading}
+                  onKeyDown={(event) => {
+                    if (event.key === 'ArrowUp' || event.key === 'PageUp' || event.key === 'Home') pauseScrollFollowing();
+                  }}
+                  onScroll={handleLogScroll}
+                  onTouchStart={(event) => { touchPositionRef.current = event.touches[0]?.clientY ?? null; }}
+                  onTouchMove={(event) => {
+                    const currentY = event.touches[0]?.clientY;
+                    if (currentY !== undefined && touchPositionRef.current !== null && currentY > touchPositionRef.current) {
+                      pauseScrollFollowing();
+                    }
+                    touchPositionRef.current = currentY ?? null;
+                  }}
+                  onTouchEnd={() => { touchPositionRef.current = null; }}
+                  onWheel={(event) => { if (event.deltaY < 0) pauseScrollFollowing(); }}
+                  tabIndex={0}
+                >
                 {messages.map((message) => <li key={message.localId ?? message.id} className={`message-row message-${message.role}`}>
                   {message.role === 'user' ? <UserMessage content={message.content} createdAt={message.createdAt} maskingApplied={message.maskingApplied} /> : <>
                     <div className="message-avatar" aria-hidden><MessageSquareText size={17} /></div>
@@ -636,6 +828,9 @@ export function ChatShell() {
                 </li>)}
                 {historyLoading && <li className="history-loading"><LoaderCircle className="spin" size={18} aria-hidden />대화 기록을 불러오는 중…</li>}
               </ol>}
+          {selected && latestAnswerAvailable && <Button className="latest-answer" variant="secondary" onClick={jumpToLatestAnswer}>
+            <ArrowDown size={16} aria-hidden />최신 답변
+          </Button>}
           {selected && messageCursor && <Button className="history-more" variant="ghost" onClick={loadMoreMessages} disabled={historyLoading}>대화 기록 더 보기</Button>}
         </div>
         <form className="composer-area" onSubmit={sendMessage}>
@@ -653,6 +848,7 @@ export function ChatShell() {
           <p className="composer-note">Enter로 전송 · Shift+Enter로 줄바꿈 · 답변은 확인이 필요할 수 있습니다.</p>
         </form>
       </div>
+      <UsageRankingView active={activeView === 'usage-ranking'} />
     </section>
   </main>;
 

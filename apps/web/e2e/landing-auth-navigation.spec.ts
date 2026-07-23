@@ -84,10 +84,41 @@ test("successful login goes directly to the tenant dashboard", async ({ page }) 
 
   const loginDialog = page.getByRole("dialog");
   await loginDialog.locator('input[name="email"]').fill("admin@example.com");
-  await loginDialog.locator('input[name="password"]').fill("local-test-password");
+  const loginPassword = loginDialog.locator('input[name="password"]');
+  await loginPassword.fill("local-test-password");
+  await expect(loginPassword).toHaveAttribute("type", "password");
+  await loginDialog.locator(".password-visibility-toggle").click();
+  await expect(loginPassword).toHaveAttribute("type", "text");
   await loginDialog.locator('button[type="submit"]').click();
 
   await expect(page).toHaveURL(new RegExp(`${dashboardPath}$`));
+});
+
+test("login account recovery submits the signup email without exposing account existence", async ({ page }) => {
+  await prepareAnonymousSessionRoute(page);
+  let requestedEmail = "";
+  await page.route("**/api/auth/password-reset/request", async (route) => {
+    const payload = route.request().postDataJSON() as { email?: string };
+    requestedEmail = payload.email ?? "";
+    await route.fulfill({
+      body: JSON.stringify({ data: { accepted: true } }),
+      contentType: "application/json",
+      status: 202
+    });
+  });
+
+  await page.goto("/");
+  const topbar = page.getByRole("navigation", { exact: true, name: "GateLM landing navigation" });
+  await topbar.locator(".landing-top-actions .landing-auth-button").first().click();
+
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.locator(".landing-auth-help").first()).toBeVisible();
+  await dialog.locator(".landing-auth-text-button").first().click();
+  await dialog.locator('input[name="email"]').fill("owner@example.com");
+  await dialog.locator('button[type="submit"]').click();
+
+  expect(requestedEmail).toBe("owner@example.com");
+  await expect(dialog.locator(".landing-auth-message-success")).toBeVisible();
 });
 
 test("email signup opens the tenant Projects management page", async ({ page }) => {
@@ -143,7 +174,13 @@ test("email signup opens the tenant Projects management page", async ({ page }) 
   const signupDialog = page.getByRole("dialog");
   await signupDialog.locator('input[name="name"]').fill("Owner User");
   await signupDialog.locator('input[name="email"]').fill("owner@example.com");
-  await signupDialog.locator('input[name="password"]').fill("correct-horse-battery-staple");
+  const signupPassword = signupDialog.locator('input[name="password"]');
+  const signupConfirmation = signupDialog.locator('input[name="passwordConfirmation"]');
+  await expect(signupPassword).toHaveAttribute("minlength", "8");
+  await expect(signupPassword).toHaveAttribute("maxlength", "15");
+  await signupPassword.fill("Valid1!Pass");
+  await signupConfirmation.fill("Valid1!Pass");
+  await expect(signupDialog.locator(".password-input-valid-icon")).toHaveCount(2);
   await signupDialog.locator('button[type="submit"]').click();
 
   await expect(signupDialog.locator(".landing-signup-steps li")).toHaveCount(4);

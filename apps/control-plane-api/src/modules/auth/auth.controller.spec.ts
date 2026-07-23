@@ -4,21 +4,27 @@ import { Test } from '@nestjs/testing';
 import request = require('supertest');
 
 import { AuthModule } from './auth.module';
+import { AuthService } from './auth.service';
 import {
   AUTH_REPOSITORY,
   EMAIL_SENDER,
   GOOGLE_OAUTH_CLIENT,
 } from './auth.tokens';
-import { hashPassword } from './auth.crypto';
+import { hashPassword, hashSecret } from './auth.crypto';
 import { EmployeeInvitationNotFoundError } from './auth.repository';
 import { createInMemoryAuthRepository } from './testing/in-memory-auth-repository';
 
 describe('Auth HTTP API', () => {
   let app: INestApplication;
+  let authService: AuthService;
   let repository: ReturnType<typeof createInMemoryAuthRepository>;
   let emailSender: {
+    passwordChangesSent: Array<{ changedAt: Date; email: string }>;
+    passwordResetsSent: Array<{ email: string; expiresAt: Date; resetUrl: string }>;
     sent: Array<{ email: string; code: string }>;
     sendEmployeeInvitationEmail: jest.Mock;
+    sendPasswordChangedEmail: jest.Mock;
+    sendPasswordResetEmail: jest.Mock;
     sendProjectAdminInvitationEmail: jest.Mock;
     sendVerificationEmail: jest.Mock;
   };
@@ -39,8 +45,16 @@ describe('Auth HTTP API', () => {
   ) {
     repository = createInMemoryAuthRepository();
     emailSender = {
+      passwordChangesSent: [],
+      passwordResetsSent: [],
       sent: [],
       sendEmployeeInvitationEmail: jest.fn(async () => undefined),
+      sendPasswordChangedEmail: jest.fn(async (message) => {
+        emailSender.passwordChangesSent.push(message);
+      }),
+      sendPasswordResetEmail: jest.fn(async (message) => {
+        emailSender.passwordResetsSent.push(message);
+      }),
       sendProjectAdminInvitationEmail: jest.fn(async () => undefined),
       sendVerificationEmail: jest.fn(async (message) => {
         emailSender.sent.push(message);
@@ -101,6 +115,7 @@ describe('Auth HTTP API', () => {
       .useValue(configService)
       .compile();
 
+    authService = moduleRef.get(AuthService);
     app = moduleRef.createNestApplication();
     app.useGlobalPipes(
       new ValidationPipe({
@@ -110,6 +125,27 @@ describe('Auth HTTP API', () => {
       }),
     );
     await app.init();
+  }
+
+  async function createVerifiedAccount(
+    email: string,
+    password = 'Valid1!Pass',
+  ) {
+    const agent = request.agent(app.getHttpServer());
+    await agent
+      .post('/api/auth/signup')
+      .send({ email, name: 'Account Owner', password })
+      .expect(201);
+    const code = emailSender.sent.at(-1)?.code;
+    await agent
+      .post('/api/auth/email/verify')
+      .send({ code, email })
+      .expect(200);
+    await agent
+      .post('/api/auth/organizations')
+      .send({ organizationName: 'Account Recovery Tenant' })
+      .expect(201);
+    return agent;
   }
 
   beforeEach(async () => {
@@ -126,7 +162,7 @@ describe('Auth HTTP API', () => {
       .send({
         email: 'Admin@Example.com',
         name: 'Kim Admin',
-        password: 'correct-horse-battery-staple',
+        password: 'Valid1!Pass',
       })
       .expect(201);
 
@@ -165,7 +201,7 @@ describe('Auth HTTP API', () => {
         email: 'employee@example.com',
         employeeInviteToken: 'invalid-employee-invite-token',
         name: 'Employee',
-        password: 'correct-horse-battery-staple',
+        password: 'Valid1!Pass',
       })
       .expect(401);
   });
@@ -181,7 +217,7 @@ describe('Auth HTTP API', () => {
         email: 'employee@example.com',
         employeeInviteToken: 'employee-invite-token',
         name: 'Employee',
-        password: 'correct-horse-battery-staple',
+        password: 'Valid1!Pass',
       })
       .expect(500);
   });
@@ -195,7 +231,7 @@ describe('Auth HTTP API', () => {
       .send({
         email: 'dev-owner@example.com',
         name: 'Dev Owner',
-        password: 'correct-horse-battery-staple',
+        password: 'Valid1!Pass',
       })
       .expect(201);
 
@@ -226,7 +262,7 @@ describe('Auth HTTP API', () => {
       .send({
         email: 'default-fake-owner@example.com',
         name: 'Default Fake Owner',
-        password: 'correct-horse-battery-staple',
+        password: 'Valid1!Pass',
       })
       .expect(201);
 
@@ -253,7 +289,7 @@ describe('Auth HTTP API', () => {
       .send({
         email: 'retry-owner@example.com',
         name: 'Retry Owner',
-        password: 'correct-horse-battery-staple',
+        password: 'Valid1!Pass',
       })
       .expect(201);
 
@@ -262,7 +298,7 @@ describe('Auth HTTP API', () => {
       .send({
         email: 'retry-owner@example.com',
         name: 'Retry Owner',
-        password: 'correct-horse-battery-staple',
+        password: 'Valid1!Pass',
       })
       .expect(201);
 
@@ -296,7 +332,7 @@ describe('Auth HTTP API', () => {
       .send({
         email: 'resume-owner@example.com',
         name: 'Resume Owner',
-        password: 'correct-horse-battery-staple',
+        password: 'Valid1!Pass',
       })
       .expect(201);
 
@@ -305,7 +341,7 @@ describe('Auth HTTP API', () => {
       .send({
         email: 'resume-owner@example.com',
         name: 'Resume Owner',
-        password: 'correct-horse-battery-staple',
+        password: 'Valid1!Pass',
       })
       .expect(201);
 
@@ -332,7 +368,7 @@ describe('Auth HTTP API', () => {
     await agent.post('/api/auth/signup').send({
       email: 'owner@example.com',
       name: 'Owner User',
-      password: 'correct-horse-battery-staple',
+      password: 'Valid1!Pass',
     });
     const code = emailSender.sent[0]?.code;
     expect(repository.dump().users).toHaveLength(0);
@@ -376,6 +412,7 @@ describe('Auth HTTP API', () => {
     expect(repository.dump().users).toHaveLength(1);
     expect(repository.dump().tenants).toHaveLength(1);
     expect(repository.dump().tenantMemberships).toHaveLength(1);
+    expect(repository.dump().tenantAdmins).toHaveLength(1);
   });
 
   it('accepts a project admin invitation during email verification', async () => {
@@ -392,7 +429,7 @@ describe('Auth HTTP API', () => {
     await agent.post('/api/auth/signup').send({
       email: 'project-admin@example.com',
       name: 'Project Admin',
-      password: 'correct-horse-battery-staple',
+      password: 'Valid1!Pass',
       projectInviteToken: 'project-admin-invite-token',
     });
 
@@ -446,7 +483,7 @@ describe('Auth HTTP API', () => {
     await agent.post('/api/auth/signup').send({
       email: 'limited@example.com',
       name: 'Limited User',
-      password: 'correct-horse-battery-staple',
+      password: 'Valid1!Pass',
     });
     const code = emailSender.sent[0]?.code;
     const invalidCode = code === '000000' ? '000001' : '000000';
@@ -473,7 +510,7 @@ describe('Auth HTTP API', () => {
     await agent.post('/api/auth/signup').send({
       email: 'login@example.com',
       name: 'Login User',
-      password: 'correct-horse-battery-staple',
+      password: 'Valid1!Pass',
     });
     await agent
       .post('/api/auth/email/verify')
@@ -486,15 +523,233 @@ describe('Auth HTTP API', () => {
       .post('/api/auth/login')
       .send({
         email: 'login@example.com',
-        password: 'correct-horse-battery-staple',
+        password: 'Valid1!Pass',
       })
       .expect(200);
 
     const cookie = String(loginResponse.headers['set-cookie']);
     expect(cookie).toContain('gatelm_session=');
     expect(cookie).toContain('HttpOnly');
+    expect(loginResponse.body).toMatchObject({
+      data: {
+        user: { hasLocalPassword: true },
+      },
+    });
     expect(JSON.stringify(loginResponse.body)).not.toContain('accessToken');
     expect(JSON.stringify(loginResponse.body)).not.toContain('refreshToken');
+  });
+
+  it('allows an existing verified account to log in with a legacy password outside the new policy', async () => {
+    const email = 'legacy-login@example.com';
+    const legacyPassword = 'legacy password longer than fifteen';
+    const user = await repository.createUser({
+      authProvider: 'local',
+      email,
+      emailVerifiedAt: new Date(),
+      name: 'Legacy Login',
+      passwordHash: await hashPassword(legacyPassword),
+      status: 'active',
+    });
+    await repository.createTenantAndMembership({
+      organizationName: 'Legacy Tenant',
+      userId: user.id,
+    });
+
+    await request(app.getHttpServer())
+      .post('/api/auth/login')
+      .send({ email, password: legacyPassword })
+      .expect(200);
+  });
+
+  it('rejects passwords missing a required character class', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/api/auth/signup')
+      .send({
+        email: 'weak-password@example.com',
+        name: 'Weak Password',
+        password: 'alllower1!',
+      })
+      .expect(400);
+
+    expect(response.body).toMatchObject({ code: 'WEAK_PASSWORD' });
+    expect(emailSender.sent).toHaveLength(0);
+    expect(repository.dump().users).toHaveLength(0);
+  });
+
+  it('resets a local password with a hashed single-use token and revokes old sessions', async () => {
+    const email = 'reset-owner@example.com';
+    const oldPassword = 'Valid1!Pass';
+    const newPassword = 'NewValid2!Pass';
+    const existingAgent = await createVerifiedAccount(email, oldPassword);
+
+    const resetResponse = await request(app.getHttpServer())
+      .post('/api/auth/password-reset/request')
+      .send({ email })
+      .expect(202);
+    const missingAccountResponse = await request(app.getHttpServer())
+      .post('/api/auth/password-reset/request')
+      .send({ email: 'missing@example.com' })
+      .expect(202);
+
+    expect(resetResponse.body).toEqual({ data: { accepted: true } });
+    expect(missingAccountResponse.body).toEqual(resetResponse.body);
+    expect(emailSender.passwordResetsSent).toHaveLength(1);
+    const resetUrl = emailSender.passwordResetsSent[0]!.resetUrl;
+    const resetToken = decodeURIComponent(
+      new URL(resetUrl).hash.slice('#token='.length),
+    );
+    expect(resetUrl).toContain('/auth/reset-password#token=');
+    expect(JSON.stringify(repository.dump().passwordResetTokens)).not.toContain(
+      resetToken,
+    );
+
+    await request(app.getHttpServer())
+      .post('/api/auth/password-reset/confirm')
+      .send({ newPassword, token: resetToken })
+      .expect(200);
+    await request(app.getHttpServer())
+      .post('/api/auth/password-reset/confirm')
+      .send({ newPassword: 'Other3!Pass', token: resetToken })
+      .expect(400);
+
+    await existingAgent.get('/api/auth/me').expect(401);
+    await request(app.getHttpServer())
+      .post('/api/auth/login')
+      .send({ email, password: oldPassword })
+      .expect(401);
+    await request(app.getHttpServer())
+      .post('/api/auth/login')
+      .send({ email, password: newPassword })
+      .expect(200);
+    expect(emailSender.passwordChangesSent).toHaveLength(1);
+  });
+
+  it('rejects an expired reset token without changing the password or session', async () => {
+    const email = 'expired-reset@example.com';
+    const password = 'Valid1!Pass';
+    const accountAgent = await createVerifiedAccount(email, password);
+    const user = repository.dump().users.find((item) => item.email === email);
+    expect(user).toBeDefined();
+
+    const expiredToken = 'expired-reset-token-with-at-least-32-characters';
+    await repository.createPasswordResetToken({
+      expiresAt: new Date(Date.now() - 1_000),
+      tokenHash: hashSecret(expiredToken),
+      userId: user!.id,
+    });
+
+    const response = await request(app.getHttpServer())
+      .post('/api/auth/password-reset/confirm')
+      .send({
+        newPassword: 'Other4!Pass',
+        token: expiredToken,
+      })
+      .expect(400);
+
+    expect(response.body).toMatchObject({
+      code: 'INVALID_PASSWORD_RESET_TOKEN',
+    });
+    await accountAgent.get('/api/auth/me').expect(200);
+    await request(app.getHttpServer())
+      .post('/api/auth/login')
+      .send({ email, password })
+      .expect(200);
+  });
+
+  it('limits reset link issuance to five per account per hour without changing the public response', async () => {
+    const email = 'reset-rate-limit@example.com';
+    await createVerifiedAccount(email);
+
+    for (let requestIndex = 0; requestIndex < 6; requestIndex += 1) {
+      const response = await request(app.getHttpServer())
+        .post('/api/auth/password-reset/request')
+        .send({ email })
+        .expect(202);
+      expect(response.body).toEqual({ data: { accepted: true } });
+    }
+
+    expect(emailSender.passwordResetsSent).toHaveLength(5);
+    expect(repository.dump().passwordResetTokens).toHaveLength(5);
+  });
+
+  it('changes a Tenant Chat authenticated user password and revokes every existing session', async () => {
+    const email = 'tenant-chat-change@example.com';
+    const oldPassword = 'Valid1!Pass';
+    const newPassword = 'Tenant2!Pass';
+    const currentAgent = await createVerifiedAccount(email, oldPassword);
+    const user = repository.dump().users.find((item) => item.email === email);
+    expect(user).toBeDefined();
+    const actorVersionBefore = user!.actorAuthzVersion;
+
+    await expect(
+      authService.changePasswordForUser(user!.id, {
+        currentPassword: oldPassword,
+        newPassword,
+      }),
+    ).resolves.toEqual({ passwordChanged: true });
+
+    await currentAgent.get('/api/auth/me').expect(401);
+    await request(app.getHttpServer())
+      .post('/api/auth/login')
+      .send({ email, password: oldPassword })
+      .expect(401);
+    await request(app.getHttpServer())
+      .post('/api/auth/login')
+      .send({ email, password: newPassword })
+      .expect(200);
+    expect(
+      repository.dump().users.find((item) => item.id === user!.id)
+        ?.actorAuthzVersion,
+    ).toBe(actorVersionBefore + 1);
+  });
+
+  it('changes a signed-in local password and revokes every existing session', async () => {
+    const email = 'change-owner@example.com';
+    const oldPassword = 'Valid1!Pass';
+    const newPassword = 'Changed3!Pass';
+    const currentAgent = await createVerifiedAccount(email, oldPassword);
+    const otherAgent = request.agent(app.getHttpServer());
+    await otherAgent
+      .post('/api/auth/login')
+      .send({ email, password: oldPassword })
+      .expect(200);
+
+    const changeResponse = await currentAgent
+      .post('/api/auth/password/change')
+      .send({ currentPassword: oldPassword, newPassword })
+      .expect(200);
+
+    expect(changeResponse.body).toEqual({
+      data: { passwordChanged: true },
+    });
+    expect(String(changeResponse.headers['set-cookie'])).toContain(
+      'gatelm_session=;',
+    );
+    await currentAgent.get('/api/auth/me').expect(401);
+    await otherAgent.get('/api/auth/me').expect(401);
+    await request(app.getHttpServer())
+      .post('/api/auth/login')
+      .send({ email, password: oldPassword })
+      .expect(401);
+    await request(app.getHttpServer())
+      .post('/api/auth/login')
+      .send({ email, password: newPassword })
+      .expect(200);
+    expect(emailSender.passwordChangesSent).toHaveLength(1);
+  });
+
+  it('rejects reusing the current password without revoking the active session', async () => {
+    const email = 'unchanged-password@example.com';
+    const password = 'Valid1!Pass';
+    const agent = await createVerifiedAccount(email, password);
+
+    const response = await agent
+      .post('/api/auth/password/change')
+      .send({ currentPassword: password, newPassword: password })
+      .expect(400);
+
+    expect(response.body).toMatchObject({ code: 'PASSWORD_UNCHANGED' });
+    await agent.get('/api/auth/me').expect(200);
   });
 
   it('does not log in a legacy pending local signup without tenant membership', async () => {
@@ -505,7 +760,7 @@ describe('Auth HTTP API', () => {
       email: 'pending-login@example.com',
       emailVerifiedAt: null,
       name: 'Pending Login',
-      passwordHash: await hashPassword('correct-horse-battery-staple'),
+      passwordHash: await hashPassword('Valid1!Pass'),
       status: 'pending_email_verification',
     });
 
@@ -513,7 +768,7 @@ describe('Auth HTTP API', () => {
       .post('/api/auth/login')
       .send({
         email: 'pending-login@example.com',
-        password: 'correct-horse-battery-staple',
+        password: 'Valid1!Pass',
       })
       .expect(401);
     expect(repository.dump().users[0]?.emailVerifiedAt).toBeNull();
@@ -549,6 +804,7 @@ describe('Auth HTTP API', () => {
         },
         user: {
           email: 'google-admin@example.com',
+          hasLocalPassword: false,
         },
       },
     });

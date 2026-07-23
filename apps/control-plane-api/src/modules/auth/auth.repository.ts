@@ -15,6 +15,7 @@ export class EmployeeInvitationExistingAccountError extends Error {
 }
 
 export interface AuthUser {
+  actorAuthzVersion: number;
   id: string;
   email: string;
   name: string | null;
@@ -129,6 +130,19 @@ export interface EmailVerificationCode {
   createdAt: Date;
 }
 
+export interface PasswordResetToken {
+  id: string;
+  userId: string;
+  tokenHash: string;
+  expiresAt: Date;
+  consumedAt: Date | null;
+  createdAt: Date;
+}
+
+export interface PasswordResetTokenWithUser extends PasswordResetToken {
+  user: AuthUser;
+}
+
 export interface OAuthAccount {
   id: string;
   userId: string;
@@ -240,6 +254,7 @@ export interface AuthRepository {
     tokenHash: string,
     now: Date,
   ): Promise<AuthProjectAdminInvitation | null>;
+  findUserById(userId: string): Promise<AuthUser | null>;
   findUserByEmail(email: string): Promise<AuthUser | null>;
   recordVerificationCodeFailure(
     id: string,
@@ -248,4 +263,27 @@ export interface AuthRepository {
   revokeSession(id: string, revokedAt: Date): Promise<void>;
   updateUserEmailVerified(userId: string, verifiedAt: Date): Promise<AuthUser>;
   updateUserLastLogin(userId: string, lastLoginAt: Date): Promise<void>;
+  countPasswordResetTokensSince(userId: string, since: Date): Promise<number>;
+  createPasswordResetToken(input: {
+    expiresAt: Date;
+    tokenHash: string;
+    userId: string;
+  }): Promise<PasswordResetToken>;
+  findActivePasswordResetTokenByHash(
+    tokenHash: string,
+    now: Date,
+  ): Promise<PasswordResetTokenWithUser | null>;
+  completePasswordReset(input: {
+    changedAt: Date;
+    expectedPasswordHash: string;
+    passwordHash: string;
+    tokenId: string;
+    userId: string;
+  }): Promise<AuthUser | null>;
+  changePasswordAndRevokeSessions(input: {
+    changedAt: Date;
+    expectedPasswordHash: string;
+    passwordHash: string;
+    userId: string;
+  }): Promise<AuthUser | null>;
 }

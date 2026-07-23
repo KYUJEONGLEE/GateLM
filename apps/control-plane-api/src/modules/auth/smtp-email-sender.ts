@@ -8,6 +8,8 @@ import {
   EmailSender,
   EmployeeInvitationEmailMessage,
   ProjectAdminInvitationEmailMessage,
+  PasswordChangedEmailMessage,
+  PasswordResetEmailMessage,
   VerificationEmailMessage,
 } from './email-sender';
 
@@ -69,6 +71,42 @@ export class SmtpEmailSender implements EmailSender {
       await connection.close();
     }
   }
+
+  async sendPasswordChangedEmail(
+    message: PasswordChangedEmailMessage,
+  ): Promise<void> {
+    const smtpConfig = this.readConfig();
+    const connection = await SmtpConnection.open(smtpConfig);
+
+    try {
+      await connection.sendMail({
+        body: this.renderPasswordChangedBody(message),
+        from: smtpConfig.from,
+        subject: 'Your GateLM password was changed',
+        to: message.email,
+      });
+    } finally {
+      await connection.close();
+    }
+  }
+
+  async sendPasswordResetEmail(
+    message: PasswordResetEmailMessage,
+  ): Promise<void> {
+    const smtpConfig = this.readConfig();
+    const connection = await SmtpConnection.open(smtpConfig);
+
+    try {
+      await connection.sendMail({
+        body: this.renderPasswordResetBody(message),
+        from: smtpConfig.from,
+        subject: 'Reset your GateLM password',
+        to: message.email,
+      });
+    } finally {
+      await connection.close();
+    }
+  }
   async sendVerificationEmail(
     message: VerificationEmailMessage,
   ): Promise<void> {
@@ -118,6 +156,32 @@ export class SmtpEmailSender implements EmailSender {
       `This invitation expires at: ${message.expiresAt.toISOString()}`,
       '',
       'If you did not expect this invitation, you can ignore this email.',
+    ].join('\r\n');
+  }
+
+  private renderPasswordChangedBody(
+    message: PasswordChangedEmailMessage,
+  ): string {
+    return [
+      'Your GateLM password was changed.',
+      '',
+      `Changed at: ${message.changedAt.toISOString()}`,
+      '',
+      'All existing GateLM sessions were signed out for your protection.',
+      '',
+      'If you did not make this change, contact your GateLM administrator immediately.',
+    ].join('\r\n');
+  }
+
+  private renderPasswordResetBody(message: PasswordResetEmailMessage): string {
+    return [
+      'Use the link below to reset your GateLM password:',
+      message.resetUrl,
+      '',
+      `This link expires at: ${message.expiresAt.toISOString()}`,
+      'The link can be used only once.',
+      '',
+      'If you did not request a password reset, you can ignore this email.',
     ].join('\r\n');
   }
 

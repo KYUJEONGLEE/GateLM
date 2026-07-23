@@ -220,6 +220,12 @@ test("dashboard keeps cost range controls and stacked mobile panels inside the l
     /\.dashboard-secondary-grid \{[^}]*grid-template-columns: 1fr;[^}]*height: auto;[^}]*max-height: none;[^}]*overflow: visible;/
   );
   expect(styles).toMatch(
+    /\.dashboard-cost-chart-stack \{[^}]*grid-template-rows: minmax\(180px, 1fr\) 112px;/
+  );
+  expect(styles).toMatch(
+    /\.dashboard-cost-over-time-chart \{[^}]*min-height: 180px;/
+  );
+  expect(styles).toMatch(
     /html\[data-theme="dark"\] \.dashboard-cost-over-time-metrics > div\[data-kind="total"\] strong,[\s\S]*?color: var\(--foreground\);/
   );
 });
@@ -273,10 +279,18 @@ test("dashboard keeps its compact default scale and enlarges operational labels 
 
 test("dashboard charts merge changed data without replaying unchanged series", async () => {
   const source = await readFile(chartSourceUrl, "utf8");
+  const densityChartSource = source.slice(
+    source.indexOf("export function DashboardCostDensityEChart"),
+    source.indexOf("function DashboardEChart")
+  );
 
   expect(source).toContain('window.matchMedia("(prefers-reduced-motion: reduce)")');
-  expect(source).toContain("animationDurationUpdate: reducedMotion ? 0 : 280");
+  expect(source).toContain(
+    "animationDurationUpdate: reducedMotion || !animateUpdates ? 0 : 280"
+  );
   expect(source).toContain('animationEasingUpdate: "cubicOut"');
+  expect(source.match(/animateUpdates=\{false\}/g)).toHaveLength(2);
+  expect(source).toContain('`updates:${animateUpdates ? "animated" : "instant"}`');
   expect(source).toContain("appliedOptionKeyRef.current === renderedOptionKey");
   expect(source).toContain("notMerge: false");
   expect(source).not.toContain('replaceMerge: ["series"]');
@@ -291,4 +305,10 @@ test("dashboard charts merge changed data without replaying unchanged series", a
   expect(source).toContain('type: "slider"');
   expect(source).toContain("showDataShadow: false");
   expect(source).toContain("components.DataZoomComponent");
+  expect(densityChartSource).toMatch(
+    /grid: \{\s*bottom: 6,\s*containLabel: true,\s*left: 34,\s*right: 34,/
+  );
+  expect(densityChartSource).toMatch(
+    /axisLabel: \{[\s\S]*?showMaxLabel: true,\s*showMinLabel: true/
+  );
 });
