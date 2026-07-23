@@ -8,6 +8,12 @@ import {
   MinLength,
 } from 'class-validator';
 
+import {
+  PASSWORD_MAX_LENGTH,
+  PASSWORD_MIN_LENGTH,
+  PASSWORD_POLICY_MESSAGE,
+} from '../password-policy';
+
 function trimString(value: unknown): unknown {
   return typeof value === 'string' ? value.trim() : value;
 }
@@ -25,8 +31,8 @@ export class SignupDto {
   name!: string;
 
   @IsString()
-  @MinLength(8)
-  @MaxLength(256)
+  @MinLength(PASSWORD_MIN_LENGTH, { message: PASSWORD_POLICY_MESSAGE })
+  @MaxLength(PASSWORD_MAX_LENGTH, { message: PASSWORD_POLICY_MESSAGE })
   password!: string;
 
   @Transform(({ value }) => trimString(value))
@@ -88,4 +94,36 @@ export class LoginDto {
   @MinLength(1)
   @MaxLength(256)
   password!: string;
+}
+
+export class RequestPasswordResetDto {
+  @Transform(({ value }) => trimString(value))
+  @IsEmail()
+  @MaxLength(254)
+  email!: string;
+}
+
+export class ConfirmPasswordResetDto {
+  @Transform(({ value }) => trimString(value))
+  @IsString()
+  @MinLength(32)
+  @MaxLength(512)
+  token!: string;
+
+  @IsString()
+  @MinLength(PASSWORD_MIN_LENGTH, { message: PASSWORD_POLICY_MESSAGE })
+  @MaxLength(PASSWORD_MAX_LENGTH, { message: PASSWORD_POLICY_MESSAGE })
+  newPassword!: string;
+}
+
+export class ChangePasswordDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(256)
+  currentPassword!: string;
+
+  @IsString()
+  @MinLength(PASSWORD_MIN_LENGTH, { message: PASSWORD_POLICY_MESSAGE })
+  @MaxLength(PASSWORD_MAX_LENGTH, { message: PASSWORD_POLICY_MESSAGE })
+  newPassword!: string;
 }

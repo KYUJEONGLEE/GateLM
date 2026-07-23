@@ -15,9 +15,10 @@
       "properties": {
         "id": { "type": "string", "format": "uuid" },
         "email": { "type": "string", "format": "email", "maxLength": 254 },
+        "hasLocalPassword": { "type": "boolean" },
         "name": { "type": ["string", "null"], "maxLength": 120 }
       },
-      "required": ["id", "email", "name"],
+      "required": ["id", "email", "hasLocalPassword", "name"],
       "additionalProperties": false
     },
     "selectedTenant": {

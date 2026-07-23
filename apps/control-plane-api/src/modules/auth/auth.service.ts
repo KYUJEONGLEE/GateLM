@@ -3,6 +3,7 @@ import {
   ConflictException,
   Inject,
   Injectable,
+  Logger,
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -15,6 +16,7 @@ import {
   normalizeEmail,
   verifyPassword,
 } from './auth.crypto';
+import { assertPasswordMeetsPolicy } from './password-policy';
 import {
   AuthEmployeeInvitation,
   AuthProjectAdmin,
@@ -30,9 +32,12 @@ import {
 } from './auth.repository';
 import { AUTH_REPOSITORY, EMAIL_SENDER, GOOGLE_OAUTH_CLIENT } from './auth.tokens';
 import {
+  ChangePasswordDto,
+  ConfirmPasswordResetDto,
   CreateOrganizationDto,
   LoginDto,
   SignupDto,
+  RequestPasswordResetDto,
   VerifyEmailDto,
 } from './dto/auth.dto';
 import { EmailSender } from './email-sender';
@@ -46,6 +51,7 @@ interface PublicUser {
   email: string;
   emailVerifiedAt: string | null;
   id: string | null;
+  hasLocalPassword: boolean;
   name: string | null;
 }
 
@@ -95,6 +101,11 @@ interface PublicEmployeeInvitation {
 
 const MAX_EMAIL_VERIFICATION_FAILURES = 5;
 
+const MAX_PASSWORD_RESET_REQUESTS_PER_HOUR = 5;
+const PASSWORD_RESET_EXPIRES_IN_MINUTES = 30;
+
+export type PasswordResetSurface = 'control-plane' | 'tenant-chat';
+
 export interface SessionIssue {
   expiresAt: Date;
   kind: AuthSessionKind;
@@ -117,6 +128,8 @@ export class SignupDraftUnauthorizedException extends UnauthorizedException {
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     @Inject(AUTH_REPOSITORY)
     private readonly repository: AuthRepository,
@@ -149,6 +162,7 @@ export class AuthService {
       );
     }
 
+    assertPasswordMeetsPolicy(dto.password);
     const passwordHash = await hashPassword(dto.password);
 
     if (dto.employeeInviteToken) {
@@ -483,6 +497,187 @@ export class AuthService {
       session,
       user: this.toPublicUser(user),
     };
+  }
+
+  async requestPasswordReset(
+    dto: RequestPasswordResetDto,
+    surface: PasswordResetSurface = 'control-plane',
+  ): Promise<{ accepted: true }> {
+    const accepted = { accepted: true as const };
+    const now = new Date();
+    const user = await this.repository.findUserByEmail(
+      normalizeEmail(dto.email),
+    );
+    if (
+      !user?.passwordHash ||
+      !user.emailVerifiedAt ||
+      user.status !== 'active'
+    ) {
+      return accepted;
+    }
+
+    const recentRequestCount =
+      await this.repository.countPasswordResetTokensSince(
+        user.id,
+        addHours(now, -1),
+      );
+    if (recentRequestCount >= MAX_PASSWORD_RESET_REQUESTS_PER_HOUR) {
+      return accepted;
+    }
+
+    const token = createOpaqueToken();
+    const expiresAt = addMinutes(now, PASSWORD_RESET_EXPIRES_IN_MINUTES);
+    await this.repository.createPasswordResetToken({
+      expiresAt,
+      tokenHash: hashSecret(token),
+      userId: user.id,
+    });
+
+    try {
+      await this.emailSender.sendPasswordResetEmail({
+        email: user.email,
+        expiresAt,
+        resetUrl: this.passwordResetUrl(token, surface),
+      });
+    } catch {
+      this.logger.error('Password reset email delivery failed.');
+    }
+
+    return accepted;
+  }
+
+  async confirmPasswordReset(
+    dto: ConfirmPasswordResetDto,
+  ): Promise<{ passwordReset: true }> {
+    assertPasswordMeetsPolicy(dto.newPassword);
+    const changedAt = new Date();
+    const resetToken =
+      await this.repository.findActivePasswordResetTokenByHash(
+        hashSecret(dto.token),
+        changedAt,
+      );
+    if (
+      !resetToken?.user.passwordHash ||
+      !resetToken.user.emailVerifiedAt ||
+      resetToken.user.status !== 'active'
+    ) {
+      throw new BadRequestException({
+        code: 'INVALID_PASSWORD_RESET_TOKEN',
+        message: 'Invalid or expired password reset link.',
+      });
+    }
+
+    if (
+      await verifyPassword(dto.newPassword, resetToken.user.passwordHash)
+    ) {
+      throw new BadRequestException({
+        code: 'PASSWORD_UNCHANGED',
+        message: 'Choose a password that is different from the current password.',
+      });
+    }
+
+    const passwordHash = await hashPassword(dto.newPassword);
+    const updatedUser = await this.repository.completePasswordReset({
+      changedAt,
+      expectedPasswordHash: resetToken.user.passwordHash,
+      passwordHash,
+      tokenId: resetToken.id,
+      userId: resetToken.userId,
+    });
+    if (!updatedUser) {
+      throw new BadRequestException({
+        code: 'INVALID_PASSWORD_RESET_TOKEN',
+        message: 'Invalid or expired password reset link.',
+      });
+    }
+
+    await this.notifyPasswordChanged(updatedUser.email, changedAt);
+    return { passwordReset: true };
+  }
+
+  async changePassword(
+    token: string | undefined,
+    dto: ChangePasswordDto,
+  ): Promise<{ passwordChanged: true }> {
+    const currentSession = await this.requireSession(token, 'full');
+    if (!currentSession.user.passwordHash) {
+      throw new BadRequestException({
+        code: 'PASSWORD_NOT_CONFIGURED',
+        message: 'This account uses Google sign-in and does not have a local password.',
+      });
+    }
+
+    const currentPasswordMatches = await verifyPassword(
+      dto.currentPassword,
+      currentSession.user.passwordHash,
+    );
+    if (!currentPasswordMatches) {
+      throw new UnauthorizedException('Current password is invalid.');
+    }
+
+    assertPasswordMeetsPolicy(dto.newPassword);
+    if (await verifyPassword(dto.newPassword, currentSession.user.passwordHash)) {
+      throw new BadRequestException({
+        code: 'PASSWORD_UNCHANGED',
+        message: 'Choose a password that is different from the current password.',
+      });
+    }
+
+    const changedAt = new Date();
+    const updatedUser = await this.repository.changePasswordAndRevokeSessions({
+      changedAt,
+      expectedPasswordHash: currentSession.user.passwordHash,
+      passwordHash: await hashPassword(dto.newPassword),
+      userId: currentSession.user.id,
+    });
+    if (!updatedUser) {
+      throw new UnauthorizedException('Authentication is required.');
+    }
+
+    await this.notifyPasswordChanged(updatedUser.email, changedAt);
+    return { passwordChanged: true };
+  }
+
+  async changePasswordForUser(
+    userId: string,
+    dto: ChangePasswordDto,
+  ): Promise<{ passwordChanged: true }> {
+    const user = await this.repository.findUserById(userId);
+    if (!user || user.status !== 'active' || !user.emailVerifiedAt) {
+      throw new UnauthorizedException('Authentication is required.');
+    }
+    if (!user.passwordHash) {
+      throw new BadRequestException({
+        code: 'PASSWORD_NOT_CONFIGURED',
+        message: 'This account uses Google sign-in and does not have a local password.',
+      });
+    }
+
+    if (!(await verifyPassword(dto.currentPassword, user.passwordHash))) {
+      throw new UnauthorizedException('Current password is invalid.');
+    }
+
+    assertPasswordMeetsPolicy(dto.newPassword);
+    if (await verifyPassword(dto.newPassword, user.passwordHash)) {
+      throw new BadRequestException({
+        code: 'PASSWORD_UNCHANGED',
+        message: 'Choose a password that is different from the current password.',
+      });
+    }
+
+    const changedAt = new Date();
+    const updatedUser = await this.repository.changePasswordAndRevokeSessions({
+      changedAt,
+      expectedPasswordHash: user.passwordHash,
+      passwordHash: await hashPassword(dto.newPassword),
+      userId: user.id,
+    });
+    if (!updatedUser) {
+      throw new UnauthorizedException('Authentication is required.');
+    }
+
+    await this.notifyPasswordChanged(updatedUser.email, changedAt);
+    return { passwordChanged: true };
   }
 
   async logout(tokens: Array<string | undefined>): Promise<{ loggedOut: true }> {
@@ -893,6 +1088,7 @@ export class AuthService {
     return {
       email: draft.email,
       emailVerifiedAt: draft.emailVerifiedAt,
+      hasLocalPassword: true,
       id: null,
       name: draft.name,
     };
@@ -902,9 +1098,34 @@ export class AuthService {
     return {
       email: user.email,
       emailVerifiedAt: user.emailVerifiedAt?.toISOString() ?? null,
+      hasLocalPassword: Boolean(user.passwordHash),
       id: user.id,
       name: user.name,
     };
+  }
+
+  private async notifyPasswordChanged(
+    email: string,
+    changedAt: Date,
+  ): Promise<void> {
+    try {
+      await this.emailSender.sendPasswordChangedEmail({ changedAt, email });
+    } catch {
+      this.logger.error('Password changed email delivery failed.');
+    }
+  }
+
+  private passwordResetUrl(
+    token: string,
+    surface: PasswordResetSurface,
+  ): string {
+    const origin =
+      surface === 'tenant-chat'
+        ? this.config.getOrThrow<string>('TENANT_CHAT_WEB_ORIGIN')
+        : this.webOrigin();
+    const path =
+      surface === 'tenant-chat' ? '/reset-password' : '/auth/reset-password';
+    return `${origin.replace(/\/+$/, '')}${path}#token=${encodeURIComponent(token)}`;
   }
 
   private webOrigin(): string {

@@ -50,6 +50,12 @@ a { color: inherit; }
 .error-box, .info-box { border-radius: 10px; padding: 12px 14px; font-size: 15px; }
 .error-box { background: #fff1f0; color: var(--g-danger); }
 .info-box { background: var(--g-primary-soft); color: #4338b4; }
+.success-box { margin-bottom: 18px; border-radius: 10px; background: #eefaf4; padding: 12px 14px; color: #226344; font-size: 15px; }
+.field-help { margin: -7px 0 0; color: var(--g-text-muted); font-size: 13px; line-height: 1.5; }
+.auth-text-button { width: fit-content; border: 0; background: transparent; padding: 0; color: var(--g-primary); font: inherit; font-size: 14px; font-weight: 680; cursor: pointer; }
+.auth-text-button:hover, .auth-link:hover { text-decoration: underline; text-underline-offset: 3px; }
+.auth-text-button:disabled { cursor: not-allowed; opacity: .55; }
+.auth-link { display: block; width: fit-content; margin-top: 20px; color: var(--g-primary); font-size: 14px; font-weight: 680; }
 .inline-heading-icon { margin-right: 7px; vertical-align: -3px; }
 .helper { margin: 22px 0 0; color: var(--g-text-muted); font-size: 14px; text-align: center; }
 .tenant-list { display: grid; gap: 10px; margin: 24px 0; }
@@ -273,3 +279,15 @@ a { color: inherit; }
 }
 @media (hover: none) { .message-user-actions { opacity: 1; pointer-events: auto; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; animation-duration: .01ms !important; } }
+
+/* Password input visibility and validation */
+.password-input-wrapper { position: relative; width: 100%; }
+.password-input-wrapper .g-input { width: 100%; padding-right: 4.75rem; }
+.password-input-valid-icon, .password-visibility-toggle { position: absolute; top: 50%; transform: translateY(-50%); }
+.password-input-valid-icon { right: 2.65rem; display: inline-flex; color: #16a34a; pointer-events: none; }
+button.password-visibility-toggle { right: .35rem; display: inline-flex; width: 2rem; min-width: 2rem; height: 2rem; min-height: 2rem; align-items: center; justify-content: center; margin: 0; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--g-text-muted); box-shadow: none; cursor: pointer; }
+button.password-visibility-toggle:hover { background: rgb(148 163 184 / 16%); color: var(--g-text); }
+button.password-visibility-toggle:focus-visible { outline: 2px solid var(--g-primary); outline-offset: 1px; }
+.password-validation-message { display: inline-flex; align-items: center; gap: 5px; margin: -7px 0 0; font-size: 13px; font-weight: 650; line-height: 1.5; }
+.password-validation-message-success { color: #15803d; }
+.password-validation-message-error { color: var(--g-danger); }

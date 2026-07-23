@@ -8,6 +8,7 @@
   "user": {
     "id": "00000000-0000-4000-8000-000000000101",
     "email": "employee@example.test",
+    "hasLocalPassword": true,
     "name": "Demo Employee"
   },
   "selectedTenant": {
