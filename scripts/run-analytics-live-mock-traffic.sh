@@ -219,6 +219,19 @@ print_summary() {
 run_traffic() {
   local tick=0
   local sequence=0
+  local slots_per_second=1
+  local slot_delay
+  local rate
+
+  for rate in "${PROJECT_RATES[@]}"; do
+    if ((rate > slots_per_second)); then
+      slots_per_second="$rate"
+    fi
+  done
+  slot_delay="$(
+    awk -v slots="$slots_per_second" 'BEGIN { printf "%.3f", 1 / slots }'
+  )"
+
   STARTED_AT="$(date +%s)"
 
   log "Gateway ${GATEWAY_URL}"
@@ -232,16 +245,18 @@ run_traffic() {
       break
     fi
 
-    local tick_started_at
-    tick_started_at="$(date +%s)"
     local index
+    local slot
 
-    for ((index = 0; index < ${#PROJECT_NAMES[@]}; index += 1)); do
-      local request_index
-      for ((request_index = 0; request_index < PROJECT_RATES[index]; request_index += 1)); do
-        sequence=$((sequence + 1))
-        send_request "$index" "$sequence" &
+    for ((slot = 0; slot < slots_per_second; slot += 1)); do
+      for ((index = 0; index < ${#PROJECT_NAMES[@]}; index += 1)); do
+        rate="${PROJECT_RATES[$index]}"
+        if ((((slot * rate) % slots_per_second) < rate)); then
+          sequence=$((sequence + 1))
+          send_request "$index" "$sequence" &
+        fi
       done
+      sleep "$slot_delay"
     done
 
     tick=$((tick + 1))
@@ -251,11 +266,6 @@ run_traffic() {
       printf '\n'
     fi
 
-    local elapsed
-    elapsed=$(( $(date +%s) - tick_started_at ))
-    if ((elapsed < 1)); then
-      sleep 1
-    fi
   done
 
   wait >/dev/null 2>&1 || true
