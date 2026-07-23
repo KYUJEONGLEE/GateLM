@@ -15,7 +15,7 @@ declare -a API_KEYS=()
 declare -a PROJECT_RATES=()
 
 STATUS_FILE="$(mktemp "${TMPDIR:-/tmp}/gatelm-live-traffic.XXXXXX")"
-STARTED_AT="$(date +%s)"
+STARTED_AT=0
 STOP_REQUESTED=false
 
 log() {
@@ -67,7 +67,35 @@ read_secret() {
   printf -v "$result_variable" '%s' "$value"
 }
 
+configure_three_project_demo() {
+  local -a names=("우주" "AskLake" "AURA")
+  local -a rates=(
+    "${GATELM_TRAFFIC_WOOJOO_RPS:-8}"
+    "${GATELM_TRAFFIC_ASKLAKE_RPS:-4}"
+    "${GATELM_TRAFFIC_AURA_RPS:-2}"
+  )
+  local index
+
+  log "3프로젝트 동시 부하: 우주 ${rates[0]} RPS · AskLake ${rates[1]} RPS · AURA ${rates[2]} RPS"
+  log "API Key를 붙여넣고 Enter를 누르세요. 입력값은 화면에 표시되지 않습니다."
+
+  for ((index = 0; index < ${#names[@]}; index += 1)); do
+    local api_key
+    is_positive_integer "${rates[$index]}" \
+      || die "${names[$index]} RPS는 양의 정수여야 합니다."
+    read_secret "${names[$index]} GateLM 통합 API Key: " api_key
+    PROJECT_NAMES+=("${names[$index]}")
+    API_KEYS+=("$api_key")
+    PROJECT_RATES+=("${rates[$index]}")
+  done
+}
+
 configure_projects() {
+  if [[ "${GATELM_TRAFFIC_PRESET:-}" == "three-project-demo" ]]; then
+    configure_three_project_demo
+    return
+  fi
+
   if [[ -n "${GATELM_TRAFFIC_API_KEY:-}" ]]; then
     [[ -n "${GATELM_TRAFFIC_API_KEY:-}" ]] || die "GATELM_TRAFFIC_API_KEY is required."
     local configured_rate="${GATELM_TRAFFIC_RPS:-8}"
@@ -191,6 +219,7 @@ print_summary() {
 run_traffic() {
   local tick=0
   local sequence=0
+  STARTED_AT="$(date +%s)"
 
   log "Gateway ${GATEWAY_URL}"
   log "Mock provider ${MOCK_PROVIDER_URL}"
@@ -198,6 +227,11 @@ run_traffic() {
   printf '\n'
 
   while true; do
+    if ((DURATION_SECONDS > 0 && tick > 0)) \
+      && (( $(date +%s) - STARTED_AT >= DURATION_SECONDS )); then
+      break
+    fi
+
     local tick_started_at
     tick_started_at="$(date +%s)"
     local index
@@ -212,12 +246,9 @@ run_traffic() {
 
     tick=$((tick + 1))
     if ((tick % REPORT_INTERVAL == 0)); then
+      wait >/dev/null 2>&1 || true
       print_summary
       printf '\n'
-    fi
-
-    if ((DURATION_SECONDS > 0)) && (( $(date +%s) - STARTED_AT >= DURATION_SECONDS )); then
-      break
     fi
 
     local elapsed
