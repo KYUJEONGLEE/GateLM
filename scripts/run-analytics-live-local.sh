@@ -29,6 +29,7 @@ DEMO_TENANT_ID="${GATELM_DEMO_TENANT_ID:-00000000-0000-4000-8000-000000000100}"
 DATABASE_URL="${DATABASE_URL:-postgresql://gatelm:gatelm@127.0.0.1:${POSTGRES_PORT}/gatelm?schema=public}"
 REDIS_URL="${REDIS_URL:-redis://127.0.0.1:${REDIS_PORT}}"
 MOCK_PROVIDER_BASE_URL="${MOCK_PROVIDER_BASE_URL:-http://127.0.0.1:8090}"
+WEB_PREWARM="${ANALYTICS_WEB_PREWARM:-true}"
 
 MODE="start"
 DETACH=false
@@ -61,6 +62,7 @@ Optional port overrides:
   ANALYTICS_REDIS_PORT=6379
   ANALYTICS_CLICKHOUSE_HTTP_PORT=18123
   ANALYTICS_CLICKHOUSE_NATIVE_PORT=19000
+  ANALYTICS_WEB_PREWARM=true
 
 Load mode:
   GATELM_LOAD_API_KEY       Project API key. Prompted securely when omitted.
@@ -108,6 +110,49 @@ wait_for_http() {
   done
 
   return 1
+}
+
+prewarm_web_route() {
+  local label="$1"
+  local path="$2"
+  local status
+
+  status="$(
+    curl --silent --show-error \
+      --max-time 180 \
+      --cookie "gatelm_session=analytics-local-prewarm" \
+      --output /dev/null \
+      --write-out '%{http_code}' \
+      "http://127.0.0.1:${WEB_PORT}${path}" \
+      2>/dev/null
+  )" || status="000"
+
+  case "$status" in
+    2??|3??|4??)
+      log "Web pre-warmed: ${label} (HTTP ${status})"
+      ;;
+    *)
+      tail -n 120 "$WEB_LOG" >&2 || true
+      die "Web pre-warm failed for ${label} with HTTP ${status}."
+      ;;
+  esac
+}
+
+prewarm_web_routes() {
+  if [[ "$WEB_PREWARM" != "true" ]]; then
+    log "Web pre-warm skipped (ANALYTICS_WEB_PREWARM=${WEB_PREWARM})."
+    return
+  fi
+
+  log "Pre-warming primary Console routes. This can take about a minute on the first run."
+  prewarm_web_route "대시보드" "/tenants/${DEMO_TENANT_ID}/dashboard"
+  prewarm_web_route "분석 · 사용량" "/tenants/${DEMO_TENANT_ID}/analytics?tab=usage&range=15m"
+  prewarm_web_route "프로젝트" "/tenants/${DEMO_TENANT_ID}/projects"
+  prewarm_web_route "요청 로그" "/tenants/${DEMO_TENANT_ID}/request-logs"
+  prewarm_web_route "직원" "/tenants/${DEMO_TENANT_ID}/employees"
+  prewarm_web_route "Provider" "/tenants/${DEMO_TENANT_ID}/provider-connections"
+  prewarm_web_route "API Key" "/tenants/${DEMO_TENANT_ID}/api-keys"
+  prewarm_web_route "분석 live BFF" "/api/analytics/live-usage?tenantId=${DEMO_TENANT_ID}&range=15m"
 }
 
 random_secret() {
@@ -611,6 +656,7 @@ start_stack() {
     die "Web failed to start."
   fi
   record_service_listener "web" "$WEB_PORT"
+  prewarm_web_routes
 
   printf '\n'
   log "Local stack is ready."
