@@ -531,6 +531,17 @@ Chat Web BFF가 호출하는 private wire는 [Chat conversation OpenAPI](./opena
 - placeholder counter는 `[EMAIL_2]`의 `EMAIL`처럼 실제 masked text에 쓰는 uppercase placeholder prefix별 이미 사용한 최대 숫자 suffix만 전달할 수 있다. detector type, raw entity, raw-to-placeholder mapping, message/conversation identifier는 포함하지 않는다.
 - exact route와 response field는 OpenAPI, resource shape는 [conversation schema](./schemas/chat-conversation.schema.json), SSE는 [turn event schema](./schemas/chat-turn-sse-event.schema.json)를 따른다.
 
+### 12.1.1 직원 사용량 순위 read API
+
+직원용 Tenant Chat 사용량 순위 wire는 [`openapi/chat-usage.openapi.json`](./openapi/chat-usage.openapi.json)을 따른다. 기존 관리자 `GET /admin/v1/tenants/{tenantId}/employees/usage`의 의미와 응답은 변경하지 않는다.
+
+- Browser는 `range=24h|7d|30d`와 `metric=cost|tokens`만 선택할 수 있다. 기본값은 `30d`, `cost`이며 `tenantId`, `employeeId`, source, order, 임의 날짜 입력은 거부한다.
+- Chat API는 현재 session과 authoritative entitlement에서 tenant와 optional viewer Employee를 유도한다. Control Plane은 viewer가 같은 tenant의 active Employee인지 다시 검증하며 Employee가 없는 tenant admin은 `viewer=null`로 조회할 수 있다.
+- 집계 source는 `tenant_chat`으로 고정한다. 기존 confirmed usage의 raw/rollup/ClickHouse 호환 경계를 재사용하며 Provider-confirmed total token과 pinned pricing으로 확정된 micro-USD만 사용한다. reservation, pending/unconfirmed usage, 미귀속 usage는 포함하지 않는다.
+- 선택 기간에 confirmed Tenant Chat 요청이 있는 active Employee만 metric 내림차순, Employee ID 안정 tie-break로 전체 순위를 계산한다. 응답 `items`는 상위 20명이며 viewer가 20위 밖이면 실제 rank를 `viewer`로 별도 반환한다. active viewer에게 사용 기록이 없으면 `rank=null`과 0 값을 반환한다.
+- 응답은 display name, 부서, rank, confirmed total token, estimated cost micro-USD, UTC 기간, 참여 직원 수와 `raw|rollup|hybrid` safe provenance만 포함한다. 이메일, Employee ID, user/tenant 내부 ID, Provider/Model 상세, pricing 내부값은 노출하지 않는다.
+- 조회 실패는 `503 CHAT_USAGE_UNAVAILABLE`로 제한하며 conversation CRUD, turn admission, SSE streaming, policy state를 변경하거나 중단하지 않는다.
+
 ### 12.2 Envelope encryption과 key rotation
 
 - 저장 format과 column은 [content DDL contract](./db/tenant-chat-content.sql)를 따른다. legacy `conversations`/`chat_messages`를 재사용하거나 dual-write하지 않는다.

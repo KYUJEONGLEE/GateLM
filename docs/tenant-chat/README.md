@@ -29,14 +29,15 @@ Tenant Chat 작업은 다음 순서로 읽는다.
 5. `docs/tenant-chat/openapi/admin-runtime.openapi.json`
 6. `docs/tenant-chat/openapi/admin-rag.openapi.json`
 7. `docs/tenant-chat/openapi/chat-conversation.openapi.json`
-8. `docs/tenant-chat/openapi/private-gateway.openapi.json`
-9. `docs/tenant-chat/db/tenant-chat-content.sql`
-10. `docs/tenant-chat/db/tenant-chat-usage.sql`
-11. `docs/tenant-chat/schemas/*.schema.json`
-12. `docs/tenant-chat/fixtures/*.fixture.json`, `docs/tenant-chat/vectors/*.json`
-13. `docs/tenant-chat/implementation-plan.md`
-14. `docs/tenant-chat/handoffs/*.md`
-15. 기존 경로 호환성 확인이 필요할 때만 `docs/v2.0.0/**`, `docs/v2.1.0/**`
+8. `docs/tenant-chat/openapi/chat-usage.openapi.json`
+9. `docs/tenant-chat/openapi/private-gateway.openapi.json`
+10. `docs/tenant-chat/db/tenant-chat-content.sql`
+11. `docs/tenant-chat/db/tenant-chat-usage.sql`
+12. `docs/tenant-chat/schemas/*.schema.json`
+13. `docs/tenant-chat/fixtures/*.fixture.json`, `docs/tenant-chat/vectors/*.json`
+14. `docs/tenant-chat/implementation-plan.md`
+15. `docs/tenant-chat/handoffs/*.md`
+16. 기존 경로 호환성 확인이 필요할 때만 `docs/v2.0.0/**`, `docs/v2.1.0/**`
 
 `contracts.md`와 schema/fixture가 충돌하면 `contracts.md`를 먼저 고치고 schema/fixture를 함께 맞춘다. 로컬 PR packet은 구현 순서와 acceptance를 제공하지만 active contract를 덮어쓰지 않는다.
 
@@ -91,6 +92,7 @@ Tenant Chat 작업은 다음 순서로 읽는다.
 - [Admin Runtime OpenAPI](./openapi/admin-runtime.openapi.json)
 - [Admin RAG document OpenAPI](./openapi/admin-rag.openapi.json)
 - [Chat conversation OpenAPI](./openapi/chat-conversation.openapi.json)
+- [Chat usage ranking OpenAPI](./openapi/chat-usage.openapi.json)
 - [Private Gateway OpenAPI](./openapi/private-gateway.openapi.json)
 - [Tenant Chat content DDL contract](./db/tenant-chat-content.sql)
 - [Tenant Chat usage DDL contract](./db/tenant-chat-usage.sql)
