@@ -127,21 +127,31 @@ export function UsageRankingView({ active }: Readonly<{ active: boolean }>) {
         </Button>
       </div>}
       {state === 'ready' && data && <>
-        {data.items.length ? <div className="usage-ranking-list" role="table" aria-label="직원 Tenant Chat 사용량 순위">
-          <div className="usage-ranking-columns" role="row">
-            <span role="columnheader">순위</span>
-            <span role="columnheader">직원</span>
-            <span role="columnheader">{metric === 'cost' ? '추정 비용' : '확정 토큰'}</span>
-          </div>
-          <ol role="rowgroup">
-            {data.items.map((row) => <RankingRow
-              isViewer={data.viewer?.rank === row.rank}
-              key={row.rank}
-              metric={metric}
-              row={row}
-            />)}
-          </ol>
-        </div> : <div className="usage-ranking-status is-empty" role="status">
+        {data.items.length ? <>
+          <RankingChart
+            items={data.items}
+            metric={metric}
+            viewerRank={data.viewer?.rank ?? null}
+          />
+          <section className="usage-ranking-list" aria-labelledby="usage-ranking-list-title">
+            <h3 className="usage-ranking-section-title" id="usage-ranking-list-title">전체 순위</h3>
+            <div role="table" aria-label="직원 Tenant Chat 전체 사용량 순위">
+              <div className="usage-ranking-columns" role="row">
+                <span role="columnheader">순위</span>
+                <span role="columnheader">직원</span>
+                <span role="columnheader">{metric === 'cost' ? '추정 비용' : '확정 토큰'}</span>
+              </div>
+              <ol role="rowgroup">
+                {data.items.map((row) => <RankingRow
+                  isViewer={data.viewer?.rank === row.rank}
+                  key={row.rank}
+                  metric={metric}
+                  row={row}
+                />)}
+              </ol>
+            </div>
+          </section>
+        </> : <div className="usage-ranking-status is-empty" role="status">
           선택한 기간의 Tenant Chat 사용 기록이 없습니다.
         </div>}
         {separateViewer && <section className="usage-ranking-viewer" aria-labelledby="viewer-ranking-title">
@@ -154,6 +164,43 @@ export function UsageRankingView({ active }: Readonly<{ active: boolean }>) {
         </section>}
       </>}
     </div>
+  </section>;
+}
+
+function RankingChart({
+  items,
+  metric,
+  viewerRank,
+}: Readonly<{
+  items: readonly UsageRankingRow[];
+  metric: UsageRankingMetric;
+  viewerRank: number | null;
+}>) {
+  const chartItems = items.slice(0, 10);
+  const values = chartItems.map((row) => rankingValue(row, metric));
+  const maximum = Math.max(...values, 1);
+
+  return <section className="usage-ranking-chart" aria-labelledby="usage-ranking-chart-title">
+    <div className="usage-ranking-chart-heading">
+      <h3 id="usage-ranking-chart-title">상위 10명 사용량 분포</h3>
+      <span>{metric === 'cost' ? '추정 비용' : '확정 토큰'}</span>
+    </div>
+    <ol>
+      {chartItems.map((row, index) => {
+        const value = values[index] ?? 0;
+        const isViewer = viewerRank === row.rank;
+        return <li className={isViewer ? 'is-viewer' : ''} key={row.rank}>
+          <div className="usage-ranking-chart-label">
+            <span className="usage-ranking-chart-rank">{row.rank}</span>
+            <strong>{row.displayName}{isViewer && <span className="usage-ranking-me">나</span>}</strong>
+            <span className="usage-ranking-chart-value">{formatRankingValue(row, metric)}</span>
+          </div>
+          <div className="usage-ranking-chart-track" aria-hidden>
+            <span style={{ width: `${rankingBarPercent(value, maximum)}%` }} />
+          </div>
+        </li>;
+      })}
+    </ol>
   </section>;
 }
 
@@ -177,11 +224,27 @@ function RankingRow({
     <strong className="usage-ranking-value" role="cell">
       {row.rank === null
         ? '사용 기록 없음'
-        : metric === 'cost'
-          ? formatMicroUsd(row.estimatedCostMicroUsd)
-          : `${formatInteger(row.confirmedTotalTokens)} 토큰`}
+        : formatRankingValue(row, metric)}
     </strong>
   </li>;
+}
+
+function rankingValue(row: UsageRankingRow, metric: UsageRankingMetric): number {
+  return metric === 'cost' ? row.estimatedCostMicroUsd : row.confirmedTotalTokens;
+}
+
+function rankingBarPercent(value: number, maximum: number): number {
+  if (value <= 0 || maximum <= 0) return 0;
+  return Math.min(100, Math.max(4, Math.round((value / maximum) * 1_000) / 10));
+}
+
+function formatRankingValue(
+  row: Pick<UsageRankingRow, 'confirmedTotalTokens' | 'estimatedCostMicroUsd'>,
+  metric: UsageRankingMetric,
+): string {
+  return metric === 'cost'
+    ? formatMicroUsd(row.estimatedCostMicroUsd)
+    : `${formatInteger(row.confirmedTotalTokens)} 토큰`;
 }
 
 function formatInteger(value: number): string {

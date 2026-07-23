@@ -250,7 +250,21 @@ a { color: inherit; }
 .usage-ranking-status.is-error { flex-wrap: wrap; color: var(--g-danger); }
 .usage-ranking-status.is-error .g-button { min-height: 36px; margin-left: 6px; }
 .usage-ranking-status.is-empty { min-height: 160px; border-bottom: 1px solid var(--g-border); }
+.usage-ranking-chart { margin-bottom: 30px; border-bottom: 1px solid var(--g-border); padding: 6px 12px 26px; }
+.usage-ranking-chart-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
+.usage-ranking-chart-heading h3, .usage-ranking-section-title { margin: 0; color: var(--g-text); font-size: 14px; letter-spacing: -.01em; }
+.usage-ranking-chart-heading > span { flex: 0 0 auto; color: var(--g-text-muted); font-size: 12px; }
+.usage-ranking-chart ol { display: grid; gap: 13px; margin: 0; padding: 0; list-style: none; }
+.usage-ranking-chart li { min-width: 0; }
+.usage-ranking-chart-label { display: grid; min-width: 0; grid-template-columns: 24px minmax(0, 1fr) minmax(112px, auto); align-items: center; gap: 9px; margin-bottom: 6px; }
+.usage-ranking-chart-rank { color: var(--g-text-muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.usage-ranking-chart-label > strong { min-width: 0; overflow-wrap: anywhere; color: var(--g-text); font-size: 13px; }
+.usage-ranking-chart-value { min-width: 0; overflow-wrap: anywhere; color: var(--g-text); font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; text-align: right; }
+.usage-ranking-chart-track { height: 8px; overflow: hidden; margin-left: 33px; border-radius: 3px; background: var(--g-surface-subtle); }
+.usage-ranking-chart-track > span { display: block; height: 100%; border-radius: inherit; background: var(--g-primary); opacity: .82; }
+.usage-ranking-chart li.is-viewer .usage-ranking-chart-track > span { opacity: 1; box-shadow: 0 0 0 1px color-mix(in srgb, var(--g-primary) 24%, transparent); }
 .usage-ranking-list { width: 100%; }
+.usage-ranking-section-title { border-bottom: 1px solid var(--g-border); padding: 0 12px 12px; }
 .usage-ranking-columns, .usage-ranking-list li, .usage-ranking-viewer li { display: grid; grid-template-columns: 64px minmax(0, 1fr) minmax(150px, auto); align-items: center; gap: 16px; }
 .usage-ranking-columns { min-height: 42px; border-bottom: 1px solid var(--g-border); padding: 6px 12px; color: var(--g-text-muted); font-size: 12px; font-weight: 700; }
 .usage-ranking-columns span:last-child { text-align: right; }
@@ -291,6 +305,11 @@ a { color: inherit; }
   .usage-ranking-filters button { min-height: 32px; padding-inline: 9px; }
   .usage-ranking-note { padding: 8px 16px; }
   .usage-ranking-content { padding: 8px 12px 28px; }
+  .usage-ranking-chart { margin-bottom: 24px; padding: 6px 8px 22px; }
+  .usage-ranking-chart-heading { align-items: flex-start; margin-bottom: 16px; }
+  .usage-ranking-chart-label { grid-template-columns: 20px minmax(0, 1fr) minmax(86px, auto); gap: 7px; }
+  .usage-ranking-chart-track { margin-left: 27px; }
+  .usage-ranking-chart-value { max-width: 116px; }
   .usage-ranking-columns, .usage-ranking-list li, .usage-ranking-viewer li { grid-template-columns: 42px minmax(0, 1fr) minmax(92px, auto); gap: 8px; }
   .usage-ranking-columns, .usage-ranking-list li, .usage-ranking-viewer li { padding-inline: 8px; }
   .usage-ranking-value { max-width: 132px; font-size: 13px; }

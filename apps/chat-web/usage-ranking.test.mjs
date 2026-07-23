@@ -141,6 +141,36 @@ test('ranking view caches filters, aborts stale reads, and keeps ChatShell mount
   assert.match(chatShell, /<UsageRankingView active=\{activeView === 'usage-ranking'\} \/>/);
 });
 
+test('ranking view renders a dependency-free top-ten bar chart with exact values', () => {
+  const rankingView = readFileSync(
+    new URL('./src/components/usage-ranking-view.tsx', import.meta.url),
+    'utf8',
+  );
+  const styles = readFileSync(
+    new URL('./src/app/globals.css', import.meta.url),
+    'utf8',
+  );
+  assert.match(rankingView, /items\.slice\(0, 10\)/);
+  assert.match(rankingView, /rankingBarPercent\(value, maximum\)/);
+  assert.match(rankingView, /formatRankingValue\(row, metric\)/);
+  assert.match(styles, /\.usage-ranking-chart-track > span/);
+  assert.match(styles, /background: var\(--g-primary\)/);
+  assert.doesNotMatch(rankingView, /echarts|recharts|chart\.js/i);
+});
+
+test('local runner preserves existing data and applies only deploy migrations', () => {
+  const runner = readFileSync(
+    new URL('../../scripts/dev/tenant-chat-local-run.sh', import.meta.url),
+    'utf8',
+  );
+  assert.match(runner, /node_modules\/prisma\/build\/index\.js migrate deploy/);
+  assert.match(runner, /GATELM_PROVIDER_CREDENTIAL_ENCRYPTION_KEY/);
+  assert.match(runner, /existing PostgreSQL and Redis data were preserved/i);
+  assert.doesNotMatch(runner, /^.*"\$\{compose\[@\]\}".*\bdown\b.*$/m);
+  assert.doesNotMatch(runner, /^\s*(docker|"\$\{compose\[@\]\}")\s+volume\s+(rm|prune)\b/m);
+  assert.doesNotMatch(runner, /^\s*(pnpm|corepack)\s+.*\bdev\b/m);
+});
+
 function ranking() {
   return {
     items: [{
