@@ -5,13 +5,13 @@ import {
   AuthProjectAdminInvitation,
   AuthRepository,
   AuthSession,
-  AuthSessionKind,
   AuthSessionWithUser,
   AuthTenant,
   AuthTenantAdmin,
   AuthTenantMembership,
   AuthUser,
   EmailVerificationCode,
+  PasswordResetToken,
   OAuthAccount,
   OAuthAccountWithUser,
 } from '../auth.repository';
@@ -19,6 +19,7 @@ import {
 interface AuthRepositoryState {
   authSessions: AuthSession[];
   emailVerificationCodes: EmailVerificationCode[];
+  passwordResetTokens: PasswordResetToken[];
   oauthAccounts: OAuthAccount[];
   projectAdminInvitations: AuthProjectAdminInvitation[];
   projectAdmins: AuthProjectAdmin[];
@@ -33,6 +34,7 @@ function cloneState(state: AuthRepositoryState): AuthRepositoryState {
   return {
     authSessions: [...state.authSessions],
     emailVerificationCodes: [...state.emailVerificationCodes],
+    passwordResetTokens: [...state.passwordResetTokens],
     oauthAccounts: [...state.oauthAccounts],
     projectAdminInvitations: [...state.projectAdminInvitations],
     projectAdmins: [...state.projectAdmins],
@@ -50,6 +52,7 @@ export function createInMemoryAuthRepository(): AuthRepository & {
   const state: AuthRepositoryState = {
     authSessions: [],
     emailVerificationCodes: [],
+    passwordResetTokens: [],
     oauthAccounts: [],
     projectAdminInvitations: [],
     projectAdmins: [],
@@ -403,6 +406,7 @@ export function createInMemoryAuthRepository(): AuthRepository & {
     async createUser(input) {
       const createdAt = now();
       const user: AuthUser = {
+        actorAuthzVersion: 1,
         authProvider: input.authProvider,
         createdAt,
         deletedAt: null,
@@ -515,6 +519,14 @@ export function createInMemoryAuthRepository(): AuthRepository & {
       );
     },
 
+    async findUserById(userId) {
+      return (
+        state.users.find(
+          (item) => item.id === userId && item.deletedAt === null,
+        ) ?? null
+      );
+    },
+
     async findUserByEmail(email) {
       return (
         state.users.find(
@@ -555,6 +567,106 @@ export function createInMemoryAuthRepository(): AuthRepository & {
       if (user) {
         user.lastLoginAt = lastLoginAt;
       }
+    },
+
+    async countPasswordResetTokensSince(userId, since) {
+      return state.passwordResetTokens.filter(
+        (item) => item.userId === userId && item.createdAt >= since,
+      ).length;
+    },
+
+    async createPasswordResetToken(input) {
+      const token: PasswordResetToken = {
+        consumedAt: null,
+        createdAt: now(),
+        expiresAt: input.expiresAt,
+        id: id(),
+        tokenHash: input.tokenHash,
+        userId: input.userId,
+      };
+      state.passwordResetTokens.push(token);
+      return token;
+    },
+
+    async findActivePasswordResetTokenByHash(tokenHash, activeAt) {
+      const token = state.passwordResetTokens.find(
+        (item) =>
+          item.tokenHash === tokenHash &&
+          item.consumedAt === null &&
+          item.expiresAt > activeAt,
+      );
+      if (!token) {
+        return null;
+      }
+
+      const user = state.users.find(
+        (item) => item.id === token.userId && item.deletedAt === null,
+      );
+      return user ? { ...token, user } : null;
+    },
+
+    async completePasswordReset(input) {
+      const token = state.passwordResetTokens.find(
+        (item) =>
+          item.id === input.tokenId &&
+          item.userId === input.userId &&
+          item.consumedAt === null &&
+          item.expiresAt > input.changedAt,
+      );
+      const user = state.users.find(
+        (item) => item.id === input.userId && item.deletedAt === null,
+      );
+      if (
+        !token ||
+        !user ||
+        user.passwordHash !== input.expectedPasswordHash ||
+        user.status !== 'active'
+      ) {
+        return null;
+      }
+
+      for (const resetToken of state.passwordResetTokens) {
+        if (resetToken.userId === input.userId && resetToken.consumedAt === null) {
+          resetToken.consumedAt = input.changedAt;
+        }
+      }
+      for (const session of state.authSessions) {
+        if (session.userId === input.userId && session.revokedAt === null) {
+          session.revokedAt = input.changedAt;
+        }
+      }
+      user.actorAuthzVersion += 1;
+      user.passwordHash = input.passwordHash;
+      user.updatedAt = input.changedAt;
+      return user;
+    },
+
+    async changePasswordAndRevokeSessions(input) {
+      const user = state.users.find(
+        (item) => item.id === input.userId && item.deletedAt === null,
+      );
+      if (
+        !user ||
+        user.passwordHash !== input.expectedPasswordHash ||
+        user.status !== 'active'
+      ) {
+        return null;
+      }
+
+      for (const resetToken of state.passwordResetTokens) {
+        if (resetToken.userId === input.userId && resetToken.consumedAt === null) {
+          resetToken.consumedAt = input.changedAt;
+        }
+      }
+      for (const session of state.authSessions) {
+        if (session.userId === input.userId && session.revokedAt === null) {
+          session.revokedAt = input.changedAt;
+        }
+      }
+      user.actorAuthzVersion += 1;
+      user.passwordHash = input.passwordHash;
+      user.updatedAt = input.changedAt;
+      return user;
     },
   };
 

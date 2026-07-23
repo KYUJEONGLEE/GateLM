@@ -121,6 +121,7 @@ model User {
   deletedAt         DateTime?
 
   emailVerificationCodes      EmailVerificationCode[]
+  passwordResetTokens         PasswordResetToken[]
   authSessions                AuthSession[]
   oauthAccounts               OAuthAccount[]
   tenantMemberships           TenantMembership[]
@@ -154,6 +155,21 @@ model EmailVerificationCode {
   @@index([userId, consumedAt])
   @@index([expiresAt])
   @@map("email_verification_codes")
+}
+
+model PasswordResetToken {
+  id         String    @id @default(uuid()) @db.Uuid
+  userId     String    @db.Uuid
+  tokenHash  String    @unique
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, consumedAt])
+  @@index([expiresAt])
+  @@map("password_reset_tokens")
 }
 
 model AuthSession {

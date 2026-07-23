@@ -4,6 +4,8 @@ import { Prisma, User } from '@prisma/client';
 
 import { PrismaService } from '@/infrastructure/database/prisma/prisma.service';
 import { hashPassword, hashSecret, normalizeEmail, verifyPassword } from '@/modules/auth/auth.crypto';
+import { AuthService } from '@/modules/auth/auth.service';
+import { assertPasswordMeetsPolicy } from '@/modules/auth/password-policy';
 import { GoogleOAuthClient } from '@/modules/auth/google-oauth-client';
 import { GOOGLE_OAUTH_CLIENT } from '@/modules/auth/auth.tokens';
 
@@ -11,7 +13,10 @@ import {
   TenantChatGoogleCompleteDto,
   TenantChatInvitationBindDto,
   TenantChatInvitationPasswordDto,
+  TenantChatPasswordChangeDto,
   TenantChatPasswordDto,
+  TenantChatPasswordResetConfirmDto,
+  TenantChatPasswordResetRequestDto,
 } from './dto/tenant-chat-identity.dto';
 
 type Transaction = Prisma.TransactionClient;
@@ -24,6 +29,7 @@ export class TenantChatIdentityService {
     private readonly config: ConfigService,
     @Inject(GOOGLE_OAUTH_CLIENT)
     private readonly google: GoogleOAuthClient,
+    private readonly auth: AuthService,
   ) {}
 
   async resolveInvitation(token: string) {
@@ -63,7 +69,20 @@ export class TenantChatIdentityService {
     return this.identityResult(user.id);
   }
 
+  requestPasswordReset(body: TenantChatPasswordResetRequestDto) {
+    return this.auth.requestPasswordReset(body, 'tenant-chat');
+  }
+
+  confirmPasswordReset(body: TenantChatPasswordResetConfirmDto) {
+    return this.auth.confirmPasswordReset(body);
+  }
+
+  changePassword(body: TenantChatPasswordChangeDto) {
+    return this.auth.changePasswordForUser(body.userId, body);
+  }
+
   async acceptInvitationWithPassword(body: TenantChatInvitationPasswordDto) {
+    assertPasswordMeetsPolicy(body.password);
     const passwordHash = await hashPassword(body.password);
     return this.identityTransaction(
       async (tx) => {
@@ -271,6 +290,7 @@ export class TenantChatIdentityService {
       user: {
         actorAuthzVersion: user.actorAuthzVersion,
         email: normalizeEmail(user.email),
+        hasLocalPassword: Boolean(user.passwordHash),
         id: user.id,
         name: user.name,
       },
@@ -291,6 +311,7 @@ export class TenantChatIdentityService {
       user: {
         actorAuthzVersion: user.actorAuthzVersion,
         email: normalizeEmail(user.email),
+        hasLocalPassword: Boolean(user.passwordHash),
         id: user.id,
         name: user.name,
       },

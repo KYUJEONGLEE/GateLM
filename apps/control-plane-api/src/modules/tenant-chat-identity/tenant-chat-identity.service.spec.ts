@@ -24,15 +24,55 @@ const existingLocalUser = {
   updatedAt: new Date('2026-01-01T00:00:00.000Z'),
 };
 
-function makeService(prisma: Record<string, any>, google: Record<string, jest.Mock> = {}) {
+function makeService(
+  prisma: Record<string, any>,
+  google: Record<string, jest.Mock> = {},
+  auth: Record<string, jest.Mock> = {},
+) {
   return new TenantChatIdentityService(
     prisma as never,
     { getOrThrow: jest.fn().mockReturnValue('http://chat.localhost:3002/auth/google/callback') } as never,
     google as never,
+    auth as never,
   );
 }
 
 describe('TenantChatIdentityService', () => {
+  it('uses the Tenant Chat reset origin and shared credential service', async () => {
+    const auth = {
+      changePasswordForUser: jest.fn().mockResolvedValue({ passwordChanged: true }),
+      confirmPasswordReset: jest.fn().mockResolvedValue({ passwordReset: true }),
+      requestPasswordReset: jest.fn().mockResolvedValue({ accepted: true }),
+    };
+    const service = makeService({}, {}, auth);
+
+    await expect(
+      service.requestPasswordReset({ email: 'member@example.test' }),
+    ).resolves.toEqual({ accepted: true });
+    await expect(
+      service.confirmPasswordReset({
+        newPassword: 'Reset1!Pass',
+        token: 'reset-token-with-at-least-32-characters',
+      }),
+    ).resolves.toEqual({ passwordReset: true });
+    await expect(
+      service.changePassword({
+        currentPassword: 'current-password',
+        newPassword: 'Tenant2!Pass',
+        userId: existingLocalUser.id,
+      }),
+    ).resolves.toEqual({ passwordChanged: true });
+
+    expect(auth.requestPasswordReset).toHaveBeenCalledWith(
+      { email: 'member@example.test' },
+      'tenant-chat',
+    );
+    expect(auth.changePasswordForUser).toHaveBeenCalledWith(
+      existingLocalUser.id,
+      expect.objectContaining({ newPassword: 'Tenant2!Pass' }),
+    );
+  });
+
   it('requires normal authentication instead of replacing an existing credential', async () => {
     const tx = {
       $executeRaw: jest.fn().mockResolvedValue(0),
@@ -47,7 +87,7 @@ describe('TenantChatIdentityService', () => {
       user: { create: jest.fn(), findMany: jest.fn().mockResolvedValue([existingLocalUser]) },
     };
     const prisma = { $transaction: jest.fn((callback: Function) => callback(tx)) };
-    await expect(makeService(prisma).acceptInvitationWithPassword({ name: '사용자', password: 'long-password', token: 'invitation-token-value' })).rejects.toBeInstanceOf(HttpException);
+    await expect(makeService(prisma).acceptInvitationWithPassword({ name: '사용자', password: 'Invite1!Pass', token: 'invitation-token-value' })).rejects.toBeInstanceOf(HttpException);
     expect(tx.user.create).not.toHaveBeenCalled();
   });
 
@@ -123,7 +163,7 @@ describe('TenantChatIdentityService', () => {
 
     await service.acceptInvitationWithPassword({
       name: '새 조직 사용자',
-      password: 'long-password',
+      password: 'Invite1!Pass',
       token: 'invitation-token-value',
     });
 
@@ -217,7 +257,7 @@ describe('TenantChatIdentityService', () => {
     const prisma = {
       employee: { findMany: employeeFindMany },
       tenantMembership: { findMany: jest.fn().mockResolvedValue(memberships) },
-      user: { findUnique: jest.fn().mockResolvedValue({ actorAuthzVersion: 5, deletedAt: null, email: 'user@example.test', id: 'user-id', name: '사용자', status: 'active' }) },
+      user: { findUnique: jest.fn().mockResolvedValue({ actorAuthzVersion: 5, deletedAt: null, email: 'user@example.test', id: 'user-id', name: '사용자', passwordHash: 'local-password-hash', status: 'active' }) },
     };
 
     const result = await makeService(prisma).getEntitlements('user-id');
@@ -226,6 +266,7 @@ describe('TenantChatIdentityService', () => {
     expect(employeeFindMany).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({ tenantId: { in: ['tenant-a', 'tenant-b'] }, userId: 'user-id' }),
     }));
+    expect(result.user.hasLocalPassword).toBe(true);
     expect(result.tenants).toEqual(expect.arrayContaining([
       expect.objectContaining({ actorKind: 'employee', employeeId: 'employee-a', tenantId: 'tenant-a' }),
       expect.objectContaining({ actorKind: 'employee', employeeId: 'employee-b', tenantId: 'tenant-b' }),
