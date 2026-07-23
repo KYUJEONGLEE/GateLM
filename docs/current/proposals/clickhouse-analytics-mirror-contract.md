@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| Status | Phase 1 mirror through Phase 5 complete Project/Application analytics read cutover implementation companion |
+| Status | Phase 1 mirror through Phase 6 pre-aggregated Project/Application analytics read cutover implementation companion |
 | Applies to | Gateway terminal log mirror, ClickHouse analytics storage, employee usage and security reads, project employee policy usage reads, and Project/Application log-based reads |
 | Canonical source during mirror phase | PostgreSQL `p0_llm_invocation_logs` |
 | Initial read cutover | Explicitly gated employee usage and all Gateway Project/Application log-based reads |
@@ -69,10 +69,17 @@ other raw PII.
 ## Duplicate boundary
 
 The existing asynchronous PostgreSQL writer can fall back from a failed batch
-to individual writes. A mirror may therefore receive the same `request_id`
-more than once. The table uses `ReplacingMergeTree(ingest_version)` ordered by
-`tenant_id, request_id`. Reconciliation and pre-cutover reads must use `FINAL`
-or an equivalent latest-version query.
+to individual writes. The fan-out writer therefore invokes the ClickHouse
+mirror only after the canonical PostgreSQL write succeeds. A failed PostgreSQL
+batch is not mirrored before the asynchronous writer retries its individual
+rows.
+
+The raw table still uses `ReplacingMergeTree(ingest_version)` ordered by
+`tenant_id, request_id` because an ambiguous ClickHouse network failure can
+still leave the caller unable to tell whether an insert was accepted.
+Reconciliation, backfill sources, and pre-cutover reads must use `FINAL` or an
+equivalent latest-version query. An unexplained duplicate blocks rollup
+cutover.
 
 ## Metrics
 
@@ -223,3 +230,45 @@ Provider admission, rate limiting, reservations, settlements, and cost ledgers
 continue to use their transactional PostgreSQL or Redis stores. PostgreSQL also
 retains canonical terminal-log writes and tenant/project/request point detail
 lookups required for audit fields that are deliberately absent from ClickHouse.
+
+## Phase 6 one-second dashboard read models
+
+The web dashboard keeps its existing one-second polling interval. The polling
+path must not repeatedly aggregate `analytics.llm_invocations FINAL`.
+
+Two ClickHouse read models are maintained from the raw mirror:
+
+- `analytics.llm_invocations_by_time` is a
+  `ReplacingMergeTree(ingest_version)` ordered by
+  `tenant_id, created_at, request_id`. Recent request lists, slow-request
+  lists, and recent reliability incidents read this table with `FINAL`.
+- `analytics.llm_invocations_dashboard_second_rollup` is an
+  `AggregatingMergeTree` ordered by tenant, second, and the required dashboard
+  dimensions. Dashboard, cost, performance, policy-impact, reliability-total,
+  and filter-option aggregates read this table.
+
+The rollup stores additive request/token/cost counters and TDigest latency
+states. Request, token, and cost totals must match the raw `FINAL` source for a
+closed UTC interval. Latency percentiles are approximate TDigest values and
+must not be presented as exact percentiles. Because the source bucket is one
+second, an unaligned query boundary can differ from an exact raw query by at
+most its two partial edge seconds.
+
+On an existing ClickHouse volume, operators must keep PostgreSQL logging online
+but pause the ClickHouse mirror while applying
+`004_create_dashboard_rollups.sql` and the one-time
+`maintenance/backfill_dashboard_rollups.sql`. They must compare the raw and
+rollup request, token, and cost totals before enabling the reader. The mirror
+is resumed only after reconciliation succeeds. The backfill script must not be
+run twice.
+
+`AnalyticsReliabilitySourceFreshness.queryMode` uses `rollup` for the
+Project/Application totals path. The point-detail source remains PostgreSQL,
+and the recent incident list remains the time-ordered ClickHouse read model.
+No aggregate read may silently fall back to PostgreSQL raw invocation logs.
+
+The self-hosted ClickHouse configuration retains query logs for 7 days, text
+logs at warning level for 3 days, and metric logs for 7 days. Trace and
+processor-profile system tables are disabled for the production analytics
+node. Applying retention to already-created system tables is an explicit
+operator action and does not force `OPTIMIZE` or `TRUNCATE`.
