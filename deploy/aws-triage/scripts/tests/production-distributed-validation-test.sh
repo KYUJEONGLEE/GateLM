@@ -24,6 +24,8 @@ DB_RESTORE_PATH="${DEPLOY_DIR}/scripts/production-distributed-db-restore.sh"
 TWO_GATEWAY_CD_TEST_PATH="${DEPLOY_DIR}/scripts/tests/production-distributed-two-gateway-cd-test.sh"
 CLICKHOUSE_BACKFILL_PATH="${DEPLOY_DIR}/scripts/clickhouse-backfill-general-analytics.sh"
 CLICKHOUSE_BACKFILL_TEST_PATH="${DEPLOY_DIR}/scripts/tests/clickhouse-backfill-general-analytics-test.sh"
+CLICKHOUSE_COMPOSE_PATH="${DEPLOY_DIR}/clickhouse/docker-compose.yml"
+CLICKHOUSE_NETWORK_CONFIG_PATH="${DEPLOY_DIR}/clickhouse/config.d/network-listen.xml"
 
 for path in \
   "${COMPOSE_PATH}" "${PII_COMPOSE_PATH}" "${PII_MANIFEST_PATH}" "${ENV_PATH}" "${TEMPLATE_PATH}" "${CD_TEMPLATE_PATH}" "${LIB_PATH}" \
@@ -31,6 +33,7 @@ for path in \
   "${BOOTSTRAP_GATEWAY_PATH}" "${BOOTSTRAP_PII_PATH}" \
   "${PREPARE_PII_PATH}" "${DB_EXPORT_PATH}" "${DB_RESTORE_PATH}" \
   "${TWO_GATEWAY_CD_TEST_PATH}" "${CLICKHOUSE_BACKFILL_PATH}" "${CLICKHOUSE_BACKFILL_TEST_PATH}" \
+  "${CLICKHOUSE_COMPOSE_PATH}" "${CLICKHOUSE_NETWORK_CONFIG_PATH}" \
   "${DEPLOY_DIR}/Caddyfile.production-distributed.rehearsal" \
   "${DEPLOY_DIR}/Caddyfile.production-distributed.production"; do
   [[ -f "${path}" ]] || { echo "Missing production distributed artifact: ${path}" >&2; exit 1; }
@@ -176,6 +179,9 @@ grep -Fq 'Read-only role check passed' "${DEPLOY_ROLE_PATH}"
 grep -Fq 'deployment is idempotent' "${DEPLOY_ROLE_PATH}"
 grep -Fq 'Database migrations, if any, were not reversed.' "${DEPLOY_ROLE_PATH}"
 grep -Fq 'production_compose "${role}" up -d "${infrastructure_services[@]}"' "${UP_PATH}"
+grep -Fq '<listen_host>0.0.0.0</listen_host>' "${CLICKHOUSE_NETWORK_CONFIG_PATH}"
+grep -Fq 'container_ip="$$(hostname -i' "${CLICKHOUSE_COMPOSE_PATH}"
+grep -Fq '"http://$${container_ip}:8123/ping"' "${CLICKHOUSE_COMPOSE_PATH}"
 
 if grep -Eq 'PROD_CLONE|prod-clone|10\.77|mock-provider-upstream|MOCK_SHAPER' \
   "${COMPOSE_PATH}" "${PII_COMPOSE_PATH}" "${ENV_PATH}" "${LIB_PATH}" "${PREFLIGHT_PATH}" "${UP_PATH}" "${SMOKE_PATH}" \
