@@ -26,7 +26,7 @@ import {
   selectDashboardSurfaceOverview,
   toTenantChatDashboardOverview
 } from "@/lib/dashboard/unified-dashboard";
-import { getLiveCostOverTime } from "@/lib/gateway/live-cost-report";
+import { getLiveMonthToDateCostMicroUsd } from "@/lib/gateway/live-cost-report";
 import {
   getLiveDashboardOverview,
   getDashboardLiveRange,
@@ -161,9 +161,8 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
       locale={locale}
       filters={scopedDashboardFilters}
       monthToDateSpendValue={
-        <Suspense fallback={formatDashboardMicroUsd(overview.totalCostMicroUsd)}>
+        <Suspense fallback="—">
           <MonthToDateSpendValue
-            fallbackMicroUsd={overview.totalCostMicroUsd}
             filters={scopedLiveFilters}
             surface={scopedDashboardFilters.surface}
             tenantId={effectiveTenantId}
@@ -179,38 +178,35 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
 }
 
 async function MonthToDateSpendValue({
-  fallbackMicroUsd,
   filters,
   surface,
   tenantId
 }: {
-  fallbackMicroUsd: number;
   filters: LiveDashboardOverviewFilters;
   surface: DashboardSurface;
   tenantId: string;
 }) {
   const monthToDateRange = getMonthToDateRange();
-  const [summary, tenantChat] = await Promise.all([
+  const [projectApplicationCostMicroUsd, tenantChat] = await Promise.all([
     surface === "tenant_chat"
       ? Promise.resolve(undefined)
-      : getLiveCostOverTime(tenantId, {
+      : getLiveMonthToDateCostMicroUsd(tenantId, {
           ...filters,
           from: monthToDateRange.from,
-          range: "1w",
           to: monthToDateRange.to
         }),
     surface === "project_application"
       ? Promise.resolve(undefined)
       : getTenantChatDashboard(tenantId, monthToDateRange.from, monthToDateRange.to)
   ]);
-  const totalSpendUsd = summary?.points?.reduce((sum, point) => sum + point.spendUsd, 0);
   const totalMicroUsd =
-    (totalSpendUsd === undefined ? 0 : totalSpendUsd * 1_000_000) +
+    (projectApplicationCostMicroUsd ?? 0) +
     (tenantChat?.usage?.confirmedCostMicroUsd ?? 0);
   const hasCurrentData =
-    summary !== undefined || (tenantChat !== undefined && tenantChat !== null);
+    (surface === "tenant_chat" || projectApplicationCostMicroUsd !== undefined) &&
+    (surface === "project_application" || tenantChat !== undefined);
 
-  return <>{formatDashboardMicroUsd(hasCurrentData ? totalMicroUsd : fallbackMicroUsd)}</>;
+  return <>{hasCurrentData ? formatDashboardMicroUsd(totalMicroUsd) : "—"}</>;
 }
 
 function buildDashboardFilters(

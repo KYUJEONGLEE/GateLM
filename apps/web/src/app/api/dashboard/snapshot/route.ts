@@ -22,7 +22,10 @@ import {
   mergeLiveRequestPayloads
 } from "@/lib/dashboard/tenant-chat-live-requests";
 import type { LiveDashboardSnapshot } from "@/lib/dashboard/live-dashboard-snapshot";
-import { getLiveCostOverTime } from "@/lib/gateway/live-cost-report";
+import {
+  getLiveCostOverTime,
+  getLiveMonthToDateCostMicroUsd
+} from "@/lib/gateway/live-cost-report";
 import {
   getDashboardLiveRange,
   getLiveDashboardOverview,
@@ -149,10 +152,9 @@ export async function GET(request: NextRequest) {
         ),
     surface === "tenant_chat"
       ? Promise.resolve(undefined)
-      : getLiveCostOverTime(tenantId, {
+      : getLiveMonthToDateCostMicroUsd(tenantId, {
           ...projectFilters,
           from: monthToDateRange.from,
-          range: "1w",
           to: monthToDateRange.to
         }),
     surface === "project_application"
@@ -189,27 +191,22 @@ export async function GET(request: NextRequest) {
     mergeLiveRequestPayloads
   );
 
-  if (!overview || !costOverTime || !liveRequests) {
+  const hasCompleteMonthToDateData =
+    (surface === "tenant_chat" || projectApplicationMonthToDate !== undefined) &&
+    (surface === "project_application" || tenantChatMonthToDate !== undefined);
+
+  if (!overview || !costOverTime || !liveRequests || !hasCompleteMonthToDateData) {
     return jsonError("Failed to load dashboard snapshot", 502);
   }
 
-  const projectMonthCostMicroUsd =
-    (projectApplicationMonthToDate?.points ?? []).reduce(
-      (sum, point) => sum + point.spendUsd * 1_000_000,
-      0
-    );
+  const projectMonthCostMicroUsd = projectApplicationMonthToDate ?? 0;
   const tenantChatMonthCostMicroUsd =
     tenantChatMonthToDate?.usage?.confirmedCostMicroUsd ?? 0;
-  const hasMonthToDateData =
-    projectApplicationMonthToDate !== undefined ||
-    (tenantChatMonthToDate !== undefined && tenantChatMonthToDate !== null);
   const snapshot: LiveDashboardSnapshot = {
     costOverTime,
     generatedAt: new Date().toISOString(),
     liveRequests,
-    monthToDateCostMicroUsd: hasMonthToDateData
-      ? projectMonthCostMicroUsd + tenantChatMonthCostMicroUsd
-      : overview.totalCostMicroUsd,
+    monthToDateCostMicroUsd: projectMonthCostMicroUsd + tenantChatMonthCostMicroUsd,
     overview
   };
 

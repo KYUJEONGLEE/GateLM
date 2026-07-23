@@ -17,6 +17,7 @@ const (
 	AnalyticsReliabilityStatusUnavailable = "unavailable"
 
 	AnalyticsReliabilityQueryModeRaw         = "raw"
+	AnalyticsReliabilityQueryModeRollup      = "rollup"
 	AnalyticsReliabilityQueryModeUnavailable = "unavailable"
 )
 

@@ -78,6 +78,17 @@ func TestAnalyticsPerformanceReaderQueriesBoundedProjectAggregates(t *testing.T)
 	if len(queries) != 5 {
 		t.Fatalf("expected five bounded aggregate queries, got %d", len(queries))
 	}
+	for _, statement := range queries {
+		if strings.Contains(statement, "ORDER BY latency_ms DESC") {
+			if !strings.Contains(statement, "FROM analytics.llm_invocations_by_time FINAL") {
+				t.Fatalf("slow-request detail must use the time-ordered read model: %s", statement)
+			}
+			continue
+		}
+		if !strings.Contains(statement, "FROM analytics.llm_invocations_dashboard_second_rollup") || strings.Contains(statement, "llm_invocations FINAL") {
+			t.Fatalf("performance aggregate must use the second rollup: %s", statement)
+		}
+	}
 	if result.Summary.TotalRequests != 3 || result.Summary.SystemErrorRequests != 1 || result.Summary.P95LatencyMs == nil || *result.Summary.P95LatencyMs != 200 {
 		t.Fatalf("unexpected summary: %+v", result.Summary)
 	}

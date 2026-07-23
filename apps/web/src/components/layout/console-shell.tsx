@@ -287,6 +287,7 @@ export function ConsoleShell({
     activeMonitoringItem ?? navigationState.activeMonitoringItem;
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isResponsiveCompact, setIsResponsiveCompact] = useState(false);
+  const [isMobileViewportActive, setIsMobileViewportActive] = useState(false);
   const [isMobileNavigationOpen, setIsMobileNavigationOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [displayMode, setDisplayMode] = useState<ConsoleDisplayMode>("default");
@@ -305,12 +306,27 @@ export function ConsoleShell({
   }, []);
 
   useEffect(() => {
-    const mediaQuery = window.matchMedia("(min-width: 1101px) and (max-width: 1280px)");
-    const syncResponsiveCompactState = () => setIsResponsiveCompact(mediaQuery.matches);
+    const responsiveCompactQuery = window.matchMedia(
+      "(min-width: 1101px) and (max-width: 1280px)"
+    );
+    const mobileViewportQuery = window.matchMedia("(max-width: 1100px)");
+    const syncNavigationViewportState = () => {
+      setIsResponsiveCompact(responsiveCompactQuery.matches);
+      setIsMobileViewportActive(mobileViewportQuery.matches);
+      if (!mobileViewportQuery.matches) {
+        setIsMobileNavigationOpen(false);
+      }
+    };
 
-    syncResponsiveCompactState();
-    mediaQuery.addEventListener("change", syncResponsiveCompactState);
-    return () => mediaQuery.removeEventListener("change", syncResponsiveCompactState);
+    syncNavigationViewportState();
+    responsiveCompactQuery.addEventListener("change", syncNavigationViewportState);
+    mobileViewportQuery.addEventListener("change", syncNavigationViewportState);
+    window.addEventListener("resize", syncNavigationViewportState);
+    return () => {
+      responsiveCompactQuery.removeEventListener("change", syncNavigationViewportState);
+      mobileViewportQuery.removeEventListener("change", syncNavigationViewportState);
+      window.removeEventListener("resize", syncNavigationViewportState);
+    };
   }, []);
 
   useEffect(() => {
@@ -427,6 +443,9 @@ export function ConsoleShell({
   }
 
   const sidebarCollapsed = isSidebarCollapsed || isResponsiveCompact;
+  const isNavigationExpanded = isMobileViewportActive
+    ? isMobileNavigationOpen
+    : !sidebarCollapsed;
 
   return (
     <div
@@ -487,21 +506,25 @@ export function ConsoleShell({
                       <span>{label}</span>
                       {item.section === "monitoring" ? (
                         <button
-                          aria-expanded={!sidebarCollapsed}
+                          aria-expanded={isNavigationExpanded}
                           aria-label={
-                            sidebarCollapsed ? text.expandNavigation : text.collapseNavigation
+                            isNavigationExpanded
+                              ? text.collapseNavigation
+                              : text.expandNavigation
                           }
                           className="console-sidebar-toggle console-nav-sidebar-toggle"
                           onClick={toggleSidebar}
                           title={
-                            sidebarCollapsed ? text.expandNavigation : text.collapseNavigation
+                            isNavigationExpanded
+                              ? text.collapseNavigation
+                              : text.expandNavigation
                           }
                           type="button"
                         >
-                          {sidebarCollapsed ? (
-                            <PanelLeftOpen aria-hidden="true" size={19} strokeWidth={2.2} />
-                          ) : (
+                          {isNavigationExpanded ? (
                             <PanelLeftClose aria-hidden="true" size={19} strokeWidth={2.2} />
+                          ) : (
+                            <PanelLeftOpen aria-hidden="true" size={19} strokeWidth={2.2} />
                           )}
                         </button>
                       ) : null}
@@ -679,7 +702,7 @@ function ConsoleTopbarActions({
               </span>
               <LanguageSwitcher ariaLabel={text.language} locale={locale} />
             </div>
-            <div className="console-user-settings-row">
+            <div className="console-user-settings-row console-user-settings-choice-row">
               <span>{text.theme}</span>
               <div className="theme-segmented-control" data-density="compact">
                 <button
@@ -698,7 +721,7 @@ function ConsoleTopbarActions({
                 </button>
               </div>
             </div>
-            <div className="console-user-settings-row">
+            <div className="console-user-settings-row console-user-settings-choice-row">
               <span>{text.display}</span>
               <div
                 aria-label={text.display}

@@ -36,6 +36,13 @@ test("snapshot route returns the whole dashboard payload without caching", async
   expect(routeSource).toContain("costOverTime,");
   expect(routeSource).toContain("generatedAt: new Date().toISOString()");
   expect(routeSource).toContain("liveRequests,");
+  expect(routeSource).toContain("getLiveMonthToDateCostMicroUsd(tenantId, {");
+  expect(routeSource).toContain("from: monthToDateRange.from");
+  expect(routeSource).toContain("to: monthToDateRange.to");
+  expect(routeSource).toContain("hasCompleteMonthToDateData");
+  expect(routeSource).toContain(
+    "!overview || !costOverTime || !liveRequests || !hasCompleteMonthToDateData"
+  );
   expect(routeSource).toContain("monthToDateCostMicroUsd:");
   expect(routeSource).toContain("overview\n  }");
   expect(routeSource).toContain("isProjectScopedForTenant(auth, tenantId)");

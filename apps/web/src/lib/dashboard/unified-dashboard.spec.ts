@@ -144,7 +144,30 @@ test("merges aligned cost buckets without losing either surface", () => {
   );
 
   expect(merged.points).toEqual([
-    { bucket: "2026-07-12T12:00:00Z", label: "12:00", spendUsd: 1.5 }
+    { bucket: "2026-07-12T12:00:00.000Z", label: "12:00", spendUsd: 1.5 }
+  ]);
+});
+
+test("merges equivalent cost bucket timestamp formats into one chart point", () => {
+  const merged = mergeCostOverTime(
+    {
+      averageSpendUsd: 0,
+      bucketInterval: "1d",
+      generatedAt: "2026-07-21T00:05:00Z",
+      period: "day",
+      points: [{ bucket: "2026-07-20T00:00:00Z", label: "Jul 20", spendUsd: 0 }]
+    },
+    {
+      averageSpendUsd: 0.9,
+      bucketInterval: "1d",
+      generatedAt: "2026-07-21T00:05:01Z",
+      period: "day",
+      points: [{ bucket: "2026-07-20T00:00:00.000Z", label: "Jul 20", spendUsd: 0.9 }]
+    }
+  );
+
+  expect(merged.points).toEqual([
+    { bucket: "2026-07-20T00:00:00.000Z", label: "Jul 20", spendUsd: 0.9 }
   ]);
 });
 
