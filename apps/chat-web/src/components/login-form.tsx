@@ -97,7 +97,7 @@ export function LoginForm() {
       <h2>{mode === 'login' ? 'GateLM Chat 로그인' : '아이디 확인 및 비밀번호 재설정'}</h2>
       <p className="auth-lead">
         {mode === 'login'
-          ? '관리자가 초대한 회사 계정으로 로그인하세요.'
+          ? 'Dashboard에 가입했거나 관리자가 초대한 회사 계정으로 로그인하세요.'
           : '로그인 아이디는 초대받은 이메일입니다. 해당 이메일로 일회용 재설정 링크를 보내드립니다.'}
       </p>
       {notice ? <div className="success-box" role="status">{notice}</div> : null}

@@ -36,6 +36,22 @@
 - Gateway는 Employee DB를 다시 조회하거나 browser actor header를 해석하지 않는다. 유효한 workload JWT의 Chat API 결정을 신뢰하고 tenant snapshot/status, JWT scope/binding/replay만 검증한다.
 - 정지·logout·device revoke·password reset은 다음 Chat API 요청부터 거부한다. 이미 Provider로 전달된 in-flight 요청은 best-effort cancel하고, 완료되면 기존 safety/persistence 규칙을 적용한다.
 
+#### 2.1.1 Dashboard 관리자 계정 호환성
+
+- Tenant Chat의 관리자 권한 원본은 active `TenantMembership(role=tenant_admin)`이다. `TenantAdmin`은 기존 Dashboard 경로와의 호환성을 위한 관리자 projection으로 유지하며 두 관계는 같은 `(tenantId,userId)`를 나타내야 한다.
+- 기존 `TenantAdmin` 관계가 있지만 대응하는 Membership이 없거나 employee/removed 상태인 경우 migration은 그 Membership을 active `tenant_admin`으로 생성 또는 승격한다. 이메일 일치만으로 관리자 권한을 만들지 않는다.
+- active `tenant_admin` Membership에 대응하는 `TenantAdmin`이 없으면 migration과 신규 조직 생성 transaction이 누락된 projection을 만든다.
+- 관리자 동기화는 Employee를 만들거나 요구하지 않는다. 동기화된 관리자의 Tenant Chat actor는 `tenant_admin`, `employeeId=null`이다.
+- Membership insert/update는 기존 actor authorization version trigger를 통과하므로 이전 권한 claim은 다음 검증에서 거부된다. migration은 이미 정합한 행을 다시 update하지 않아 재실행 시 불필요한 version 증가를 만들지 않는다.
+
+| 항목 | 내용 |
+|---|---|
+| 현재 의미 | Dashboard 일부 호환 경로는 `TenantAdmin`을 인정하지만 Tenant Chat은 canonical `TenantMembership`만 읽는다. |
+| 변경 이유 | 기존 Dashboard 관리자가 자신을 Employee로 초대해야 Tenant Chat에 들어가는 권한 데이터 불일치를 제거한다. |
+| 호환성 | 기존 User credential, Dashboard session, Employee entitlement와 API wire는 변경하지 않는다. |
+| migration | 기존 관리자 관계를 양방향 동기화하고 신규 조직 소유자 생성 시 두 관계를 같은 transaction에서 기록한다. |
+| acceptance | Dashboard 관리자 credential로 Tenant Chat 로그인 가능, `actorKind=tenant_admin`, `employeeId=null`, migration 멱등성, 이메일 기반 권한 생성 금지를 검증한다. |
+
 ### 2.2 Browser auth와 session 계약
 
 Browser auth wire는 [Chat auth OpenAPI](./openapi/chat-auth.openapi.json)를 따른다.

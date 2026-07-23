@@ -393,6 +393,13 @@ export class PrismaAuthRepository implements AuthRepository {
         },
       });
 
+      await tx.tenantAdmin.create({
+        data: {
+          tenantId: tenant.id,
+          userId: user.id,
+        },
+      });
+
       return { membership, tenant, user };
     });
   }

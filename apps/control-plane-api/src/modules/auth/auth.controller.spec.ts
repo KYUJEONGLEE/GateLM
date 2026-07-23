@@ -412,6 +412,7 @@ describe('Auth HTTP API', () => {
     expect(repository.dump().users).toHaveLength(1);
     expect(repository.dump().tenants).toHaveLength(1);
     expect(repository.dump().tenantMemberships).toHaveLength(1);
+    expect(repository.dump().tenantAdmins).toHaveLength(1);
   });
 
   it('accepts a project admin invitation during email verification', async () => {
