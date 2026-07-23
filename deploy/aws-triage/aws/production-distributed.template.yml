@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: "2010-09-09"
-Description: GateLM distributed production foundation with dual private Gateway targets and dedicated AI and PII services.
+Description: GateLM distributed production foundation with dual private Gateway and PII targets plus a dedicated AI service.
 
 Parameters:
   SshKeyName:
@@ -370,6 +370,27 @@ Resources:
         - Key: Environment
           Value: production-distributed
 
+  PiiLoadBalancerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: GateLM internal Network Load Balancer for PII inference traffic.
+      GroupName: gatelm-production-distributed-pii-nlb
+      VpcId: !Ref ProductionVpc
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 8001
+          ToPort: 8001
+          SourceSecurityGroupId: !Ref GatewaySecurityGroup
+          Description: PII detection calls from Gateway only
+      SecurityGroupEgress: []
+      Tags:
+        - Key: Name
+          Value: gatelm-production-distributed-pii-nlb
+        - Key: Project
+          Value: GateLM
+        - Key: Environment
+          Value: production-distributed
+
   DataPostgresSelfIngress:
     Type: AWS::EC2::SecurityGroupIngress
     Properties:
@@ -439,6 +460,26 @@ Resources:
       ToPort: 8081
       DestinationSecurityGroupId: !Ref GatewaySecurityGroup
       Description: Private Gateway target and health-check traffic
+
+  PiiIngressFromLoadBalancer:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref PiiSecurityGroup
+      IpProtocol: tcp
+      FromPort: 8001
+      ToPort: 8001
+      SourceSecurityGroupId: !Ref PiiLoadBalancerSecurityGroup
+      Description: PII inference and health-check traffic from the internal NLB
+
+  PiiLoadBalancerEgress:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      GroupId: !Ref PiiLoadBalancerSecurityGroup
+      IpProtocol: tcp
+      FromPort: 8001
+      ToPort: 8001
+      DestinationSecurityGroupId: !Ref PiiSecurityGroup
+      Description: PII target and health-check traffic
 
   GatewayBootstrapKmsKey:
     Type: AWS::KMS::Key
@@ -705,6 +746,14 @@ Resources:
         RestrictPublicBuckets: true
       VersioningConfiguration:
         Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpireSecondaryBootstrapObjects
+            Prefix: bootstrap/
+            Status: Enabled
+            ExpirationInDays: 1
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 1
       Tags:
         - Key: Name
           Value: gatelm-production-pii-artifacts
@@ -748,6 +797,13 @@ Resources:
                 Effect: Allow
                 Action: s3:GetObject
                 Resource: !Sub arn:${AWS::Partition}:s3:::${ProductionPiiArtifactBucketName}/pii/v36/*
+              - Sid: ManageEphemeralPiiBootstrapObjects
+                Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:DeleteObject
+                Resource: !Sub arn:${AWS::Partition}:s3:::${ProductionPiiArtifactBucketName}/bootstrap/*
       Tags:
         - Key: Project
           Value: GateLM
@@ -1083,11 +1139,69 @@ Resources:
           systemctl enable --now docker
           usermod -aG docker ubuntu
           install -d -o ubuntu -g ubuntu -m 0755 /home/ubuntu/GateLM
-          install -d -o ubuntu -g ubuntu -m 0755 /opt/gatelm/pii-v314/releases/8a5cb146
+          install -d -o ubuntu -g ubuntu -m 0755 /opt/gatelm/pii-v36/releases/171bbde0
           printf '%s\n' pii > /etc/gatelm-production-role
       Tags:
         - Key: Name
           Value: gatelm-production-distributed-pii
+        - Key: Project
+          Value: GateLM
+        - Key: Environment
+          Value: production-distributed
+        - Key: Role
+          Value: pii
+        - Key: DoNotDelete
+          Value: "true"
+
+  PiiSecondaryInstance:
+    Type: AWS::EC2::Instance
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      AvailabilityZone: !GetAtt PrivateSubnet.AvailabilityZone
+      DisableApiTermination: true
+      EbsOptimized: true
+      IamInstanceProfile: !Ref PiiInstanceProfile
+      ImageId: !Ref UbuntuAmiId
+      InstanceInitiatedShutdownBehavior: stop
+      InstanceType: !Ref PiiInstanceType
+      KeyName: !Ref SshKeyName
+      MetadataOptions:
+        HttpEndpoint: enabled
+        HttpTokens: required
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: false
+          DeleteOnTermination: true
+          DeviceIndex: "0"
+          GroupSet: [!Ref PiiSecurityGroup]
+          PrivateIpAddress: 10.78.2.51
+          SubnetId: !Ref PrivateSubnet
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            DeleteOnTermination: false
+            Encrypted: true
+            Iops: 3000
+            VolumeSize: 40
+            VolumeType: gp3
+      UserData: !Base64
+        Fn::Sub: |
+          #!/usr/bin/env bash
+          set -euxo pipefail
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update
+          apt-get install -y ca-certificates curl docker-compose-v2 docker.io git jq postgresql-client python3 unzip
+          curl -fsSL https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip -o /tmp/awscliv2.zip
+          unzip -q /tmp/awscliv2.zip -d /tmp
+          /tmp/aws/install --update
+          systemctl enable --now docker
+          usermod -aG docker ubuntu
+          install -d -o ubuntu -g ubuntu -m 0755 /home/ubuntu/GateLM
+          install -d -o ubuntu -g ubuntu -m 0755 /opt/gatelm/pii-v314/releases/8a5cb146
+          printf '%s\n' pii > /etc/gatelm-production-role
+      Tags:
+        - Key: Name
+          Value: gatelm-production-distributed-pii-secondary
         - Key: Project
           Value: GateLM
         - Key: Environment
@@ -1110,8 +1224,70 @@ Resources:
             install -d -o ubuntu -g ubuntu -m 0755 /opt/gatelm/pii-v314/releases
       Targets:
         - Key: InstanceIds
-          Values: [!Ref PiiInstance]
+          Values: [!Ref PiiInstance, !Ref PiiSecondaryInstance]
       WaitForSuccessTimeoutSeconds: 300
+
+  PiiTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Port: 8001
+      Protocol: TCP
+      TargetType: instance
+      VpcId: !Ref ProductionVpc
+      HealthCheckEnabled: true
+      HealthCheckIntervalSeconds: 10
+      HealthCheckPath: /readyz
+      HealthCheckPort: traffic-port
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 6
+      HealthyThresholdCount: 3
+      UnhealthyThresholdCount: 3
+      Matcher:
+        HttpCode: 200
+      TargetGroupAttributes:
+        - Key: deregistration_delay.timeout_seconds
+          Value: "30"
+        - Key: preserve_client_ip.enabled
+          Value: "false"
+      Targets:
+        - Id: !Ref PiiInstance
+        - Id: !Ref PiiSecondaryInstance
+      Tags:
+        - Key: Name
+          Value: gatelm-production-distributed-pii
+        - Key: Project
+          Value: GateLM
+        - Key: Environment
+          Value: production-distributed
+
+  PiiLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    DependsOn: PiiLoadBalancerEgress
+    Properties:
+      IpAddressType: ipv4
+      Scheme: internal
+      SecurityGroups: [!Ref PiiLoadBalancerSecurityGroup]
+      SubnetMappings:
+        - SubnetId: !Ref PrivateSubnet
+          PrivateIPv4Address: 10.78.2.11
+      Type: network
+      Tags:
+        - Key: Name
+          Value: gatelm-production-distributed-pii
+        - Key: Project
+          Value: GateLM
+        - Key: Environment
+          Value: production-distributed
+
+  PiiListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref PiiTargetGroup
+      LoadBalancerArn: !Ref PiiLoadBalancer
+      Port: 8001
+      Protocol: TCP
 
   GatewayPublicTargetGroup:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
@@ -1293,6 +1469,18 @@ Outputs:
     Value: !Ref PiiInstance
   PiiPrivateIp:
     Value: !GetAtt PiiInstance.PrivateIp
+  PiiSecondaryInstanceId:
+    Value: !Ref PiiSecondaryInstance
+  PiiSecondaryPrivateIp:
+    Value: !GetAtt PiiSecondaryInstance.PrivateIp
+  PiiLoadBalancerArn:
+    Value: !Ref PiiLoadBalancer
+  PiiLoadBalancerDnsName:
+    Value: !GetAtt PiiLoadBalancer.DNSName
+  PiiLoadBalancerPrivateIp:
+    Value: 10.78.2.11
+  PiiTargetGroupArn:
+    Value: !Ref PiiTargetGroup
   PiiArtifactBucketName:
     Value: !Ref PiiArtifactBucket
   NodeInstanceProfileName:
