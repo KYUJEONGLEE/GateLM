@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException } from '@nestjs/common';
 
 import { PrismaService } from '@/infrastructure/database/prisma/prisma.service';
 
@@ -258,6 +258,138 @@ describe('EmployeeUsageService', () => {
       'p0_llm_invocation_logs',
     );
   });
+
+  it('returns the top 20 active employees and the viewer at the actual cost rank', async () => {
+    const employeeIds = Array.from({ length: 21 }, (_, index) =>
+      `00000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
+    );
+    const analytics = employeeIds.map((employeeId, index) =>
+      tenantChatAnalyticsRow(employeeId, {
+        costMicroUsd: BigInt(21 - index),
+        totalTokens: BigInt(100 + index),
+      }),
+    );
+    analytics.push(tenantChatAnalyticsRow(
+      '00000000-0000-4000-8000-000000000099',
+      { costMicroUsd: 999n, totalTokens: 999n },
+    ));
+    const { prisma, service } = createTenantChatRankingService(
+      analytics,
+      employeeIds.map((id, index) => ({
+        department: index === 20 ? ' 운영 ' : 'Platform',
+        id,
+        name: index === 20 ? ' 현재 사용자 ' : `Employee ${index + 1}`,
+      })),
+    );
+
+    const result = await service.listTenantChatUsageRanking(
+      tenantId,
+      employeeIds[20],
+      '30d',
+      'cost',
+      new Date('2026-07-23T12:00:00.000Z'),
+    );
+
+    expect(result.items).toHaveLength(20);
+    expect(result.items[0]).toMatchObject({
+      displayName: 'Employee 1',
+      estimatedCostMicroUsd: 21,
+      rank: 1,
+    });
+    expect(result.rankedEmployeeCount).toBe(21);
+    expect(result.viewer).toEqual({
+      confirmedTotalTokens: 120,
+      department: '운영',
+      displayName: '현재 사용자',
+      estimatedCostMicroUsd: 1,
+      rank: 21,
+    });
+    expect(result.period).toEqual({
+      from: '2026-06-23T12:00:00.000Z',
+      timezone: 'UTC',
+      to: '2026-07-23T12:00:00.000Z',
+    });
+    expect(result.provenance.source).toBe('raw');
+    expect(prisma.employee.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        deletedAt: null,
+        status: 'active',
+        tenantId,
+      }),
+    }));
+    const sql = rawQuery(prisma.$queryRaw.mock.calls[0]?.[0]).sql;
+    expect(sql).toContain('logs.confirmed_total_tokens');
+    expect(sql).toContain('logs.confirmed_cost_micro_usd');
+    expect(sql).not.toContain('tenant_chat_usage_reservations');
+  });
+
+  it('sorts the same confirmed usage by tokens with a stable employee id tie-break', async () => {
+    const employeeIds = [
+      '00000000-0000-4000-8000-000000000011',
+      '00000000-0000-4000-8000-000000000010',
+      '00000000-0000-4000-8000-000000000012',
+    ] as const;
+    const { service } = createTenantChatRankingService(
+      [
+        tenantChatAnalyticsRow(employeeIds[0], { costMicroUsd: 100n, totalTokens: 20n }),
+        tenantChatAnalyticsRow(employeeIds[1], { costMicroUsd: 1n, totalTokens: 20n }),
+        tenantChatAnalyticsRow(employeeIds[2], { costMicroUsd: 200n, totalTokens: 10n }),
+      ],
+      employeeIds.map((id) => ({ department: null, id, name: id.slice(-2) })),
+    );
+
+    const result = await service.listTenantChatUsageRanking(
+      tenantId,
+      undefined,
+      '7d',
+      'tokens',
+      new Date('2026-07-23T12:00:00.000Z'),
+    );
+
+    expect(result.items.map((row) => row.displayName)).toEqual(['10', '11', '12']);
+    expect(result.viewer).toBeNull();
+    expect(result.period.from).toBe('2026-07-16T12:00:00.000Z');
+  });
+
+  it('returns a null viewer rank for an active employee without usage', async () => {
+    const viewerId = '00000000-0000-4000-8000-000000000030';
+    const { service } = createTenantChatRankingService(
+      [],
+      [{ department: null, id: viewerId, name: null }],
+    );
+
+    const result = await service.listTenantChatUsageRanking(
+      tenantId,
+      viewerId,
+      '24h',
+      'cost',
+      new Date('2026-07-23T12:00:00.000Z'),
+    );
+
+    expect(result.items).toEqual([]);
+    expect(result.rankedEmployeeCount).toBe(0);
+    expect(result.viewer).toEqual({
+      confirmedTotalTokens: 0,
+      department: null,
+      displayName: '이름 미등록',
+      estimatedCostMicroUsd: 0,
+      rank: null,
+    });
+  });
+
+  it('rejects a viewer employee that is not active in the same tenant', async () => {
+    const { service } = createTenantChatRankingService(
+      [],
+      [],
+    );
+
+    await expect(service.listTenantChatUsageRanking(
+      tenantId,
+      '00000000-0000-4000-8000-000000000040',
+      '30d',
+      'cost',
+    )).rejects.toBeInstanceOf(ForbiddenException);
+  });
 });
 
 function createService(queryRaw: jest.Mock) {
@@ -301,6 +433,42 @@ function createClickHouseService(
     },
   } as unknown as PrismaService;
   return new EmployeeUsageService(prisma, reader);
+}
+
+function createTenantChatRankingService(
+  analytics: ReturnType<typeof tenantChatAnalyticsRow>[],
+  employees: Array<{ department: string | null; id: string; name: string | null }>,
+) {
+  const prisma = {
+    $queryRaw: jest.fn().mockResolvedValue(analytics),
+    tenant: {
+      findUnique: jest.fn().mockResolvedValue({ id: tenantId }),
+    },
+    employee: {
+      findMany: jest.fn().mockResolvedValue(employees),
+    },
+  };
+  return {
+    prisma,
+    service: new EmployeeUsageService(prisma as unknown as PrismaService),
+  };
+}
+
+function tenantChatAnalyticsRow(
+  employeeId: string,
+  values: { costMicroUsd: bigint; totalTokens: bigint },
+) {
+  return {
+    costMicroUsd: values.costMicroUsd,
+    employeeId,
+    hasRawUsage: true,
+    hasRollupUsage: false,
+    inputTokens: values.totalTokens,
+    outputTokens: 0n,
+    requestCount: 1n,
+    sourceMaxAt: new Date('2026-07-23T11:59:00.000Z'),
+    totalTokens: values.totalTokens,
+  };
 }
 
 function usageRow(

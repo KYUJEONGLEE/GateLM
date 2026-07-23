@@ -41,6 +41,7 @@ const tenantChatDocs = [
   "docs/tenant-chat/openapi/private-control-plane.openapi.json",
   "docs/tenant-chat/openapi/admin-rag.openapi.json",
   "docs/tenant-chat/openapi/chat-conversation.openapi.json",
+  "docs/tenant-chat/openapi/chat-usage.openapi.json",
   "docs/tenant-chat/openapi/private-gateway.openapi.json",
   "docs/tenant-chat/db/tenant-chat-content.sql",
   "docs/tenant-chat/db/tenant-chat-usage.sql",
@@ -220,6 +221,8 @@ function assertDocumentationRouting() {
 
   assertIncludes("docs/tenant-chat/README.md", "openapi/admin-rag.openapi.json");
   assertIncludes("docs/tenant-chat/contracts.md", "openapi/admin-rag.openapi.json");
+  assertIncludes("docs/tenant-chat/README.md", "openapi/chat-usage.openapi.json");
+  assertIncludes("docs/tenant-chat/contracts.md", "openapi/chat-usage.openapi.json");
 
   for (const expectedText of [
     "Historical baseline",
@@ -716,6 +719,7 @@ function assertTenantChatExecutableContract() {
   const controlPlaneOpenApiPath = "docs/tenant-chat/openapi/private-control-plane.openapi.json";
   const adminRagOpenApiPath = "docs/tenant-chat/openapi/admin-rag.openapi.json";
   const conversationOpenApiPath = "docs/tenant-chat/openapi/chat-conversation.openapi.json";
+  const usageOpenApiPath = "docs/tenant-chat/openapi/chat-usage.openapi.json";
   const chatTurnEventSchemaPath = "docs/tenant-chat/schemas/chat-turn-sse-event.schema.json";
   const openApiPath = "docs/tenant-chat/openapi/private-gateway.openapi.json";
   const ddlPath = "docs/tenant-chat/db/tenant-chat-usage.sql";
@@ -1165,6 +1169,56 @@ function assertTenantChatExecutableContract() {
     ]?.post?.responses?.["200"];
     if (!turnResponse?.content?.["text/event-stream"] || turnResponse?.content?.["application/json"]) {
       fail(`${conversationOpenApiPath}: turn success must be text/event-stream only`);
+    }
+  }
+
+  const usageOpenApi = readJson(usageOpenApiPath);
+  if (usageOpenApi) {
+    if (usageOpenApi.openapi !== "3.1.0") {
+      fail(`${usageOpenApiPath}: expected OpenAPI 3.1.0`);
+    }
+    for (const apiPath of [
+      "/api/tenant-chat/usage-ranking",
+      "/internal/v1/tenant-chat/usage-ranking",
+      "/internal/v1/tenant-chat/usage/rankings/{tenantId}",
+    ]) {
+      const operation = usageOpenApi.paths?.[apiPath]?.get;
+      if (!operation) {
+        fail(`${usageOpenApiPath}: missing GET ${apiPath}`);
+        continue;
+      }
+      for (const status of ["200", "400", "401", "503"]) {
+        if (!operation.responses?.[status]) {
+          fail(`${usageOpenApiPath}: GET ${apiPath} must declare ${status}`);
+        }
+      }
+    }
+    const browserParameters = usageOpenApi.paths?.[
+      "/api/tenant-chat/usage-ranking"
+    ]?.get?.parameters ?? [];
+    const browserParameterRefs = browserParameters.map((parameter) => parameter.$ref).sort();
+    if (JSON.stringify(browserParameterRefs) !== JSON.stringify([
+      "#/components/parameters/Metric",
+      "#/components/parameters/Range",
+    ])) {
+      fail(`${usageOpenApiPath}: Browser route must accept only range and metric`);
+    }
+    const ranking = usageOpenApi.components?.schemas?.UsageRankingResponse;
+    const row = usageOpenApi.components?.schemas?.UsageRankingRow;
+    if (ranking?.additionalProperties !== false || ranking?.properties?.items?.maxItems !== 20) {
+      fail(`${usageOpenApiPath}: ranking response must be closed and bounded to 20 items`);
+    }
+    if (row?.additionalProperties !== false) {
+      fail(`${usageOpenApiPath}: ranking row must reject unknown properties`);
+    }
+    for (const forbidden of ["email", "employeeId", "provider", "model"]) {
+      if (row?.properties?.[forbidden]) {
+        fail(`${usageOpenApiPath}: ranking row must not expose ${forbidden}`);
+      }
+    }
+    const unavailableCodes = usageOpenApi.components?.responses?.Unavailable?.["x-error-codes"] ?? [];
+    if (JSON.stringify(unavailableCodes) !== JSON.stringify(["CHAT_USAGE_UNAVAILABLE"])) {
+      fail(`${usageOpenApiPath}: Unavailable must declare only CHAT_USAGE_UNAVAILABLE`);
     }
   }
 

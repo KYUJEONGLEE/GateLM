@@ -1,0 +1,323 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "GateLM Tenant Chat employee usage ranking API",
+    "version": "tenant-chat/usage-ranking-v1",
+    "description": "Read-only Tenant Chat confirmed-usage ranking across Browser BFF, Chat API, and private Control Plane boundaries."
+  },
+  "paths": {
+    "/api/tenant-chat/usage-ranking": {
+      "get": {
+        "operationId": "getTenantChatUsageRankingFromBrowser",
+        "security": [{ "ChatSessionCookie": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/Range" },
+          { "$ref": "#/components/parameters/Metric" }
+        ],
+        "responses": {
+          "200": { "$ref": "#/components/responses/Ranking" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/AuthRequired" },
+          "503": { "$ref": "#/components/responses/Unavailable" }
+        }
+      }
+    },
+    "/internal/v1/tenant-chat/usage-ranking": {
+      "get": {
+        "operationId": "getTenantChatUsageRankingFromChatApi",
+        "security": [{ "ChatWebService": [], "ChatAccess": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/Range" },
+          { "$ref": "#/components/parameters/Metric" }
+        ],
+        "responses": {
+          "200": { "$ref": "#/components/responses/Ranking" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/AuthRequired" },
+          "503": { "$ref": "#/components/responses/Unavailable" }
+        }
+      }
+    },
+    "/internal/v1/tenant-chat/usage/rankings/{tenantId}": {
+      "get": {
+        "operationId": "getTenantChatUsageRankingFromControlPlane",
+        "security": [{ "ControlPlaneService": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/TenantId" },
+          { "$ref": "#/components/parameters/ViewerEmployeeId" },
+          { "$ref": "#/components/parameters/Range" },
+          { "$ref": "#/components/parameters/Metric" }
+        ],
+        "responses": {
+          "200": { "$ref": "#/components/responses/Ranking" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/AuthRequired" },
+          "403": { "$ref": "#/components/responses/AccessStale" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "503": { "$ref": "#/components/responses/Unavailable" }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "ChatSessionCookie": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "gatelm_chat_access"
+      },
+      "ChatWebService": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "x-gatelm-chat-web-service-token"
+      },
+      "ChatAccess": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "x-gatelm-chat-access"
+      },
+      "ControlPlaneService": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "x-gatelm-tenant-chat-service-token"
+      }
+    },
+    "parameters": {
+      "TenantId": {
+        "name": "tenantId",
+        "in": "path",
+        "required": true,
+        "schema": { "$ref": "#/components/schemas/Uuid" },
+        "description": "Server-derived tenant scope. It is never accepted by the Browser BFF."
+      },
+      "ViewerEmployeeId": {
+        "name": "viewerEmployeeId",
+        "in": "query",
+        "required": false,
+        "schema": { "$ref": "#/components/schemas/Uuid" },
+        "description": "Server-derived active employee identity. Omitted for tenant admins without an Employee."
+      },
+      "Range": {
+        "name": "range",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "enum": ["24h", "7d", "30d"],
+          "default": "30d"
+        }
+      },
+      "Metric": {
+        "name": "metric",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "enum": ["cost", "tokens"],
+          "default": "cost"
+        }
+      }
+    },
+    "schemas": {
+      "Uuid": {
+        "type": "string",
+        "format": "uuid"
+      },
+      "UsageRankingRow": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "confirmedTotalTokens",
+          "department",
+          "displayName",
+          "estimatedCostMicroUsd",
+          "rank"
+        ],
+        "properties": {
+          "confirmedTotalTokens": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Provider-confirmed total tokens only."
+          },
+          "department": {
+            "type": ["string", "null"],
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "displayName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "estimatedCostMicroUsd": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Confirmed micro-USD calculated by the existing pinned pricing path; it is an estimate."
+          },
+          "rank": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      },
+      "UsageRankingViewer": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "confirmedTotalTokens",
+          "department",
+          "displayName",
+          "estimatedCostMicroUsd",
+          "rank"
+        ],
+        "properties": {
+          "confirmedTotalTokens": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "department": {
+            "type": ["string", "null"],
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "displayName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "estimatedCostMicroUsd": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "rank": {
+            "type": ["integer", "null"],
+            "minimum": 1,
+            "description": "Null when the active viewer has no Tenant Chat usage in the selected period."
+          }
+        }
+      },
+      "UsageRankingResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "items",
+          "metric",
+          "period",
+          "provenance",
+          "range",
+          "rankedEmployeeCount",
+          "viewer"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "maxItems": 20,
+            "items": { "$ref": "#/components/schemas/UsageRankingRow" }
+          },
+          "metric": { "enum": ["cost", "tokens"] },
+          "period": { "$ref": "#/components/schemas/UsagePeriod" },
+          "provenance": { "$ref": "#/components/schemas/UsageProvenance" },
+          "range": { "enum": ["24h", "7d", "30d"] },
+          "rankedEmployeeCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "viewer": {
+            "oneOf": [
+              { "$ref": "#/components/schemas/UsageRankingViewer" },
+              { "type": "null" }
+            ]
+          }
+        }
+      },
+      "UsagePeriod": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["from", "timezone", "to"],
+        "properties": {
+          "from": { "type": "string", "format": "date-time" },
+          "timezone": { "const": "UTC" },
+          "to": { "type": "string", "format": "date-time" }
+        }
+      },
+      "UsageProvenance": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["generatedAt", "lastSourceAt", "source"],
+        "properties": {
+          "generatedAt": { "type": "string", "format": "date-time" },
+          "lastSourceAt": {
+            "type": ["string", "null"],
+            "format": "date-time"
+          },
+          "source": { "enum": ["raw", "rollup", "hybrid"] }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code", "message"],
+        "properties": {
+          "code": {
+            "type": "string",
+            "pattern": "^CHAT_[A-Z0-9_]{1,59}$"
+          },
+          "message": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          }
+        }
+      }
+    },
+    "responses": {
+      "Ranking": {
+        "description": "Top active employees with confirmed Tenant Chat usage and an optional separately ranked viewer.",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/UsageRankingResponse" }
+          }
+        }
+      },
+      "BadRequest": {
+        "description": "Unsupported or browser-forbidden query input.",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+          }
+        }
+      },
+      "AuthRequired": {
+        "description": "Service or user authentication failed.",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+          }
+        }
+      },
+      "AccessStale": {
+        "description": "The supplied server-derived viewer is not an active Employee in the tenant.",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "Tenant not found.",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+          }
+        }
+      },
+      "Unavailable": {
+        "description": "Usage ranking read failed without affecting conversation or streaming APIs.",
+        "x-error-codes": ["CHAT_USAGE_UNAVAILABLE"],
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+          }
+        }
+      }
+    }
+  }
+}

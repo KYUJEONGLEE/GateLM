@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -20,9 +21,15 @@ import {
   EmployeeUsageResponseDto,
   ListEmployeeUsageQueryDto,
 } from './dto/employee-usage.dto';
+import {
+  TenantChatUsageMetric,
+  TenantChatUsageRange,
+  TenantChatUsageRankingResponseDto,
+} from './dto/tenant-chat-usage-ranking.dto';
 import type { EmployeeStatus } from './dto/employee.dto';
 
 const MAX_USAGE_RANGE_MS = 31 * 24 * 60 * 60 * 1_000;
+const TENANT_CHAT_RANKING_LIMIT = 20;
 
 type EmployeeUsageCursor = {
   employeeId: string;
@@ -83,6 +90,11 @@ type TenantChatAnalyticsRow = {
   sourceMaxAt: Date | null;
   hasRawUsage: boolean;
   hasRollupUsage: boolean;
+};
+
+type TenantChatRankingEmployee = {
+  department: string | null;
+  name: string | null;
 };
 
 export type EmployeeCostTotalPeriod = {
@@ -245,6 +257,102 @@ export class EmployeeUsageService {
           ]),
         ),
     );
+  }
+
+  async listTenantChatUsageRanking(
+    tenantId: string,
+    viewerEmployeeId: string | undefined,
+    range: TenantChatUsageRange,
+    metric: TenantChatUsageMetric,
+    now = new Date(),
+  ): Promise<TenantChatUsageRankingResponseDto> {
+    await this.assertTenantExists(tenantId);
+    const to = new Date(now.getTime());
+    const from = new Date(to.getTime() - tenantChatUsageRangeMs(range));
+    const analytics = await this.queryTenantChatAnalytics(tenantId, from, to);
+    const usageEmployeeIds = analytics
+      .filter((row) => row.employeeId !== null && row.requestCount > 0n)
+      .map((row) => row.employeeId as string);
+    const selectedEmployeeIds = [...new Set([
+      ...usageEmployeeIds,
+      ...(viewerEmployeeId ? [viewerEmployeeId] : []),
+    ])];
+    const employees = selectedEmployeeIds.length
+      ? await this.prisma.employee.findMany({
+          where: {
+            deletedAt: null,
+            id: { in: selectedEmployeeIds },
+            status: 'active',
+            tenantId,
+          },
+          select: {
+            department: true,
+            id: true,
+            name: true,
+          },
+        })
+      : [];
+    const employeeById = new Map(employees.map((employee) => [employee.id, employee]));
+    if (viewerEmployeeId && !employeeById.has(viewerEmployeeId)) {
+      throw new ForbiddenException({
+        code: 'CHAT_ACCESS_STALE',
+        message: 'The active employee entitlement could not be verified.',
+      });
+    }
+
+    const aggregateByEmployee = new Map<string, EmployeeUsageAggregate>();
+    for (const row of analytics) {
+      if (!row.employeeId || row.requestCount <= 0n || !employeeById.has(row.employeeId)) continue;
+      aggregateByEmployee.set(
+        row.employeeId,
+        addAggregate(
+          aggregateByEmployee.get(row.employeeId) ?? emptyAggregate(),
+          aggregateFromTenantChat(row),
+        ),
+      );
+    }
+    const ranked = [...aggregateByEmployee.entries()]
+      .map(([employeeId, usage]) => ({ employeeId, usage }))
+      .sort((left, right) => compareTenantChatRanking(left, right, metric))
+      .map((row, index) => ({ ...row, rank: index + 1 }));
+    const viewerRanked = viewerEmployeeId
+      ? ranked.find((row) => row.employeeId === viewerEmployeeId)
+      : undefined;
+    const viewerEmployee = viewerEmployeeId
+      ? employeeById.get(viewerEmployeeId)
+      : undefined;
+    const viewerUsage = viewerRanked?.usage ?? emptyAggregate();
+    const lastSourceAt = analytics.reduce<Date | null>(
+      (latest, row) => maxDate(latest, row.sourceMaxAt),
+      null,
+    );
+    const hasRaw = analytics.some((row) => row.hasRawUsage);
+    const hasRollup = analytics.some((row) => row.hasRollupUsage);
+
+    return {
+      items: ranked.slice(0, TENANT_CHAT_RANKING_LIMIT).map((row) =>
+        tenantChatRankingRow(employeeById.get(row.employeeId)!, row.usage, row.rank),
+      ),
+      metric,
+      period: {
+        from: from.toISOString(),
+        timezone: 'UTC',
+        to: to.toISOString(),
+      },
+      provenance: {
+        generatedAt: to.toISOString(),
+        lastSourceAt: lastSourceAt?.toISOString() ?? null,
+        source: hasRaw && hasRollup ? 'hybrid' : hasRollup ? 'rollup' : 'raw',
+      },
+      range,
+      rankedEmployeeCount: ranked.length,
+      viewer: viewerEmployee
+        ? {
+            ...tenantChatRankingValues(viewerEmployee, viewerUsage),
+            rank: viewerRanked?.rank ?? null,
+          }
+        : null,
+    };
   }
 
   private async listEmployeeUsageFromClickHouse(input: {
@@ -1088,6 +1196,52 @@ function addMetrics(
     outputTokens: left.outputTokens + right.outputTokens,
     requestCount: left.requestCount + right.requestCount,
     totalTokens: left.totalTokens + right.totalTokens,
+  };
+}
+
+function tenantChatUsageRangeMs(range: TenantChatUsageRange): number {
+  if (range === '24h') return 24 * 60 * 60 * 1_000;
+  if (range === '7d') return 7 * 24 * 60 * 60 * 1_000;
+  return 30 * 24 * 60 * 60 * 1_000;
+}
+
+function compareTenantChatRanking(
+  left: Readonly<{ employeeId: string; usage: EmployeeUsageAggregate }>,
+  right: Readonly<{ employeeId: string; usage: EmployeeUsageAggregate }>,
+  metric: TenantChatUsageMetric,
+): number {
+  const leftValue = metric === 'cost'
+    ? left.usage.costMicroUsd
+    : left.usage.totalTokens;
+  const rightValue = metric === 'cost'
+    ? right.usage.costMicroUsd
+    : right.usage.totalTokens;
+  if (leftValue !== rightValue) return leftValue > rightValue ? -1 : 1;
+  return left.employeeId.localeCompare(right.employeeId);
+}
+
+function tenantChatRankingValues(
+  employee: TenantChatRankingEmployee,
+  usage: EmployeeUsageAggregate,
+) {
+  const displayName = employee.name?.trim() || '이름 미등록';
+  const department = employee.department?.trim() || null;
+  return {
+    confirmedTotalTokens: Number(usage.totalTokens),
+    department,
+    displayName,
+    estimatedCostMicroUsd: Number(usage.costMicroUsd),
+  };
+}
+
+function tenantChatRankingRow(
+  employee: TenantChatRankingEmployee,
+  usage: EmployeeUsageAggregate,
+  rank: number,
+) {
+  return {
+    ...tenantChatRankingValues(employee, usage),
+    rank,
   };
 }
 

@@ -343,6 +343,7 @@ function safeMessage(code) {
   if (code === 'CHAT_CONCURRENCY_LIMITED') return '진행 중인 요청이 많습니다. 잠시 후 다시 시도해 주세요.';
   if (['CHAT_PROVIDER_FAILED', 'CHAT_PROVIDER_TIMEOUT', 'CHAT_NO_ELIGIBLE_ROUTE'].includes(code)) return '답변 서비스를 일시적으로 사용할 수 없습니다. 잠시 후 다시 시도해 주세요.';
   if (['CHAT_RUNTIME_UNAVAILABLE', 'CHAT_USAGE_GUARD_UNAVAILABLE', 'CHAT_ENTITLEMENT_UNAVAILABLE'].includes(code)) return '조직의 AI 실행 설정을 확인할 수 없습니다. 잠시 후 다시 시도해 주세요.';
+  if (code === 'CHAT_USAGE_UNAVAILABLE') return '사용량 순위를 불러올 수 없습니다. 잠시 후 다시 시도해 주세요.';
   if (['CHAT_STORAGE_UNAVAILABLE', 'CHAT_CONTENT_KEY_UNAVAILABLE', 'CHAT_CONTENT_INTEGRITY_FAILED'].includes(code)) return '대화 기록을 안전하게 처리할 수 없습니다. 잠시 후 다시 시도해 주세요.';
   if (code === 'CHAT_REQUEST_CANCELLED') return '답변 생성을 중지했습니다.';
   if (code === 'CHAT_AUTH_REQUIRED' || code === 'CHAT_ACCESS_STALE') return '로그인이 만료되었습니다. 다시 로그인해 주세요.';
