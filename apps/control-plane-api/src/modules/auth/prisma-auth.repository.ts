@@ -17,6 +17,8 @@ import {
   EmployeeInvitationExistingAccountError,
   EmployeeInvitationNotFoundError,
   EmailVerificationCode,
+  PasswordResetToken,
+  PasswordResetTokenWithUser,
   OAuthAccount,
   OAuthAccountWithUser,
 } from './auth.repository';
@@ -563,6 +565,12 @@ export class PrismaAuthRepository implements AuthRepository {
     });
   }
 
+  async findUserById(userId: string): Promise<AuthUser | null> {
+    return this.prisma.user.findFirst({
+      where: { deletedAt: null, id: userId },
+    });
+  }
+
   async findUserByEmail(email: string): Promise<AuthUser | null> {
     return this.prisma.user.findFirst({
       where: {
@@ -611,6 +619,137 @@ export class PrismaAuthRepository implements AuthRepository {
     await this.prisma.user.update({
       data: { lastLoginAt },
       where: { id: userId },
+    });
+  }
+
+  async countPasswordResetTokensSince(
+    userId: string,
+    since: Date,
+  ): Promise<number> {
+    return this.prisma.passwordResetToken.count({
+      where: { createdAt: { gte: since }, userId },
+    });
+  }
+
+  async createPasswordResetToken(input: {
+    expiresAt: Date;
+    tokenHash: string;
+    userId: string;
+  }): Promise<PasswordResetToken> {
+    return this.prisma.passwordResetToken.create({ data: input });
+  }
+
+  async findActivePasswordResetTokenByHash(
+    tokenHash: string,
+    now: Date,
+  ): Promise<PasswordResetTokenWithUser | null> {
+    return this.prisma.passwordResetToken.findFirst({
+      include: { user: true },
+      where: {
+        consumedAt: null,
+        expiresAt: { gt: now },
+        tokenHash,
+        user: { deletedAt: null },
+      },
+    });
+  }
+
+  async completePasswordReset(input: {
+    changedAt: Date;
+    expectedPasswordHash: string;
+    passwordHash: string;
+    tokenId: string;
+    userId: string;
+  }): Promise<AuthUser | null> {
+    return this.prisma.$transaction(async (tx) => {
+      const claimedToken = await tx.passwordResetToken.updateMany({
+        data: { consumedAt: input.changedAt },
+        where: {
+          consumedAt: null,
+          expiresAt: { gt: input.changedAt },
+          id: input.tokenId,
+          userId: input.userId,
+        },
+      });
+      if (claimedToken.count !== 1) {
+        return null;
+      }
+
+      const updatedUser = await tx.user.updateMany({
+        data: {
+          actorAuthzVersion: { increment: 1 },
+          passwordHash: input.passwordHash,
+        },
+        where: {
+          deletedAt: null,
+          id: input.userId,
+          passwordHash: input.expectedPasswordHash,
+          status: 'active',
+        },
+      });
+      if (updatedUser.count !== 1) {
+        return null;
+      }
+      await tx.passwordResetToken.updateMany({
+        data: { consumedAt: input.changedAt },
+        where: { consumedAt: null, userId: input.userId },
+      });
+      await tx.authSession.updateMany({
+        data: { revokedAt: input.changedAt },
+        where: { revokedAt: null, userId: input.userId },
+      });
+      await tx.tenantChatRefreshToken.updateMany({
+        data: { revokedAt: input.changedAt },
+        where: { revokedAt: null, session: { userId: input.userId } },
+      });
+      await tx.tenantChatSession.updateMany({
+        data: { revokeReason: 'password_reset', revokedAt: input.changedAt },
+        where: { revokedAt: null, userId: input.userId },
+      });
+      return tx.user.findUniqueOrThrow({ where: { id: input.userId } });
+    });
+  }
+
+  async changePasswordAndRevokeSessions(input: {
+    changedAt: Date;
+    expectedPasswordHash: string;
+    passwordHash: string;
+    userId: string;
+  }): Promise<AuthUser | null> {
+    return this.prisma.$transaction(async (tx) => {
+      const updatedUser = await tx.user.updateMany({
+        data: {
+          actorAuthzVersion: { increment: 1 },
+          passwordHash: input.passwordHash,
+        },
+        where: {
+          deletedAt: null,
+          id: input.userId,
+          passwordHash: input.expectedPasswordHash,
+          status: 'active',
+        },
+      });
+      if (updatedUser.count !== 1) {
+        return null;
+      }
+
+      await tx.passwordResetToken.updateMany({
+        data: { consumedAt: input.changedAt },
+        where: { consumedAt: null, userId: input.userId },
+      });
+      await tx.authSession.updateMany({
+        data: { revokedAt: input.changedAt },
+        where: { revokedAt: null, userId: input.userId },
+      });
+      await tx.tenantChatRefreshToken.updateMany({
+        data: { revokedAt: input.changedAt },
+        where: { revokedAt: null, session: { userId: input.userId } },
+      });
+      await tx.tenantChatSession.updateMany({
+        data: { revokeReason: 'password_changed', revokedAt: input.changedAt },
+        where: { revokedAt: null, userId: input.userId },
+      });
+      return tx.user.findUniqueOrThrow({ where: { id: input.userId } });
     });
   }
 }

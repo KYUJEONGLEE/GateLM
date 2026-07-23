@@ -34,7 +34,7 @@ func TestTerminalLogWriterKeepsPrimaryResultWhenMirrorFails(t *testing.T) {
 	}
 }
 
-func TestTerminalLogWriterReturnsOnlyPrimaryFailure(t *testing.T) {
+func TestTerminalLogWriterSkipsMirrorWhenPrimaryFails(t *testing.T) {
 	primaryErr := errors.New("synthetic primary failure")
 	primary := &recordingWriter{err: primaryErr}
 	mirror := &recordingWriter{}
@@ -44,8 +44,26 @@ func TestTerminalLogWriterReturnsOnlyPrimaryFailure(t *testing.T) {
 	if !errors.Is(err, primaryErr) {
 		t.Fatalf("expected primary failure, got %v", err)
 	}
-	if len(mirror.entries) != 1 {
-		t.Fatalf("mirror should still be attempted, got %d records", len(mirror.entries))
+	if len(mirror.entries) != 0 {
+		t.Fatalf("mirror must wait for canonical primary success, got %d records", len(mirror.entries))
+	}
+}
+
+func TestTerminalLogWriterSkipsBatchMirrorWhenPrimaryFails(t *testing.T) {
+	primaryErr := errors.New("synthetic primary batch failure")
+	primary := &failingBatchWriter{err: primaryErr}
+	mirror := &recordingBatchWriter{}
+	writer := NewTerminalLogWriter(TerminalLogWriterConfig{Primary: primary, Mirror: mirror})
+
+	err := writer.WriteTerminalLogs(context.Background(), []invocationlog.TerminalLog{
+		{RequestID: "request_1"},
+		{RequestID: "request_2"},
+	})
+	if !errors.Is(err, primaryErr) {
+		t.Fatalf("expected primary batch failure, got %v", err)
+	}
+	if mirror.batchCalls != 0 {
+		t.Fatalf("mirror must not receive a batch that the canonical primary rejected, got %d calls", mirror.batchCalls)
 	}
 }
 
@@ -113,6 +131,18 @@ func (w *recordingBatchWriter) WriteTerminalLog(context.Context, invocationlog.T
 func (w *recordingBatchWriter) WriteTerminalLogs(_ context.Context, _ []invocationlog.TerminalLog) error {
 	w.batchCalls++
 	return nil
+}
+
+type failingBatchWriter struct {
+	err error
+}
+
+func (w *failingBatchWriter) WriteTerminalLog(context.Context, invocationlog.TerminalLog) error {
+	return w.err
+}
+
+func (w *failingBatchWriter) WriteTerminalLogs(context.Context, []invocationlog.TerminalLog) error {
+	return w.err
 }
 
 type blockingWriter struct{}

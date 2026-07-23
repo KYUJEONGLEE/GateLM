@@ -23,6 +23,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { GateLMLogo } from "@/components/brand/gatelm-logo";
+import { ChangePasswordDialog } from "@/features/auth/components/change-password-dialog";
 import { LanguageSwitcher } from "@/components/i18n/language-switcher";
 import { IntentPrefetchLink } from "@/components/navigation/intent-prefetch-link";
 import {
@@ -44,6 +45,7 @@ type CurrentUser = {
   avatarUrl?: string;
   displayName: string;
   email?: string;
+  hasLocalPassword: boolean;
   id: string;
   role: string;
   tenantName?: string;
@@ -185,6 +187,7 @@ const shellText: Record<
   {
     collapseNavigation: string;
     account: string;
+    changePassword: string;
     accountActions: string;
     expandNavigation: string;
     language: string;
@@ -194,6 +197,7 @@ const shellText: Record<
     navigation: string;
     openUserProfile: string;
     organization: string;
+    passwordUnavailable: string;
     role: string;
     sessionRequired: string;
     settings: string;
@@ -211,6 +215,7 @@ const shellText: Record<
 > = {
   en: {
     account: "Account",
+    changePassword: "Change password",
     accountActions: "Console account actions",
     collapseNavigation: "Collapse navigation",
     expandNavigation: "Expand navigation",
@@ -226,6 +231,7 @@ const shellText: Record<
     navigation: "navigation",
     openUserProfile: "Open user profile menu",
     organization: "Organization",
+    passwordUnavailable: "This Google sign-in account does not have a local password.",
     planned: "planned",
     role: "Role",
     sessionRequired: "Session required",
@@ -237,6 +243,7 @@ const shellText: Record<
   },
   ko: {
     account: "계정",
+    changePassword: "비밀번호 변경",
     accountActions: "콘솔 계정 메뉴",
     landing: "랜딩",
     collapseNavigation: "내비게이션 닫기",
@@ -252,6 +259,7 @@ const shellText: Record<
     navigation: "내비게이션",
     openUserProfile: "사용자 프로필 메뉴 열기",
     organization: "조직",
+    passwordUnavailable: "Google 로그인 계정에는 로컬 비밀번호가 없습니다.",
     planned: "예정",
     role: "역할",
     sessionRequired: "로그인 필요",
@@ -635,6 +643,7 @@ function ConsoleTopbarActions({
   theme: ConsoleTheme;
 }) {
   const displayUser = currentUser ?? buildPendingCurrentUser(text);
+  const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false);
   const displayRole = displayUser.role === "Tenant Admin" ? text.tenantAdmin : displayUser.role;
 
   return (
@@ -750,6 +759,18 @@ function ConsoleTopbarActions({
           </section>
 
           <div className="console-user-menu-actions">
+            {currentUser?.hasLocalPassword ? (
+              <button
+                className="console-user-menu-action"
+                onClick={() => setIsPasswordDialogOpen(true)}
+                type="button"
+              >
+                <KeyRound aria-hidden="true" size={14} strokeWidth={2.2} />
+                <span>{text.changePassword}</span>
+              </button>
+            ) : currentUser ? (
+              <p className="console-user-menu-note">{text.passwordUnavailable}</p>
+            ) : null}
             <button
               className="console-user-menu-action"
               disabled={isLoggingOut}
@@ -764,6 +785,11 @@ function ConsoleTopbarActions({
           </div>
         </DropdownMenuContent>
       </DropdownMenu>
+      <ChangePasswordDialog
+        locale={locale}
+        onOpenChange={setIsPasswordDialogOpen}
+        open={isPasswordDialogOpen}
+      />
     </div>
   );
 }
@@ -773,6 +799,7 @@ function buildPendingCurrentUser(
 ): CurrentUser {
   return {
     displayName: text.account,
+    hasLocalPassword: false,
     id: "session-loading",
     role: text.sessionRequired,
     tenantName: text.organization

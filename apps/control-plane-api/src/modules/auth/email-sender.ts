@@ -6,6 +6,17 @@ export interface VerificationEmailMessage {
   expiresAt: Date;
 }
 
+export interface PasswordResetEmailMessage {
+  email: string;
+  expiresAt: Date;
+  resetUrl: string;
+}
+
+export interface PasswordChangedEmailMessage {
+  changedAt: Date;
+  email: string;
+}
+
 export interface ProjectAdminInvitationEmailMessage {
   email: string;
   expiresAt: Date;
@@ -30,6 +41,8 @@ export interface EmailSender {
   sendProjectAdminInvitationEmail(
     message: ProjectAdminInvitationEmailMessage,
   ): Promise<void>;
+  sendPasswordChangedEmail(message: PasswordChangedEmailMessage): Promise<void>;
+  sendPasswordResetEmail(message: PasswordResetEmailMessage): Promise<void>;
   sendVerificationEmail(message: VerificationEmailMessage): Promise<void>;
 }
 
@@ -37,6 +50,8 @@ export interface EmailSender {
 export class InMemoryEmailSender implements EmailSender {
   readonly employeeInvitationsSent: EmployeeInvitationEmailMessage[] = [];
   readonly projectAdminInvitationsSent: ProjectAdminInvitationEmailMessage[] = [];
+  readonly passwordChangesSent: PasswordChangedEmailMessage[] = [];
+  readonly passwordResetsSent: PasswordResetEmailMessage[] = [];
   readonly sent: VerificationEmailMessage[] = [];
 
   async sendEmployeeInvitationEmail(
@@ -49,6 +64,18 @@ export class InMemoryEmailSender implements EmailSender {
     message: ProjectAdminInvitationEmailMessage,
   ): Promise<void> {
     this.projectAdminInvitationsSent.push(message);
+  }
+
+  async sendPasswordChangedEmail(
+    message: PasswordChangedEmailMessage,
+  ): Promise<void> {
+    this.passwordChangesSent.push(message);
+  }
+
+  async sendPasswordResetEmail(
+    message: PasswordResetEmailMessage,
+  ): Promise<void> {
+    this.passwordResetsSent.push(message);
   }
 
   async sendVerificationEmail(

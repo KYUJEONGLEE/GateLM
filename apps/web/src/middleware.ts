@@ -23,6 +23,7 @@ export function middleware(request: NextRequest) {
 function isPublicPath(pathname: string) {
   return (
     pathname === "/" ||
+    pathname === "/auth/reset-password" ||
     pathname.startsWith("/api/") ||
     pathname.startsWith("/_next/") ||
     pathname === "/favicon.ico" ||
