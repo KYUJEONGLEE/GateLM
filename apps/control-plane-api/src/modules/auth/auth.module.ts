@@ -12,11 +12,12 @@ import {
 } from './auth.tokens';
 import { EmailSender, InMemoryEmailSender } from './email-sender';
 import { GoogleOAuthHttpClient } from './google-oauth-client';
+import { PasswordAccountController } from './password-account.controller';
 import { PrismaAuthRepository } from './prisma-auth.repository';
 import { SmtpEmailSender } from './smtp-email-sender';
 
 @Module({
-  controllers: [AuthController],
+  controllers: [AuthController, PasswordAccountController],
   imports: [ConfigModule, DatabaseModule],
   providers: [
     AuthService,
