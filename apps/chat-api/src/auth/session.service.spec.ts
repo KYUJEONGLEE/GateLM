@@ -25,7 +25,7 @@ const identity = {
     membershipId: '00000000-0000-4000-8000-000000000050', status: 'active' as const,
     tenantAuthzVersion: 7, tenantId: session.selectedTenantId, tenantName: '테스트 조직', userId: session.userId,
   }],
-  user: { actorAuthzVersion: 4, email: 'member@example.test', id: session.userId, name: '테스트 사용자' },
+  user: { actorAuthzVersion: 4, email: 'member@example.test', hasLocalPassword: true, id: session.userId, name: '테스트 사용자' },
 };
 
 function service(prisma: Record<string, any>, controlPlane: Record<string, jest.Mock>) {
@@ -47,6 +47,46 @@ function accessToken(overrides: Partial<AccessClaims> = {}) {
 }
 
 describe('SessionService', () => {
+  it('passes generic password reset requests and confirmations to Control Plane', async () => {
+    const controlPlane = {
+      confirmPasswordReset: jest.fn().mockResolvedValue({ passwordReset: true }),
+      requestPasswordReset: jest.fn().mockResolvedValue({ accepted: true }),
+    };
+    const sessions = service({}, controlPlane);
+
+    await expect(
+      sessions.requestPasswordReset('member@example.test'),
+    ).resolves.toEqual({ accepted: true });
+    await expect(
+      sessions.confirmPasswordReset(
+        'reset-token-with-at-least-32-characters',
+        'a-new-secure-chat-passphrase',
+      ),
+    ).resolves.toEqual({ passwordReset: true });
+  });
+
+  it('changes the password only for the user bound to the active Chat session', async () => {
+    const prisma = {
+      tenantChatSession: { findUnique: jest.fn().mockResolvedValue(session) },
+    };
+    const controlPlane = {
+      changePassword: jest.fn().mockResolvedValue({ passwordChanged: true }),
+    };
+
+    await expect(
+      service(prisma, controlPlane).changePassword(
+        accessToken(),
+        'current-password',
+        'a-new-secure-chat-passphrase',
+      ),
+    ).resolves.toEqual({ passwordChanged: true });
+    expect(controlPlane.changePassword).toHaveBeenCalledWith(
+      session.userId,
+      'current-password',
+      'a-new-secure-chat-passphrase',
+    );
+  });
+
   it('revalidates the selected authoritative entitlement for execution', async () => {
     const prisma = { tenantChatSession: { findUnique: jest.fn().mockResolvedValue(session) } };
     const controlPlane = { entitlement: jest.fn().mockResolvedValue(identity.tenants[0]) };

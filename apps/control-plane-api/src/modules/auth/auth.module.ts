@@ -40,6 +40,6 @@ import { SmtpEmailSender } from './smtp-email-sender';
       useClass: GoogleOAuthHttpClient,
     },
   ],
-  exports: [EMAIL_SENDER, GOOGLE_OAUTH_CLIENT],
+  exports: [AuthService, EMAIL_SENDER, GOOGLE_OAUTH_CLIENT],
 })
 export class AuthModule {}

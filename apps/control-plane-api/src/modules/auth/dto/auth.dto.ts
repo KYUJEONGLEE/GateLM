@@ -25,7 +25,7 @@ export class SignupDto {
   name!: string;
 
   @IsString()
-  @MinLength(8)
+  @MinLength(15, { message: 'Use at least 15 characters and avoid common or repeated passwords.' })
   @MaxLength(256)
   password!: string;
 
@@ -88,4 +88,36 @@ export class LoginDto {
   @MinLength(1)
   @MaxLength(256)
   password!: string;
+}
+
+export class RequestPasswordResetDto {
+  @Transform(({ value }) => trimString(value))
+  @IsEmail()
+  @MaxLength(254)
+  email!: string;
+}
+
+export class ConfirmPasswordResetDto {
+  @Transform(({ value }) => trimString(value))
+  @IsString()
+  @MinLength(32)
+  @MaxLength(512)
+  token!: string;
+
+  @IsString()
+  @MinLength(15, { message: 'Use at least 15 characters and avoid common or repeated passwords.' })
+  @MaxLength(256)
+  newPassword!: string;
+}
+
+export class ChangePasswordDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(256)
+  currentPassword!: string;
+
+  @IsString()
+  @MinLength(15, { message: 'Use at least 15 characters and avoid common or repeated passwords.' })
+  @MaxLength(256)
+  newPassword!: string;
 }

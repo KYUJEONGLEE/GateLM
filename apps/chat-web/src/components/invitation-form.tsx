@@ -22,9 +22,18 @@ export function InvitationForm() {
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); if (!invite) return; setBusy(true); setError('');
     const form = new FormData(event.currentTarget);
+    const password = form.get('password');
+    if (
+      invite.accountState !== 'existing' &&
+      password !== form.get('passwordConfirmation')
+    ) {
+      setError('비밀번호 확인이 일치하지 않습니다.');
+      setBusy(false);
+      return;
+    }
     try {
       if (invite.accountState !== 'existing') {
-        finish(await api<ChatSession>('/api/tenant-chat/invitations/accept-password', { body: JSON.stringify({ name: form.get('name'), password: form.get('password') }), method: 'POST' }));
+        finish(await api<ChatSession>('/api/tenant-chat/invitations/accept-password', { body: JSON.stringify({ name: form.get('name'), password }), method: 'POST' }));
       } else {
         await api<ChatSession>('/api/tenant-chat/auth/login', { body: JSON.stringify({ email: invite.email, password: form.get('password') }), method: 'POST' });
         finish(await api<ChatSession>('/api/tenant-chat/invitations/bind-existing', { body: '{}', method: 'POST' }));
@@ -41,7 +50,8 @@ export function InvitationForm() {
       <div className="info-box"><strong><Building2 className="inline-heading-icon" size={17} aria-hidden />{invite.tenantName}</strong><br />{invite.email}</div>
       <form className="form-stack invitation-form" onSubmit={submit}>
         {invite.accountState !== 'existing' && <div className="field"><label htmlFor="name">이름</label><Input id="name" name="name" defaultValue={invite.employeeName ?? ''} autoComplete="name" required /></div>}
-        <div className="field"><label htmlFor="password">{invite.accountState !== 'existing' ? '새 비밀번호' : '기존 계정 비밀번호'}</label><Input id="password" name="password" type="password" minLength={8} autoComplete={invite.accountState !== 'existing' ? 'new-password' : 'current-password'} required /></div>
+        <div className="field"><label htmlFor="password">{invite.accountState !== 'existing' ? '새 비밀번호' : '기존 계정 비밀번호'}</label><Input id="password" name="password" type="password" minLength={invite.accountState !== 'existing' ? 15 : 1} maxLength={256} autoComplete={invite.accountState !== 'existing' ? 'new-password' : 'current-password'} required /></div>
+        {invite.accountState !== 'existing' && <><p className="helper">15자 이상 입력하세요. 흔하거나 반복된 비밀번호는 사용할 수 없습니다.</p><div className="field"><label htmlFor="passwordConfirmation">새 비밀번호 확인</label><Input id="passwordConfirmation" name="passwordConfirmation" type="password" minLength={15} maxLength={256} autoComplete="new-password" required /></div></>}
         <Button disabled={busy} type="submit">{busy ? '처리하는 중…' : invite.accountState === 'new' ? '계정 만들고 시작' : invite.accountState === 'reclaimable' ? '새 비밀번호 설정하고 시작' : '로그인하고 초대 수락'}</Button>
         <div className="divider" aria-hidden>또는</div>
         <Button type="button" variant="secondary" disabled={busy} onClick={() => { setBusy(true); startGoogle().catch((reason) => { setBusy(false); setError(reason instanceof Error ? reason.message : 'Google 로그인을 시작하지 못했습니다.'); }); }}><span className="google-mark" aria-hidden>G</span> Google로 초대 수락</Button>

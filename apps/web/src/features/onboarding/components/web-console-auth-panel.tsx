@@ -33,6 +33,7 @@ export type WebConsoleAuthPanelProps = {
   onClose: () => void;
   onGoogleLogin: () => void;
   onLoginSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>;
+  onPasswordResetRequestSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>;
   onSelectAuthMode: (mode: AuthMode) => void;
   onSignupSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>;
 };
@@ -46,15 +47,23 @@ export function WebConsoleAuthPanel({
   onClose,
   onGoogleLogin,
   onLoginSubmit,
+  onPasswordResetRequestSubmit,
   onSelectAuthMode,
   onSignupSubmit,
   signupStep,
   text
 }: WebConsoleAuthPanelProps) {
+  const panelTitle =
+    authMode === "login"
+      ? text.auth.loginTitle
+      : authMode === "recovery"
+        ? text.auth.recoveryTitle
+        : text.auth.signupTitle;
+
   return (
     <div className="landing-auth-overlay" role="presentation">
       <section
-        aria-label={authMode === "login" ? text.auth.loginTitle : text.auth.signupTitle}
+        aria-label={panelTitle}
         aria-modal="true"
         className="landing-auth-panel"
         role="dialog"
@@ -62,7 +71,7 @@ export function WebConsoleAuthPanel({
         <div className="landing-auth-panel-header">
           <div>
             <p>GateLM</p>
-            <h2>{authMode === "login" ? text.auth.loginTitle : text.auth.signupTitle}</h2>
+            <h2>{panelTitle}</h2>
           </div>
           <button
             aria-label={text.auth.close}
@@ -75,26 +84,28 @@ export function WebConsoleAuthPanel({
           </button>
         </div>
 
-        <div className="landing-auth-tabs" role="tablist" aria-label="Authentication mode">
-          <button
-            aria-selected={authMode === "login"}
-            data-active={authMode === "login"}
-            onClick={() => onSelectAuthMode("login")}
-            role="tab"
-            type="button"
-          >
-            {text.actions.login}
-          </button>
-          <button
-            aria-selected={authMode === "signup"}
-            data-active={authMode === "signup"}
-            onClick={() => onSelectAuthMode("signup")}
-            role="tab"
-            type="button"
-          >
-            {text.actions.signup}
-          </button>
-        </div>
+        {authMode !== "recovery" ? (
+          <div className="landing-auth-tabs" role="tablist" aria-label="Authentication mode">
+            <button
+              aria-selected={authMode === "login"}
+              data-active={authMode === "login"}
+              onClick={() => onSelectAuthMode("login")}
+              role="tab"
+              type="button"
+            >
+              {text.actions.login}
+            </button>
+            <button
+              aria-selected={authMode === "signup"}
+              data-active={authMode === "signup"}
+              onClick={() => onSelectAuthMode("signup")}
+              role="tab"
+              type="button"
+            >
+              {text.actions.signup}
+            </button>
+          </div>
+        ) : null}
 
         {authError ? (
           <p className="landing-auth-message landing-auth-message-error" role="alert">
@@ -111,8 +122,16 @@ export function WebConsoleAuthPanel({
           <LoginForm
             isSubmitting={isSubmitting}
             text={text}
+            onForgotPassword={() => onSelectAuthMode("recovery")}
             onGoogleLogin={onGoogleLogin}
             onSubmit={onLoginSubmit}
+          />
+        ) : authMode === "recovery" ? (
+          <RecoveryForm
+            isSubmitting={isSubmitting}
+            onBackToLogin={() => onSelectAuthMode("login")}
+            onSubmit={onPasswordResetRequestSubmit}
+            text={text}
           />
         ) : (
           <SignupFlow
@@ -131,11 +150,13 @@ export function WebConsoleAuthPanel({
 
 function LoginForm({
   isSubmitting,
+  onForgotPassword,
   onGoogleLogin,
   onSubmit,
   text
 }: {
   isSubmitting: boolean;
+  onForgotPassword: () => void;
   onGoogleLogin: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>;
   text: WebConsoleInitText;
@@ -160,11 +181,55 @@ function LoginForm({
       </label>
       <label>
         <span>{text.auth.password}</span>
-        <input autoComplete="current-password" name="password" required type="password" />
+        <input
+          autoComplete="current-password"
+          maxLength={256}
+          name="password"
+          required
+          type="password"
+        />
       </label>
+      <p className="landing-auth-help">{text.auth.accountEmailHelp}</p>
+      <button
+        className="landing-auth-text-button"
+        disabled={isSubmitting}
+        onClick={onForgotPassword}
+        type="button"
+      >
+        {text.auth.forgotPassword}
+      </button>
       <button className="landing-auth-submit" disabled={isSubmitting} type="submit">
         <LogIn aria-hidden="true" size={18} strokeWidth={2.4} />
         <span>{text.actions.loginSubmit}</span>
+      </button>
+    </form>
+  );
+}
+
+function RecoveryForm({
+  isSubmitting,
+  onBackToLogin,
+  onSubmit,
+  text
+}: {
+  isSubmitting: boolean;
+  onBackToLogin: () => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>;
+  text: WebConsoleInitText;
+}) {
+  return (
+    <form className="landing-auth-form" onSubmit={onSubmit}>
+      <p className="landing-auth-help">{text.auth.recoveryBody}</p>
+      <label>
+        <span>{text.auth.email}</span>
+        <input autoComplete="email" maxLength={254} name="email" required type="email" />
+      </label>
+      <button className="landing-auth-submit" disabled={isSubmitting} type="submit">
+        <MailCheck aria-hidden="true" size={18} strokeWidth={2.4} />
+        <span>{text.auth.sendResetLink}</span>
+      </button>
+      <button className="landing-auth-text-button" disabled={isSubmitting} onClick={onBackToLogin} type="button">
+        {text.auth.backToLogin}
       </button>
     </form>
   );
@@ -223,7 +288,12 @@ function SignupFlow({
           </label>
           <label>
             <span>{text.auth.password}</span>
-            <input autoComplete="new-password" name="password" required type="password" />
+            <input autoComplete="new-password" maxLength={256} minLength={15} name="password" required type="password" />
+            <small className="landing-auth-help">{text.auth.passwordHint}</small>
+          </label>
+          <label>
+            <span>{text.auth.confirmPassword}</span>
+            <input autoComplete="new-password" maxLength={256} minLength={15} name="passwordConfirmation" required type="password" />
           </label>
         </>
       ) : null}

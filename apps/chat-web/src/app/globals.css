@@ -50,6 +50,12 @@ a { color: inherit; }
 .error-box, .info-box { border-radius: 10px; padding: 12px 14px; font-size: 15px; }
 .error-box { background: #fff1f0; color: var(--g-danger); }
 .info-box { background: var(--g-primary-soft); color: #4338b4; }
+.success-box { margin-bottom: 18px; border-radius: 10px; background: #eefaf4; padding: 12px 14px; color: #226344; font-size: 15px; }
+.field-help { margin: -7px 0 0; color: var(--g-text-muted); font-size: 13px; line-height: 1.5; }
+.auth-text-button { width: fit-content; border: 0; background: transparent; padding: 0; color: var(--g-primary); font: inherit; font-size: 14px; font-weight: 680; cursor: pointer; }
+.auth-text-button:hover, .auth-link:hover { text-decoration: underline; text-underline-offset: 3px; }
+.auth-text-button:disabled { cursor: not-allowed; opacity: .55; }
+.auth-link { display: block; width: fit-content; margin-top: 20px; color: var(--g-primary); font-size: 14px; font-weight: 680; }
 .inline-heading-icon { margin-right: 7px; vertical-align: -3px; }
 .helper { margin: 22px 0 0; color: var(--g-text-muted); font-size: 14px; text-align: center; }
 .tenant-list { display: grid; gap: 10px; margin: 24px 0; }

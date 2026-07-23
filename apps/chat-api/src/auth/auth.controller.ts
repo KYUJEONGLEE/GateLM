@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Headers, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Headers, HttpCode, HttpStatus, Post, UseGuards } from '@nestjs/common';
 
 import { ChatWebServiceGuard } from './chat-web-service.guard';
 import {
@@ -6,7 +6,10 @@ import {
   InvitationIntentDto,
   InvitationPasswordDto,
   InvitationTokenDto,
+  PasswordChangeDto,
   PasswordLoginDto,
+  PasswordResetConfirmDto,
+  PasswordResetRequestDto,
   TenantSelectionDto,
 } from './dto';
 import { SessionService } from './session.service';
@@ -19,6 +22,31 @@ export class AuthController {
   @Post('password')
   password(@Body() body: PasswordLoginDto) {
     return this.sessions.password(body.email, body.password, body.deviceId);
+  }
+
+  @Post('password-reset/request')
+  @HttpCode(HttpStatus.OK)
+  requestPasswordReset(@Body() body: PasswordResetRequestDto) {
+    return this.sessions.requestPasswordReset(body.email);
+  }
+
+  @Post('password-reset/confirm')
+  @HttpCode(HttpStatus.OK)
+  confirmPasswordReset(@Body() body: PasswordResetConfirmDto) {
+    return this.sessions.confirmPasswordReset(body.token, body.newPassword);
+  }
+
+  @Post('password/change')
+  @HttpCode(HttpStatus.OK)
+  changePassword(
+    @Body() body: PasswordChangeDto,
+    @Headers('x-gatelm-chat-access') accessToken: string,
+  ) {
+    return this.sessions.changePassword(
+      accessToken,
+      body.currentPassword,
+      body.newPassword,
+    );
   }
 
   @Post('invitation-intents')

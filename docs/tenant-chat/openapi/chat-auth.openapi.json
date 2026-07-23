@@ -19,6 +19,44 @@
         }
       }
     },
+    "/api/tenant-chat/auth/password-reset/request": {
+      "post": {
+        "summary": "Request a generic password reset response without exposing account existence",
+        "requestBody": { "$ref": "#/components/requestBodies/PasswordResetRequest" },
+        "responses": {
+          "202": { "$ref": "#/components/responses/PasswordResetAccepted" },
+          "400": { "$ref": "#/components/responses/SafeError" },
+          "403": { "$ref": "#/components/responses/SafeError" },
+          "503": { "$ref": "#/components/responses/SafeError" }
+        }
+      }
+    },
+    "/api/tenant-chat/auth/password-reset/confirm": {
+      "post": {
+        "summary": "Consume a one-time reset token and revoke all existing sessions",
+        "requestBody": { "$ref": "#/components/requestBodies/PasswordResetConfirm" },
+        "responses": {
+          "200": { "$ref": "#/components/responses/PasswordResetResult" },
+          "400": { "$ref": "#/components/responses/SafeError" },
+          "401": { "$ref": "#/components/responses/SafeError" },
+          "403": { "$ref": "#/components/responses/SafeError" },
+          "503": { "$ref": "#/components/responses/SafeError" }
+        }
+      }
+    },
+    "/api/tenant-chat/auth/password/change": {
+      "post": {
+        "summary": "Change the active local account password and require a fresh login",
+        "requestBody": { "$ref": "#/components/requestBodies/PasswordChange" },
+        "responses": {
+          "200": { "$ref": "#/components/responses/PasswordChangeResult" },
+          "400": { "$ref": "#/components/responses/SafeError" },
+          "401": { "$ref": "#/components/responses/SafeError" },
+          "403": { "$ref": "#/components/responses/SafeError" },
+          "503": { "$ref": "#/components/responses/SafeError" }
+        }
+      }
+    },
     "/api/tenant-chat/auth/refresh": {
       "post": {
         "summary": "Rotate the refresh token and issue a new access JWT",
@@ -115,6 +153,82 @@
     "/internal/v1/tenant-chat/identity/google/start": { "$ref": "#/components/pathItems/PrivateIdentityMutation" },
     "/internal/v1/tenant-chat/identity/google/complete": { "$ref": "#/components/pathItems/PrivateIdentityMutation" },
     "/internal/v1/tenant-chat/identity/entitlements/{userId}": { "$ref": "#/components/pathItems/PrivateIdentityRead" },
+    "/internal/v1/tenant-chat/auth/password-reset/request": {
+      "post": {
+        "summary": "Private Chat API password reset request",
+        "security": [{ "chatWebServiceToken": [] }],
+        "requestBody": { "$ref": "#/components/requestBodies/PasswordResetRequest" },
+        "responses": {
+          "200": { "$ref": "#/components/responses/PasswordResetAccepted" },
+          "400": { "$ref": "#/components/responses/SafeError" },
+          "503": { "$ref": "#/components/responses/SafeError" }
+        }
+      }
+    },
+    "/internal/v1/tenant-chat/auth/password-reset/confirm": {
+      "post": {
+        "summary": "Private Chat API password reset confirmation",
+        "security": [{ "chatWebServiceToken": [] }],
+        "requestBody": { "$ref": "#/components/requestBodies/PasswordResetConfirm" },
+        "responses": {
+          "200": { "$ref": "#/components/responses/PasswordResetResult" },
+          "400": { "$ref": "#/components/responses/SafeError" },
+          "401": { "$ref": "#/components/responses/SafeError" },
+          "503": { "$ref": "#/components/responses/SafeError" }
+        }
+      }
+    },
+    "/internal/v1/tenant-chat/auth/password/change": {
+      "post": {
+        "summary": "Private Chat API password change bound to the active access session",
+        "security": [{ "chatWebServiceToken": [] }],
+        "requestBody": { "$ref": "#/components/requestBodies/PasswordChange" },
+        "responses": {
+          "200": { "$ref": "#/components/responses/PasswordChangeResult" },
+          "400": { "$ref": "#/components/responses/SafeError" },
+          "401": { "$ref": "#/components/responses/SafeError" },
+          "503": { "$ref": "#/components/responses/SafeError" }
+        }
+      }
+    },
+    "/internal/v1/tenant-chat/identity/password-reset/request": {
+      "post": {
+        "summary": "Private Control Plane password reset request",
+        "security": [{ "controlPlaneTenantChatServiceToken": [] }],
+        "requestBody": { "$ref": "#/components/requestBodies/PasswordResetRequest" },
+        "responses": {
+          "200": { "description": "Data envelope containing the generic accepted result" },
+          "400": { "$ref": "#/components/responses/SafeError" },
+          "503": { "$ref": "#/components/responses/SafeError" }
+        }
+      }
+    },
+    "/internal/v1/tenant-chat/identity/password-reset/confirm": {
+      "post": {
+        "summary": "Private Control Plane password reset confirmation",
+        "security": [{ "controlPlaneTenantChatServiceToken": [] }],
+        "requestBody": { "$ref": "#/components/requestBodies/PasswordResetConfirm" },
+        "responses": {
+          "200": { "description": "Data envelope containing the password reset result" },
+          "400": { "$ref": "#/components/responses/SafeError" },
+          "401": { "$ref": "#/components/responses/SafeError" },
+          "503": { "$ref": "#/components/responses/SafeError" }
+        }
+      }
+    },
+    "/internal/v1/tenant-chat/identity/password/change": {
+      "post": {
+        "summary": "Private Control Plane password change for a Chat-authenticated user",
+        "security": [{ "controlPlaneTenantChatServiceToken": [] }],
+        "requestBody": { "$ref": "#/components/requestBodies/PrivatePasswordChange" },
+        "responses": {
+          "200": { "description": "Data envelope containing the password change result" },
+          "400": { "$ref": "#/components/responses/SafeError" },
+          "401": { "$ref": "#/components/responses/SafeError" },
+          "503": { "$ref": "#/components/responses/SafeError" }
+        }
+      }
+    },
     "/internal/v1/tenant-chat/auth/password": {
       "post": {
         "summary": "Private Chat API password login",
@@ -247,6 +361,60 @@
         "required": ["email", "password"],
         "additionalProperties": false
       },
+      "PasswordResetRequest": {
+        "type": "object",
+        "properties": {
+          "email": { "type": "string", "format": "email", "maxLength": 254 }
+        },
+        "required": ["email"],
+        "additionalProperties": false
+      },
+      "PasswordResetConfirm": {
+        "type": "object",
+        "properties": {
+          "token": { "type": "string", "minLength": 32, "maxLength": 512, "writeOnly": true },
+          "newPassword": { "type": "string", "minLength": 15, "maxLength": 256, "writeOnly": true }
+        },
+        "required": ["token", "newPassword"],
+        "additionalProperties": false
+      },
+      "PasswordChange": {
+        "type": "object",
+        "properties": {
+          "currentPassword": { "type": "string", "minLength": 1, "maxLength": 256, "writeOnly": true },
+          "newPassword": { "type": "string", "minLength": 15, "maxLength": 256, "writeOnly": true }
+        },
+        "required": ["currentPassword", "newPassword"],
+        "additionalProperties": false
+      },
+      "PrivatePasswordChange": {
+        "type": "object",
+        "properties": {
+          "userId": { "type": "string", "format": "uuid" },
+          "currentPassword": { "type": "string", "minLength": 1, "maxLength": 256, "writeOnly": true },
+          "newPassword": { "type": "string", "minLength": 15, "maxLength": 256, "writeOnly": true }
+        },
+        "required": ["userId", "currentPassword", "newPassword"],
+        "additionalProperties": false
+      },
+      "PasswordResetAccepted": {
+        "type": "object",
+        "properties": { "accepted": { "type": "boolean", "const": true } },
+        "required": ["accepted"],
+        "additionalProperties": false
+      },
+      "PasswordResetResult": {
+        "type": "object",
+        "properties": { "passwordReset": { "type": "boolean", "const": true } },
+        "required": ["passwordReset"],
+        "additionalProperties": false
+      },
+      "PasswordChangeResult": {
+        "type": "object",
+        "properties": { "passwordChanged": { "type": "boolean", "const": true } },
+        "required": ["passwordChanged"],
+        "additionalProperties": false
+      },
       "TenantSelection": {
         "type": "object",
         "properties": { "tenantId": { "type": "string", "format": "uuid" } },
@@ -257,7 +425,7 @@
         "type": "object",
         "properties": {
           "name": { "type": "string", "minLength": 1, "maxLength": 120 },
-          "password": { "type": "string", "minLength": 8, "maxLength": 256 }
+          "password": { "type": "string", "minLength": 15, "maxLength": 256 }
         },
         "required": ["name", "password"],
         "additionalProperties": false
@@ -296,6 +464,22 @@
       "ChatEntitlement": { "$ref": "../schemas/chat-entitlement.schema.json" }
     },
     "requestBodies": {
+      "PasswordResetRequest": {
+        "required": true,
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PasswordResetRequest" } } }
+      },
+      "PasswordResetConfirm": {
+        "required": true,
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PasswordResetConfirm" } } }
+      },
+      "PasswordChange": {
+        "required": true,
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PasswordChange" } } }
+      },
+      "PrivatePasswordChange": {
+        "required": true,
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PrivatePasswordChange" } } }
+      },
       "PasswordLogin": {
         "required": true,
         "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PasswordLogin" } } }
@@ -310,6 +494,9 @@
       }
     },
     "responses": {
+      "PasswordResetAccepted": { "description": "Generic response shared by eligible and ineligible accounts", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PasswordResetAccepted" } } } },
+      "PasswordResetResult": { "description": "Password reset completed and all existing sessions revoked", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PasswordResetResult" } } } },
+      "PasswordChangeResult": { "description": "Password changed and all existing sessions revoked", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PasswordChangeResult" } } } },
       "Ok": { "description": "Successful operation", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Ok" } } } },
       "AuthSession": { "description": "Token-free public session metadata", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ChatAuthSession" } } } },
       "InvitationSummary": { "description": "Safe invitation and tenant summary", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/InvitationSummary" } } } },

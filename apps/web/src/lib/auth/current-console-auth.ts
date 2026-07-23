@@ -21,6 +21,7 @@ export type CurrentConsoleUser = {
   avatarUrl?: string;
   displayName: string;
   email?: string;
+  hasLocalPassword: boolean;
   id: string;
   role: string;
   tenantName?: string;
@@ -243,6 +244,7 @@ function toCurrentConsoleUser(input: {
     avatarUrl: readString(input.user, 'avatarUrl') ?? readString(input.user, 'picture') ?? undefined,
     displayName,
     email: email ?? undefined,
+    hasLocalPassword: input.user.hasLocalPassword !== false,
     id: readString(input.user, 'id') ?? readString(input.user, 'userId') ?? 'current-admin',
     role: formatRoleLabel(readString(membership, 'role') ?? readString(input.user, 'role')),
     tenantName: tenantName ?? undefined

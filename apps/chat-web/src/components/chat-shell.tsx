@@ -9,6 +9,7 @@ import {
   CheckCircle2,
   Copy,
   Gauge,
+  KeyRound,
   LoaderCircle,
   LogOut,
   Menu,
@@ -569,6 +570,11 @@ export function ChatShell() {
       <div className="sidebar-account">
         <Badge><Building2 className="badge-leading-icon" size={14} aria-hidden />{session.selectedTenant.name}</Badge>
         <div><div className="account-name">{displayName}</div><div className="account-email">{session.user.email}</div></div>
+        {session.user.hasLocalPassword ? (
+          <Button variant="ghost" onClick={() => router.push('/change-password')}>
+            <KeyRound size={17} aria-hidden />비밀번호 변경
+          </Button>
+        ) : null}
         <Button variant="ghost" onClick={logout}><LogOut size={17} aria-hidden />로그아웃</Button>
       </div>
     </aside>

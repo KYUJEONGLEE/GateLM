@@ -39,7 +39,7 @@ type WebConsoleInitViewProps = {
   locale: Locale;
 };
 
-export type AuthMode = "login" | "signup";
+export type AuthMode = "login" | "recovery" | "signup";
 export type AuthStatus = "anonymous" | "authenticated";
 export type SignupStepId = "account" | "verify" | "organization" | "ready";
 
@@ -211,15 +211,25 @@ const initText: Record<
       signupSubmit: string;
     };
     auth: {
+      accountEmailHelp: string;
+      backToLogin: string;
       close: string;
+      confirmPassword: string;
       email: string;
+      forgotPassword: string;
       loginTitle: string;
       name: string;
       organization: string;
       organizationPlaceholder: string;
       password: string;
+      passwordHint: string;
+      passwordMismatch: string;
       readyBody: string;
       readyTitle: string;
+      recoveryBody: string;
+      recoveryNotice: string;
+      recoveryTitle: string;
+      sendResetLink: string;
       signupTitle: string;
       verificationCode: string;
     };
@@ -302,15 +312,25 @@ const initText: Record<
       signupSubmit: "Continue"
     },
     auth: {
+      accountEmailHelp: "Your login ID is the email address used to sign up. If you cannot remember it, check your invitation or contact your administrator.",
+      backToLogin: "Back to login",
       close: "Close authentication panel",
+      confirmPassword: "Confirm password",
       email: "Email",
+      forgotPassword: "Forgot your email or password?",
       loginTitle: "Login to GateLM",
       name: "Name",
       organization: "Tenant name",
       organizationPlaceholder: "Acme AI Operations",
       password: "Password",
+      passwordHint: "Use at least 15 characters. Passphrases are welcome; common or repeated passwords are blocked.",
+      passwordMismatch: "The password confirmation does not match.",
       readyBody: "The tenant is ready and your account has Owner/Admin access.",
       readyTitle: "Owner/Admin granted",
+      recoveryBody: "Enter your sign-up email. If a local account exists, GateLM will send a one-time reset link.",
+      recoveryNotice: "If an eligible account exists, a reset link has been sent. Check your inbox and spam folder.",
+      recoveryTitle: "Find your account or reset password",
+      sendResetLink: "Send reset link",
       signupTitle: "Create a tenant account",
       verificationCode: "Verification code"
     },
@@ -440,15 +460,25 @@ const initText: Record<
       signupSubmit: "계속",
     },
     auth: {
+      accountEmailHelp: "로그인 아이디는 가입할 때 사용한 이메일입니다. 기억나지 않으면 초대 메일을 확인하거나 관리자에게 문의하세요.",
+      backToLogin: "로그인으로 돌아가기",
       close: "인증 패널 닫기",
+      confirmPassword: "비밀번호 확인",
       email: "이메일",
+      forgotPassword: "아이디 또는 비밀번호를 잊으셨나요?",
       loginTitle: "GateLM 로그인",
       name: "이름",
       organization: "Tenant 이름",
       organizationPlaceholder: "Acme AI 운영팀",
       password: "비밀번호",
+      passwordHint: "15자 이상 입력하세요. 긴 문구를 사용할 수 있으며 흔하거나 반복된 비밀번호는 사용할 수 없습니다.",
+      passwordMismatch: "비밀번호 확인이 일치하지 않습니다.",
       readyBody: "Tenant가 생성되고 이 계정에 Owner/Admin 권한이 부여된 상태입니다.",
       readyTitle: "Owner/Admin 권한 부여",
+      recoveryBody: "가입 이메일을 입력하세요. 로컬 계정이 있으면 GateLM이 일회용 재설정 링크를 보냅니다.",
+      recoveryNotice: "해당되는 계정이 있다면 재설정 링크를 보냈습니다. 받은편지함과 스팸함을 확인하세요.",
+      recoveryTitle: "아이디 확인 및 비밀번호 재설정",
+      sendResetLink: "재설정 링크 보내기",
       signupTitle: "Tenant 계정 만들기",
       verificationCode: "인증 코드"
     },
@@ -597,6 +627,11 @@ export function WebConsoleInitView({
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const nextPath = getSafeNextPath(params);
+    if (params.get("auth") === "login") {
+      window.history.replaceState(null, "", "/");
+      setAuthMode("login");
+      setIsAuthPanelOpen(true);
+    }
     if (params.get("auth") === "organization" || params.get("auth") === "tenant") {
       window.history.replaceState(null, "", "/");
       setAuthMode("signup");
@@ -706,6 +741,8 @@ export function WebConsoleInitView({
   }
 
   function switchAuthMode(mode: AuthMode) {
+    setAuthError(null);
+    setAuthNotice(null);
     setAuthMode(mode);
     if (mode === "signup") {
       setSignupStep("account");
@@ -759,9 +796,24 @@ export function WebConsoleInitView({
     await runAuthAction(async () => {
       const result = await postAuth("login", {
         email: readFormString(formData, "email"),
-        password: readFormString(formData, "password")
+        password: readFormValue(formData, "password")
       });
       completeAuth(resolveDashboardTenantId(result.data));
+    });
+  }
+
+  async function submitPasswordResetRequest(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (isAuthSubmitting) {
+      return;
+    }
+
+    const formData = new FormData(event.currentTarget);
+    await runAuthAction(async () => {
+      await postAuth("password-reset/request", {
+        email: readFormString(formData, "email")
+      });
+      setAuthNotice(text.auth.recoveryNotice);
     });
   }
 
@@ -778,13 +830,23 @@ export function WebConsoleInitView({
       return;
     }
 
+    if (
+      signupStep === "account" &&
+      readFormValue(formData, "password") !==
+        readFormValue(formData, "passwordConfirmation")
+    ) {
+      setAuthNotice(null);
+      setAuthError(text.auth.passwordMismatch);
+      return;
+    }
+
     await runAuthAction(async () => {
       if (signupStep === "account") {
         const email = readFormString(formData, "email");
         const result = await postAuth("signup", {
           email,
           name: readFormString(formData, "name"),
-          password: readFormString(formData, "password"),
+          password: readFormValue(formData, "password"),
           ...(employeeInviteToken ? { employeeInviteToken } : {}),
           ...(projectInviteToken ? { projectInviteToken } : {})
         });
@@ -989,6 +1051,7 @@ export function WebConsoleInitView({
           onClose={closeAuthPanel}
           onGoogleLogin={startGoogleLogin}
           onLoginSubmit={submitLogin}
+          onPasswordResetRequestSubmit={submitPasswordResetRequest}
           onSelectAuthMode={switchAuthMode}
           onSignupSubmit={continueSignup}
         />
@@ -1034,8 +1097,12 @@ async function postAuth(path: string, payload: Record<string, string>) {
 }
 
 function readFormString(formData: FormData, key: string) {
+  return readFormValue(formData, key).trim();
+}
+
+function readFormValue(formData: FormData, key: string) {
   const value = formData.get(key);
-  return typeof value === "string" ? value.trim() : "";
+  return typeof value === "string" ? value : "";
 }
 
 function extractAuthErrorMessage(error: unknown) {

@@ -17,6 +17,41 @@ export class TenantChatPasswordDto {
   password!: string;
 }
 
+export class TenantChatPasswordResetRequestDto {
+  @Transform(({ value }) => trim(value))
+  @IsEmail()
+  @MaxLength(254)
+  email!: string;
+}
+
+export class TenantChatPasswordResetConfirmDto {
+  @Transform(({ value }) => trim(value))
+  @IsString()
+  @MinLength(32)
+  @MaxLength(512)
+  token!: string;
+
+  @IsString()
+  @MinLength(15)
+  @MaxLength(256)
+  newPassword!: string;
+}
+
+export class TenantChatPasswordChangeDto {
+  @IsUUID()
+  userId!: string;
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(256)
+  currentPassword!: string;
+
+  @IsString()
+  @MinLength(15)
+  @MaxLength(256)
+  newPassword!: string;
+}
+
 export class TenantChatInvitationTokenDto {
   @Transform(({ value }) => trim(value))
   @IsString()
@@ -33,7 +68,7 @@ export class TenantChatInvitationPasswordDto extends TenantChatInvitationTokenDt
   name!: string;
 
   @IsString()
-  @MinLength(8)
+  @MinLength(15)
   @MaxLength(256)
   password!: string;
 }

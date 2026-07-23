@@ -20,6 +20,38 @@ export class PasswordLoginDto {
   deviceId!: string;
 }
 
+export class PasswordResetRequestDto {
+  @Transform(({ value }) => trim(value))
+  @IsEmail()
+  @MaxLength(254)
+  email!: string;
+}
+
+export class PasswordResetConfirmDto {
+  @Transform(({ value }) => trim(value))
+  @IsString()
+  @MinLength(32)
+  @MaxLength(512)
+  token!: string;
+
+  @IsString()
+  @MinLength(15)
+  @MaxLength(256)
+  newPassword!: string;
+}
+
+export class PasswordChangeDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(256)
+  currentPassword!: string;
+
+  @IsString()
+  @MinLength(15)
+  @MaxLength(256)
+  newPassword!: string;
+}
+
 export class InvitationTokenDto {
   @Transform(({ value }) => trim(value))
   @IsString()
@@ -41,7 +73,7 @@ export class InvitationPasswordDto {
   name!: string;
 
   @IsString()
-  @MinLength(8)
+  @MinLength(15)
   @MaxLength(256)
   password!: string;
 

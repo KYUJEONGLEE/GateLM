@@ -90,6 +90,33 @@ test("successful login goes directly to the tenant dashboard", async ({ page }) 
   await expect(page).toHaveURL(new RegExp(`${dashboardPath}$`));
 });
 
+test("login account recovery submits the signup email without exposing account existence", async ({ page }) => {
+  await prepareAnonymousSessionRoute(page);
+  let requestedEmail = "";
+  await page.route("**/api/auth/password-reset/request", async (route) => {
+    const payload = route.request().postDataJSON() as { email?: string };
+    requestedEmail = payload.email ?? "";
+    await route.fulfill({
+      body: JSON.stringify({ data: { accepted: true } }),
+      contentType: "application/json",
+      status: 202
+    });
+  });
+
+  await page.goto("/");
+  const topbar = page.getByRole("navigation", { exact: true, name: "GateLM landing navigation" });
+  await topbar.locator(".landing-top-actions .landing-auth-button").first().click();
+
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.locator(".landing-auth-help").first()).toBeVisible();
+  await dialog.locator(".landing-auth-text-button").first().click();
+  await dialog.locator('input[name="email"]').fill("owner@example.com");
+  await dialog.locator('button[type="submit"]').click();
+
+  expect(requestedEmail).toBe("owner@example.com");
+  await expect(dialog.locator(".landing-auth-message-success")).toBeVisible();
+});
+
 test("email signup opens the tenant Projects management page", async ({ page }) => {
   await prepareAnonymousSessionRoute(page);
   await page.route("**/api/auth/signup", async (route) => {
@@ -144,6 +171,7 @@ test("email signup opens the tenant Projects management page", async ({ page }) 
   await signupDialog.locator('input[name="name"]').fill("Owner User");
   await signupDialog.locator('input[name="email"]').fill("owner@example.com");
   await signupDialog.locator('input[name="password"]').fill("correct-horse-battery-staple");
+  await signupDialog.locator('input[name="passwordConfirmation"]').fill("correct-horse-battery-staple");
   await signupDialog.locator('button[type="submit"]').click();
 
   await expect(signupDialog.locator(".landing-signup-steps li")).toHaveCount(4);

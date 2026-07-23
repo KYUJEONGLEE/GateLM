@@ -81,6 +81,31 @@ describe('SmtpEmailSender', () => {
     expect(receivedMessage).not.toContain('smtp-password');
   });
 
+  it('sends a password reset link with its expiry and without SMTP credentials', async () => {
+    const sender = new SmtpEmailSender(
+      new ConfigService({
+        SMTP_FROM: 'GateLM <no-reply@gatelm.test>',
+        SMTP_HOST: '127.0.0.1',
+        SMTP_PASSWORD: 'smtp-password',
+        SMTP_PORT: String(port),
+        SMTP_SECURE: 'false',
+        SMTP_TLS_MODE: 'disabled',
+        SMTP_USER: 'smtp-user',
+      }),
+    );
+
+    await sender.sendPasswordResetEmail({
+      email: 'owner@example.com',
+      expiresAt: new Date('2026-07-23T12:30:00.000Z'),
+      resetUrl: 'http://localhost:3000/auth/reset-password#token=opaque-reset-token',
+    });
+
+    expect(receivedMessage).toContain('Subject: Reset your GateLM password');
+    expect(receivedMessage).toContain('/auth/reset-password#token=opaque-reset-token');
+    expect(receivedMessage).toContain('2026-07-23T12:30:00.000Z');
+    expect(receivedMessage).not.toContain('smtp-password');
+  });
+
   it('treats a blank SMTP_PORT value as unset', () => {
     const sender = new SmtpEmailSender(
       new ConfigService({

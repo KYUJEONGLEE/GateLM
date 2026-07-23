@@ -23,8 +23,11 @@ import {
 } from './auth.service';
 import { AUTH_COOKIE_NAMES } from './auth.tokens';
 import {
+  ChangePasswordDto,
+  ConfirmPasswordResetDto,
   CreateOrganizationDto,
   LoginDto,
+  RequestPasswordResetDto,
   SignupDto,
   VerifyEmailDto,
 } from './dto/auth.dto';
@@ -154,6 +157,49 @@ export class AuthController {
         memberships: result.memberships,
         session: this.toSessionResponse(result.session),
         user: result.user,
+      },
+    };
+  }
+
+  @Post('password-reset/request')
+  @HttpCode(HttpStatus.ACCEPTED)
+  async requestPasswordReset(
+    @Body() body: RequestPasswordResetDto,
+  ): Promise<DataEnvelope<unknown>> {
+    return { data: await this.authService.requestPasswordReset(body) };
+  }
+
+  @Post('password-reset/confirm')
+  @HttpCode(HttpStatus.OK)
+  async confirmPasswordReset(
+    @Body() body: ConfirmPasswordResetDto,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<DataEnvelope<unknown>> {
+    const result = await this.authService.confirmPasswordReset(body);
+    this.clearCookie(response, AUTH_COOKIE_NAMES.full);
+    this.clearCookie(response, AUTH_COOKIE_NAMES.onboarding);
+    this.clearCookie(response, AUTH_COOKIE_NAMES.signup);
+    return { data: result };
+  }
+
+  @Post('password/change')
+  @HttpCode(HttpStatus.OK)
+  async changePassword(
+    @Body() body: ChangePasswordDto,
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<DataEnvelope<unknown>> {
+    const session = await this.authService.changePassword(
+      this.readCookie(request, AUTH_COOKIE_NAMES.full),
+      body,
+    );
+    this.clearCookie(response, AUTH_COOKIE_NAMES.onboarding);
+    this.clearCookie(response, AUTH_COOKIE_NAMES.signup);
+    this.setSessionCookie(response, session);
+    return {
+      data: {
+        passwordChanged: true,
+        session: this.toSessionResponse(session),
       },
     };
   }

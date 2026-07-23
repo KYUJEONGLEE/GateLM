@@ -15,6 +15,7 @@ export type IdentityResult = {
   user: {
     actorAuthzVersion: number;
     email: string;
+    hasLocalPassword: boolean;
     id: string;
     name: string | null;
   };
@@ -47,7 +48,12 @@ export type PublicSession = {
     id: string;
     name: string;
   }>;
-  user: { email: string; id: string; name: string | null };
+  user: {
+    email: string;
+    hasLocalPassword: boolean;
+    id: string;
+    name: string | null;
+  };
 };
 
 export type AuthorizedExecution = {

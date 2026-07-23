@@ -4,21 +4,27 @@ import { Test } from '@nestjs/testing';
 import request = require('supertest');
 
 import { AuthModule } from './auth.module';
+import { AuthService } from './auth.service';
 import {
   AUTH_REPOSITORY,
   EMAIL_SENDER,
   GOOGLE_OAUTH_CLIENT,
 } from './auth.tokens';
-import { hashPassword } from './auth.crypto';
+import { hashPassword, hashSecret } from './auth.crypto';
 import { EmployeeInvitationNotFoundError } from './auth.repository';
 import { createInMemoryAuthRepository } from './testing/in-memory-auth-repository';
 
 describe('Auth HTTP API', () => {
   let app: INestApplication;
+  let authService: AuthService;
   let repository: ReturnType<typeof createInMemoryAuthRepository>;
   let emailSender: {
+    passwordChangesSent: Array<{ changedAt: Date; email: string }>;
+    passwordResetsSent: Array<{ email: string; expiresAt: Date; resetUrl: string }>;
     sent: Array<{ email: string; code: string }>;
     sendEmployeeInvitationEmail: jest.Mock;
+    sendPasswordChangedEmail: jest.Mock;
+    sendPasswordResetEmail: jest.Mock;
     sendProjectAdminInvitationEmail: jest.Mock;
     sendVerificationEmail: jest.Mock;
   };
@@ -39,8 +45,16 @@ describe('Auth HTTP API', () => {
   ) {
     repository = createInMemoryAuthRepository();
     emailSender = {
+      passwordChangesSent: [],
+      passwordResetsSent: [],
       sent: [],
       sendEmployeeInvitationEmail: jest.fn(async () => undefined),
+      sendPasswordChangedEmail: jest.fn(async (message) => {
+        emailSender.passwordChangesSent.push(message);
+      }),
+      sendPasswordResetEmail: jest.fn(async (message) => {
+        emailSender.passwordResetsSent.push(message);
+      }),
       sendProjectAdminInvitationEmail: jest.fn(async () => undefined),
       sendVerificationEmail: jest.fn(async (message) => {
         emailSender.sent.push(message);
@@ -101,6 +115,7 @@ describe('Auth HTTP API', () => {
       .useValue(configService)
       .compile();
 
+    authService = moduleRef.get(AuthService);
     app = moduleRef.createNestApplication();
     app.useGlobalPipes(
       new ValidationPipe({
@@ -110,6 +125,27 @@ describe('Auth HTTP API', () => {
       }),
     );
     await app.init();
+  }
+
+  async function createVerifiedAccount(
+    email: string,
+    password = 'correct-horse-battery-staple',
+  ) {
+    const agent = request.agent(app.getHttpServer());
+    await agent
+      .post('/api/auth/signup')
+      .send({ email, name: 'Account Owner', password })
+      .expect(201);
+    const code = emailSender.sent.at(-1)?.code;
+    await agent
+      .post('/api/auth/email/verify')
+      .send({ code, email })
+      .expect(200);
+    await agent
+      .post('/api/auth/organizations')
+      .send({ organizationName: 'Account Recovery Tenant' })
+      .expect(201);
+    return agent;
   }
 
   beforeEach(async () => {
@@ -493,8 +529,190 @@ describe('Auth HTTP API', () => {
     const cookie = String(loginResponse.headers['set-cookie']);
     expect(cookie).toContain('gatelm_session=');
     expect(cookie).toContain('HttpOnly');
+    expect(loginResponse.body).toMatchObject({
+      data: {
+        user: { hasLocalPassword: true },
+      },
+    });
     expect(JSON.stringify(loginResponse.body)).not.toContain('accessToken');
     expect(JSON.stringify(loginResponse.body)).not.toContain('refreshToken');
+  });
+
+  it('rejects common repeated passwords even when they meet the minimum length', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/api/auth/signup')
+      .send({
+        email: 'weak-password@example.com',
+        name: 'Weak Password',
+        password: '111111111111111',
+      })
+      .expect(400);
+
+    expect(response.body).toMatchObject({ code: 'WEAK_PASSWORD' });
+    expect(emailSender.sent).toHaveLength(0);
+    expect(repository.dump().users).toHaveLength(0);
+  });
+
+  it('resets a local password with a hashed single-use token and revokes old sessions', async () => {
+    const email = 'reset-owner@example.com';
+    const oldPassword = 'correct-horse-battery-staple';
+    const newPassword = 'a-new-secure-passphrase';
+    const existingAgent = await createVerifiedAccount(email, oldPassword);
+
+    const resetResponse = await request(app.getHttpServer())
+      .post('/api/auth/password-reset/request')
+      .send({ email })
+      .expect(202);
+    const missingAccountResponse = await request(app.getHttpServer())
+      .post('/api/auth/password-reset/request')
+      .send({ email: 'missing@example.com' })
+      .expect(202);
+
+    expect(resetResponse.body).toEqual({ data: { accepted: true } });
+    expect(missingAccountResponse.body).toEqual(resetResponse.body);
+    expect(emailSender.passwordResetsSent).toHaveLength(1);
+    const resetUrl = emailSender.passwordResetsSent[0]!.resetUrl;
+    const resetToken = decodeURIComponent(
+      new URL(resetUrl).hash.slice('#token='.length),
+    );
+    expect(resetUrl).toContain('/auth/reset-password#token=');
+    expect(JSON.stringify(repository.dump().passwordResetTokens)).not.toContain(
+      resetToken,
+    );
+
+    await request(app.getHttpServer())
+      .post('/api/auth/password-reset/confirm')
+      .send({ newPassword, token: resetToken })
+      .expect(200);
+    await request(app.getHttpServer())
+      .post('/api/auth/password-reset/confirm')
+      .send({ newPassword: 'one-more-secure-passphrase', token: resetToken })
+      .expect(400);
+
+    await existingAgent.get('/api/auth/me').expect(401);
+    await request(app.getHttpServer())
+      .post('/api/auth/login')
+      .send({ email, password: oldPassword })
+      .expect(401);
+    await request(app.getHttpServer())
+      .post('/api/auth/login')
+      .send({ email, password: newPassword })
+      .expect(200);
+    expect(emailSender.passwordChangesSent).toHaveLength(1);
+  });
+
+  it('rejects an expired reset token without changing the password or session', async () => {
+    const email = 'expired-reset@example.com';
+    const password = 'correct-horse-battery-staple';
+    const accountAgent = await createVerifiedAccount(email, password);
+    const user = repository.dump().users.find((item) => item.email === email);
+    expect(user).toBeDefined();
+
+    const expiredToken = 'expired-reset-token-with-at-least-32-characters';
+    await repository.createPasswordResetToken({
+      expiresAt: new Date(Date.now() - 1_000),
+      tokenHash: hashSecret(expiredToken),
+      userId: user!.id,
+    });
+
+    const response = await request(app.getHttpServer())
+      .post('/api/auth/password-reset/confirm')
+      .send({
+        newPassword: 'another-secure-passphrase',
+        token: expiredToken,
+      })
+      .expect(400);
+
+    expect(response.body).toMatchObject({
+      code: 'INVALID_PASSWORD_RESET_TOKEN',
+    });
+    await accountAgent.get('/api/auth/me').expect(200);
+    await request(app.getHttpServer())
+      .post('/api/auth/login')
+      .send({ email, password })
+      .expect(200);
+  });
+
+  it('limits reset link issuance to five per account per hour without changing the public response', async () => {
+    const email = 'reset-rate-limit@example.com';
+    await createVerifiedAccount(email);
+
+    for (let requestIndex = 0; requestIndex < 6; requestIndex += 1) {
+      const response = await request(app.getHttpServer())
+        .post('/api/auth/password-reset/request')
+        .send({ email })
+        .expect(202);
+      expect(response.body).toEqual({ data: { accepted: true } });
+    }
+
+    expect(emailSender.passwordResetsSent).toHaveLength(5);
+    expect(repository.dump().passwordResetTokens).toHaveLength(5);
+  });
+
+  it('changes a Tenant Chat authenticated user password and revokes every existing session', async () => {
+    const email = 'tenant-chat-change@example.com';
+    const oldPassword = 'correct-horse-battery-staple';
+    const newPassword = 'tenant-chat-new-secure-passphrase';
+    const currentAgent = await createVerifiedAccount(email, oldPassword);
+    const user = repository.dump().users.find((item) => item.email === email);
+    expect(user).toBeDefined();
+    const actorVersionBefore = user!.actorAuthzVersion;
+
+    await expect(
+      authService.changePasswordForUser(user!.id, {
+        currentPassword: oldPassword,
+        newPassword,
+      }),
+    ).resolves.toEqual({ passwordChanged: true });
+
+    await currentAgent.get('/api/auth/me').expect(401);
+    await request(app.getHttpServer())
+      .post('/api/auth/login')
+      .send({ email, password: oldPassword })
+      .expect(401);
+    await request(app.getHttpServer())
+      .post('/api/auth/login')
+      .send({ email, password: newPassword })
+      .expect(200);
+    expect(
+      repository.dump().users.find((item) => item.id === user!.id)
+        ?.actorAuthzVersion,
+    ).toBe(actorVersionBefore + 1);
+  });
+
+  it('changes a signed-in local password, rotates its session, and revokes other sessions', async () => {
+    const email = 'change-owner@example.com';
+    const oldPassword = 'correct-horse-battery-staple';
+    const newPassword = 'changed-to-a-safe-passphrase';
+    const currentAgent = await createVerifiedAccount(email, oldPassword);
+    const otherAgent = request.agent(app.getHttpServer());
+    await otherAgent
+      .post('/api/auth/login')
+      .send({ email, password: oldPassword })
+      .expect(200);
+
+    const changeResponse = await currentAgent
+      .post('/api/auth/password/change')
+      .send({ currentPassword: oldPassword, newPassword })
+      .expect(200);
+
+    expect(changeResponse.body).toMatchObject({
+      data: { passwordChanged: true, session: { kind: 'full' } },
+    });
+    expect(String(changeResponse.headers['set-cookie'])).toContain(
+      'gatelm_session=',
+    );
+    await currentAgent.get('/api/auth/me').expect(200);
+    await otherAgent.get('/api/auth/me').expect(401);
+    await request(app.getHttpServer())
+      .post('/api/auth/login')
+      .send({ email, password: oldPassword })
+      .expect(401);
+    await request(app.getHttpServer())
+      .post('/api/auth/login')
+      .send({ email, password: newPassword })
+      .expect(200);
+    expect(emailSender.passwordChangesSent).toHaveLength(1);
   });
 
   it('does not log in a legacy pending local signup without tenant membership', async () => {
@@ -549,6 +767,7 @@ describe('Auth HTTP API', () => {
         },
         user: {
           email: 'google-admin@example.com',
+          hasLocalPassword: false,
         },
       },
     });
