@@ -47,6 +47,9 @@ type LiveCostReportResponse = {
     expectedBucketCount?: number;
     generatedAt?: string;
     period?: string;
+    totals?: {
+      costMicroUsd?: number | string;
+    };
   };
 };
 
@@ -90,6 +93,49 @@ export async function getLiveCostOverTime(
   const payload = (await response.json().catch(() => ({}))) as LiveCostReportResponse;
 
   return toCostOverTimeSummary(payload.data, period);
+}
+
+export async function getLiveMonthToDateCostMicroUsd(
+  tenantId: string,
+  filters: LiveCostOverTimeFilters = {}
+): Promise<number | undefined> {
+  const config = getLiveGatewayConfig();
+  const { from, to } = getCurrentUtcMonthRange();
+  const query = new URLSearchParams({
+    from,
+    period: "month",
+    tenantId: toGatewayTenantId(tenantId),
+    to
+  });
+  appendOptionalQuery(query, "budgetScopeId", filters.budgetScopeId);
+  appendOptionalQuery(query, "budgetScopeType", filters.budgetScopeType);
+  appendOptionalQuery(query, "projectId", filters.projectId);
+  appendOptionalQuery(query, "resolvedBy", filters.resolvedBy);
+
+  const response = await fetch(`${config.baseUrl}/api/reports/costs?${query.toString()}`, {
+    headers: getGatewayObservabilityHeaders(`request_web_month_to_date_cost_${Date.now()}`),
+    cache: "no-store"
+  }).catch(() => undefined);
+
+  if (!response?.ok) {
+    return undefined;
+  }
+
+  const payload = (await response.json().catch(() => ({}))) as LiveCostReportResponse;
+  const total = normalizeOptionalNonNegativeNumber(payload.data?.totals?.costMicroUsd);
+
+  if (total !== undefined) {
+    return total;
+  }
+
+  if (!Array.isArray(payload.data?.buckets)) {
+    return undefined;
+  }
+
+  return payload.data.buckets.reduce(
+    (sum, bucket) => sum + normalizeNonNegativeNumber(bucket.costMicroUsd),
+    0
+  );
 }
 
 export async function getLiveMonthlyProjectCostReport(
@@ -271,6 +317,16 @@ function normalizeNonNegativeNumber(value: number | string | undefined) {
 
   if (typeof parsed !== "number" || !Number.isFinite(parsed)) {
     return 0;
+  }
+
+  return Math.max(0, parsed);
+}
+
+function normalizeOptionalNonNegativeNumber(value: number | string | undefined) {
+  const parsed = typeof value === "string" ? Number(value) : value;
+
+  if (typeof parsed !== "number" || !Number.isFinite(parsed)) {
+    return undefined;
   }
 
   return Math.max(0, parsed);
