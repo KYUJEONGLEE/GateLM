@@ -12,6 +12,12 @@
   --analytics-v5-primary-value-size: 46px;
   --analytics-v5-surface-title-size: 19px;
   --analytics-v5-surface-copy-size: 13px;
+  --analytics-v3-panel-title-size: 24px;
+  --analytics-v3-section-title-size: 19px;
+  --analytics-v3-lead-label-size: 18px;
+  --analytics-v3-lead-value-min-size: 36px;
+  --analytics-v3-lead-value-max-size: 46px;
+  --analytics-v3-metric-value-size: 36px;
   gap: 0;
 }
 
@@ -40,6 +46,16 @@
 
 .analytics-v5-page .analytics-v3-tab[data-active="true"]::after {
   background: var(--analytics-v5-green);
+}
+
+.analytics-v5-page .analytics-v3-subtab:hover {
+  border-color: color-mix(in srgb, var(--analytics-v5-green) 42%, var(--border));
+}
+
+.analytics-v5-page .analytics-v3-subtab[data-active="true"] {
+  border-color: color-mix(in srgb, var(--analytics-v5-green) 50%, var(--border));
+  background: color-mix(in srgb, var(--analytics-v5-green) 9%, var(--surface));
+  color: var(--analytics-v5-green);
 }
 
 .analytics-v5-overview {
@@ -194,19 +210,11 @@
   margin-bottom: 1px;
 }
 
-.analytics-v5-primary-grid,
-.analytics-v5-secondary-grid {
+.analytics-v5-policy-grid {
   display: grid;
   min-width: 0;
   gap: 14px;
-}
-
-.analytics-v5-primary-grid {
-  grid-template-columns: minmax(0, 1.9fr) minmax(360px, 1fr);
-}
-
-.analytics-v5-secondary-grid {
-  grid-template-columns: minmax(420px, 1.15fr) minmax(0, 1.35fr);
+  grid-template-columns: minmax(0, 1.25fr) minmax(360px, 0.75fr);
 }
 
 .analytics-v5-surface {
@@ -244,8 +252,114 @@
 
 .analytics-v5-model-share-chart {
   width: 100%;
-  height: 310px;
-  margin-top: 8px;
+  height: 250px;
+  margin: 0;
+}
+
+.analytics-v5-model-share-layout {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(220px, 0.85fr) minmax(260px, 1.15fr);
+  align-items: center;
+  gap: 24px;
+  margin-top: 10px;
+}
+
+.analytics-v5-model-share-visual {
+  position: relative;
+  min-width: 0;
+}
+
+.analytics-v5-model-share-center {
+  position: absolute;
+  inset: 50% auto auto 50%;
+  display: grid;
+  width: 118px;
+  transform: translate(-50%, -50%);
+  gap: 5px;
+  text-align: center;
+  pointer-events: none;
+}
+
+.analytics-v5-model-share-center span {
+  color: var(--text-muted);
+  font-size: calc(13px + var(--global-font-lift));
+  font-weight: 700;
+}
+
+.analytics-v5-model-share-center strong {
+  color: var(--foreground);
+  font-size: calc(26px + var(--global-font-lift));
+  font-weight: 850;
+}
+
+.analytics-v5-model-share-list {
+  display: grid;
+  min-width: 0;
+}
+
+.analytics-v5-model-share-row {
+  display: grid;
+  min-width: 0;
+  min-height: 51px;
+  grid-template-columns: 9px 30px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.analytics-v5-model-share-row:last-child {
+  border-bottom: 0;
+}
+
+.analytics-v5-model-share-row > i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.analytics-v5-model-share-provider {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface-subtle);
+  color: var(--foreground);
+}
+
+.analytics-v5-model-share-provider img {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+}
+
+html[data-theme="dark"] .analytics-v5-model-share-provider[data-family="openai"] img {
+  filter: invert(1);
+}
+
+.analytics-v5-model-share-row > strong {
+  overflow: hidden;
+  color: var(--foreground);
+  font-size: calc(15px + var(--global-font-lift));
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.analytics-v5-model-share-row > span,
+.analytics-v5-model-share-row > em {
+  color: var(--text-muted);
+  font-size: calc(14px + var(--global-font-lift));
+  font-style: normal;
+  font-weight: 750;
+}
+
+.analytics-v5-model-share-row > em {
+  min-width: 52px;
+  color: var(--foreground);
+  text-align: right;
 }
 
 .analytics-v5-empty {
@@ -280,8 +394,7 @@ html[data-theme="dark"] .analytics-v5-metric-primary > div > strong {
 }
 
 @media (max-width: 1280px) {
-  .analytics-v5-primary-grid,
-  .analytics-v5-secondary-grid {
+  .analytics-v5-policy-grid {
     grid-template-columns: minmax(0, 1fr);
   }
 }
@@ -334,5 +447,20 @@ html[data-theme="dark"] .analytics-v5-metric-primary > div > strong {
   .analytics-v5-routing-difficulty-chart,
   .analytics-v5-project-usage-chart {
     height: 270px;
+  }
+
+  .analytics-v5-model-share-layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+  }
+}
+
+@media (max-width: 520px) {
+  .analytics-v5-model-share-row {
+    grid-template-columns: 8px 28px minmax(0, 1fr) auto;
+  }
+
+  .analytics-v5-model-share-row > span {
+    display: none;
   }
 }

@@ -56,7 +56,8 @@ export function AnalyticsRankedBarChart({
   outlierMultiplier,
   presentation = false,
   rankColors,
-  rows
+  rows,
+  valueLabelFontSize
 }: {
   ariaLabel: string;
   className?: string;
@@ -68,6 +69,7 @@ export function AnalyticsRankedBarChart({
   presentation?: boolean;
   rankColors?: readonly string[];
   rows: AnalyticsValueRow[];
+  valueLabelFontSize?: number;
 }) {
   const theme = useAnalyticsChartTheme();
   const isVertical = orientation === "vertical";
@@ -175,7 +177,7 @@ export function AnalyticsRankedBarChart({
           })),
           label: {
             color: theme.label,
-            fontSize: presentation ? 20 : 14,
+            fontSize: valueLabelFontSize ?? (presentation ? 20 : 14),
             fontWeight: 900,
             formatter: ({ value }: { value: number }) =>
               formatValue(value, kind, false, microUsdMaximumFractionDigits),
@@ -194,6 +196,7 @@ export function AnalyticsRankedBarChart({
       presentation,
       rankColors,
       theme,
+      valueLabelFontSize,
       visibleRows
     ]
   );
@@ -511,6 +514,82 @@ export function AnalyticsCompositionChart({
   return <AnalyticsEChart ariaLabel={ariaLabel} className="analytics-v3-composition-chart" option={option} />;
 }
 
+export function AnalyticsCostAttributionChart({
+  ariaLabel,
+  rows,
+  totalLabel
+}: {
+  ariaLabel: string;
+  rows: AnalyticsValueRow[];
+  totalLabel: string;
+}) {
+  const theme = useAnalyticsChartTheme();
+  const visibleRows = useMemo(
+    () => rows.filter((row) => row.value > 0).slice(0, 5),
+    [rows]
+  );
+  const totalCostMicroUsd = useMemo(
+    () => visibleRows.reduce((sum, row) => sum + row.value, 0),
+    [visibleRows]
+  );
+  const option = useMemo<AnalyticsEChartOption>(
+    () => ({
+      animationDuration: 360,
+      color: palette,
+      series: [
+        {
+          avoidLabelOverlap: true,
+          center: ["50%", "50%"],
+          data: visibleRows.map((row) => ({
+            name: row.label,
+            value: row.value
+          })),
+          emphasis: { scaleSize: 6 },
+          itemStyle: {
+            borderColor: theme.tooltipBackground,
+            borderWidth: 3
+          },
+          label: { show: false },
+          radius: ["56%", "82%"],
+          type: "pie"
+        }
+      ],
+      tooltip: {
+        ...analyticsTooltip("", theme),
+        trigger: "item",
+        valueFormatter: (value: unknown) => formatMicroUsdCurrency(Number(value ?? 0))
+      }
+    }),
+    [theme, visibleRows]
+  );
+
+  return (
+    <div className="analytics-v3-cost-attribution-layout">
+      <div className="analytics-v3-cost-attribution-visual">
+        <AnalyticsEChart
+          ariaLabel={ariaLabel}
+          className="analytics-v3-cost-attribution-chart"
+          option={option}
+        />
+        <div aria-hidden="true" className="analytics-v3-cost-attribution-center">
+          <span>{totalLabel}</span>
+          <strong>{formatMicroUsdCurrency(totalCostMicroUsd)}</strong>
+        </div>
+      </div>
+      <div className="analytics-v3-cost-attribution-list">
+        {visibleRows.map((row, index) => (
+          <div className="analytics-v3-cost-attribution-row" key={row.id}>
+            <i style={{ backgroundColor: palette[index] }} />
+            <strong title={row.label}>{row.label}</strong>
+            <span>{formatMicroUsdCurrency(row.value)}</span>
+            <em>{formatRatio(row.value, totalCostMicroUsd)}</em>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function AnalyticsCostTrendChart({
   ariaLabel,
   points
@@ -779,4 +858,11 @@ function tooltipUnit(kind: AnalyticsValueKind) {
     return " micro USD";
   }
   return " requests";
+}
+
+function formatRatio(value: number, total: number) {
+  return new Intl.NumberFormat("en-US", {
+    maximumFractionDigits: 1,
+    style: "percent"
+  }).format(total > 0 ? value / total : 0);
 }
