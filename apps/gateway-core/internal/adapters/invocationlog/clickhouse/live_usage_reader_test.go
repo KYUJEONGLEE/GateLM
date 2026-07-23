@@ -84,6 +84,10 @@ func TestAnalyticsLiveUsageReaderUsesOnlyBoundedSecondRollup(t *testing.T) {
 		if !strings.Contains(statement, "analytics.llm_invocations_dashboard_second_rollup") {
 			t.Fatalf("live usage must use the second rollup: %s", statement)
 		}
+		if strings.Contains(statement, "sum(requests)") ||
+			strings.Contains(statement, "sumIf(requests") {
+			t.Fatalf("aggregate source columns must be qualified to avoid ClickHouse alias shadowing: %s", statement)
+		}
 		if strings.Contains(statement, "llm_invocations FINAL") ||
 			strings.Contains(statement, "llm_invocations_by_time") {
 			t.Fatalf("live usage must not scan a raw read model: %s", statement)

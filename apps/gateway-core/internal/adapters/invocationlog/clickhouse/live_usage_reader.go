@@ -88,22 +88,22 @@ func (r *ProjectReader) queryAnalyticsLiveUsage(
 			filteredCTE+`
 , per_second AS (
   SELECT
-    bucket,
-    sum(requests) AS requests,
-    sumIf(requests, terminal_status != 'rate_limited') AS processed,
-    sumIf(requests, terminal_status = 'rate_limited') AS rate_limited,
-    max(last_created_at) AS last_created_at
-  FROM filtered
-  GROUP BY bucket
+    live.bucket,
+    sum(live.requests) AS second_requests,
+    sumIf(live.requests, live.terminal_status != 'rate_limited') AS second_processed,
+    sumIf(live.requests, live.terminal_status = 'rate_limited') AS second_rate_limited,
+    max(live.last_created_at) AS second_last_created_at
+  FROM filtered AS live
+  GROUP BY live.bucket
 )
 SELECT
-  sum(requests) AS requests,
-  sum(processed) AS processed,
-  sum(rate_limited) AS rate_limited,
-  sumIf(requests, bucket >= parseDateTime64BestEffort({current_from:String}, 3, 'UTC')
+  sum(second_requests) AS requests,
+  sum(second_processed) AS processed,
+  sum(second_rate_limited) AS rate_limited,
+  sumIf(second_requests, bucket >= parseDateTime64BestEffort({current_from:String}, 3, 'UTC')
     AND bucket < parseDateTime64BestEffort({current_to:String}, 3, 'UTC')) AS current_requests,
-  if(count() = 0, 0, max(requests)) AS peak_rps,
-  if(count() = 0, NULL, toUnixTimestamp64Milli(max(last_created_at))) AS last_ms
+  if(count() = 0, 0, max(second_requests)) AS peak_rps,
+  if(count() = 0, NULL, toUnixTimestamp64Milli(max(second_last_created_at))) AS last_ms
 FROM per_second
 FORMAT JSONEachRow`,
 			params,
@@ -120,12 +120,12 @@ FORMAT JSONEachRow`,
 	group.Go(func() error {
 		query := filteredCTE + fmt.Sprintf(`
 SELECT
-  toUnixTimestamp(toStartOfInterval(bucket, INTERVAL %d SECOND, 'UTC')) * 1000 AS bucket_ms,
-  sum(requests) AS requests,
-  sumIf(requests, terminal_status != 'rate_limited') AS processed,
-  sumIf(requests, terminal_status = 'rate_limited') AS rate_limited
-FROM filtered
-GROUP BY toStartOfInterval(bucket, INTERVAL %d SECOND, 'UTC')
+  toUnixTimestamp(toStartOfInterval(live.bucket, INTERVAL %d SECOND, 'UTC')) * 1000 AS bucket_ms,
+  sum(live.requests) AS requests,
+  sumIf(live.requests, live.terminal_status != 'rate_limited') AS processed,
+  sumIf(live.requests, live.terminal_status = 'rate_limited') AS rate_limited
+FROM filtered AS live
+GROUP BY toStartOfInterval(live.bucket, INTERVAL %d SECOND, 'UTC')
 ORDER BY bucket_ms
 FORMAT JSONEachRow`, intervalSeconds, intervalSeconds)
 		rows, queryErr := queryJSONEachRow[analyticsLiveUsageBucketRow](groupCtx, r.client, query, params)
@@ -140,18 +140,18 @@ FORMAT JSONEachRow`, intervalSeconds, intervalSeconds)
 			r.client,
 			filteredCTE+`
 SELECT
-  toString(project_id) AS project_id_text,
-  sum(requests) AS requests,
-  sumIf(requests, terminal_status != 'rate_limited') AS processed,
-  sumIf(requests, terminal_status = 'rate_limited') AS rate_limited,
-  sumIf(requests, bucket >= parseDateTime64BestEffort({current_from:String}, 3, 'UTC')
-    AND bucket < parseDateTime64BestEffort({current_to:String}, 3, 'UTC')) AS current_requests,
-  sumIf(requests, bucket >= parseDateTime64BestEffort({delta_current_from:String}, 3, 'UTC')
-    AND bucket < parseDateTime64BestEffort({current_to:String}, 3, 'UTC')) AS current_delta,
-  sumIf(requests, bucket >= parseDateTime64BestEffort({delta_previous_from:String}, 3, 'UTC')
-    AND bucket < parseDateTime64BestEffort({delta_current_from:String}, 3, 'UTC')) AS previous_delta
-FROM filtered
-GROUP BY project_id
+  toString(live.project_id) AS project_id_text,
+  sum(live.requests) AS requests,
+  sumIf(live.requests, live.terminal_status != 'rate_limited') AS processed,
+  sumIf(live.requests, live.terminal_status = 'rate_limited') AS rate_limited,
+  sumIf(live.requests, live.bucket >= parseDateTime64BestEffort({current_from:String}, 3, 'UTC')
+    AND live.bucket < parseDateTime64BestEffort({current_to:String}, 3, 'UTC')) AS current_requests,
+  sumIf(live.requests, live.bucket >= parseDateTime64BestEffort({delta_current_from:String}, 3, 'UTC')
+    AND live.bucket < parseDateTime64BestEffort({current_to:String}, 3, 'UTC')) AS current_delta,
+  sumIf(live.requests, live.bucket >= parseDateTime64BestEffort({delta_previous_from:String}, 3, 'UTC')
+    AND live.bucket < parseDateTime64BestEffort({delta_current_from:String}, 3, 'UTC')) AS previous_delta
+FROM filtered AS live
+GROUP BY live.project_id
 ORDER BY requests DESC, project_id_text ASC
 LIMIT `+strconv.Itoa(invocationlog.AnalyticsLiveUsageProjectLimit)+`
 FORMAT JSONEachRow`,
