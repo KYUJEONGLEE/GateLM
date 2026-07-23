@@ -1786,6 +1786,41 @@ describe('RuntimeConfigsService', () => {
     expect(JSON.stringify(catalog)).not.toContain('secretHash');
   });
 
+  it('uses the configured distributed URL for the built-in mock provider', async () => {
+    const previous = process.env.GATELM_DEMO_MOCK_PROVIDER_BASE_URL;
+    process.env.GATELM_DEMO_MOCK_PROVIDER_BASE_URL = 'http://10.78.2.40:8090/';
+
+    try {
+      const { service, prisma } = createService();
+      mockRuntimeInputs(prisma, {
+        provider: 'openai-main',
+        baseUrl: 'https://api.openai.com/v1',
+        providerConfig: { models: ['gpt-4o-mini'] },
+      });
+      prisma.runtimeConfig.findUnique.mockResolvedValue(null);
+      prisma.runtimeConfig.create.mockImplementation(({ data }) =>
+        Promise.resolve(runtimeConfigRecord(data.document, data)),
+      );
+
+      const draft = await service.upsertDraft(applicationId, {});
+      const mockProvider = draft.runtimeConfig.providers.find(
+        (provider) => provider.provider === 'mock',
+      );
+
+      expect(mockProvider).toMatchObject({
+        adapterType: 'mock',
+        baseUrl: 'http://10.78.2.40:8090',
+        credentialRequired: false,
+      });
+    } finally {
+      if (previous === undefined) {
+        delete process.env.GATELM_DEMO_MOCK_PROVIDER_BASE_URL;
+      } else {
+        process.env.GATELM_DEMO_MOCK_PROVIDER_BASE_URL = previous;
+      }
+    }
+  });
+
   it('classifies simple, complex, and fallback routing models by cost tier', async () => {
     const { service, prisma } = createService();
     mockRuntimeInputs(prisma);
