@@ -445,8 +445,16 @@ html[data-theme="dark"] .analytics-v5-metric-primary > div > strong {
     padding: 21px;
   }
 
+  .analytics-v5-metric-primary > div {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 10px;
+  }
+
   .analytics-v5-metric-primary > div > strong {
     font-size: calc(40px + var(--global-font-lift));
+    overflow-wrap: normal;
+    white-space: nowrap;
   }
 
   .analytics-v5-surface {

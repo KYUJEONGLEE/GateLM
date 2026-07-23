@@ -103,6 +103,17 @@ test("new analytics summaries keep responsive one-column fallbacks", async () =>
   );
 });
 
+test("confirmed savings keeps its amount on one line on mobile", async () => {
+  const styles = await readFile(v5StylesSourceUrl, "utf8");
+
+  expect(styles).toMatch(
+    /@media \(max-width: 760px\) \{[\s\S]*?\.analytics-v5-metric-primary > div \{[\s\S]*?flex-direction: column;/
+  );
+  expect(styles).toMatch(
+    /@media \(max-width: 760px\) \{[\s\S]*?\.analytics-v5-metric-primary > div > strong \{[\s\S]*?overflow-wrap: normal;[\s\S]*?white-space: nowrap;/
+  );
+});
+
 test("analytics category tabs keep compact vertical spacing", async () => {
   const styles = await readFile(v5StylesSourceUrl, "utf8");
 
