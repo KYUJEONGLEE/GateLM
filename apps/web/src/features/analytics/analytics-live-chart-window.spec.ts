@@ -1,6 +1,9 @@
 import { expect, test } from "@playwright/test";
 import type { AnalyticsLiveUsageBucket } from "@/features/analytics/analytics-live-usage-contract";
-import { analyticsLiveChartStartIndex } from "@/features/analytics/analytics-live-chart-window";
+import {
+  analyticsLiveChartStartIndex,
+  latestAnalyticsRateLimitStartIndex
+} from "@/features/analytics/analytics-live-chart-window";
 
 test("최근 활동이 짧으면 최소 5분의 요청 추이를 표시한다", () => {
   const buckets = makeBuckets({ count: 181, intervalSeconds: 5, activityStartIndex: 157 });
@@ -24,6 +27,32 @@ test("긴 bucket 간격에서는 최소 12개 bucket을 표시한다", () => {
   const buckets = makeBuckets({ count: 337, intervalSeconds: 1_800, activityStartIndex: 335 });
 
   expect(analyticsLiveChartStartIndex(buckets)).toBe(325);
+});
+
+test("가장 최근에 다시 시작된 요청 제한 구간을 표시한다", () => {
+  const buckets = withRateLimits(
+    makeBuckets({ count: 10, intervalSeconds: 5 }),
+    [2, 3, 7, 8]
+  );
+
+  expect(latestAnalyticsRateLimitStartIndex(buckets, null)).toBe(7);
+});
+
+test("요청 제한이 연속되는 동안 시작 위치를 유지한다", () => {
+  const buckets = makeBuckets({ count: 10, intervalSeconds: 5 });
+  const firstSnapshot = withRateLimits(buckets, [5, 6, 7]);
+  const nextSnapshot = withRateLimits(buckets, [5, 6, 7, 8]);
+
+  expect(latestAnalyticsRateLimitStartIndex(firstSnapshot, null)).toBe(5);
+  expect(latestAnalyticsRateLimitStartIndex(nextSnapshot, null)).toBe(5);
+});
+
+test("bucket에 제한 증거가 없으면 API의 안전한 시작점을 사용한다", () => {
+  const buckets = makeBuckets({ count: 10, intervalSeconds: 5 });
+
+  expect(
+    latestAnalyticsRateLimitStartIndex(buckets, buckets[4].periodStart)
+  ).toBe(4);
 });
 
 function makeBuckets({
@@ -51,4 +80,20 @@ function makeBuckets({
       requestCount: hasActivity ? 40 : 0
     };
   });
+}
+
+function withRateLimits(
+  buckets: AnalyticsLiveUsageBucket[],
+  limitedIndexes: number[]
+) {
+  const limited = new Set(limitedIndexes);
+  return buckets.map((bucket, index) => limited.has(index)
+    ? {
+        ...bucket,
+        incomingRps: 8,
+        rateLimitedRequestCount: 10,
+        rateLimitedRps: 2,
+        requestCount: 40
+      }
+    : bucket);
 }

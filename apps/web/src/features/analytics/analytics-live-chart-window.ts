@@ -41,6 +41,24 @@ export function analyticsLiveChartStartIndex(buckets: AnalyticsLiveUsageBucket[]
   return Math.max(0, startIndex);
 }
 
+export function latestAnalyticsRateLimitStartIndex(
+  buckets: AnalyticsLiveUsageBucket[],
+  fallbackStartedAt: string | null
+) {
+  for (let index = buckets.length - 1; index >= 0; index -= 1) {
+    if (!hasRateLimit(buckets[index])) {
+      continue;
+    }
+    if (index === 0 || !hasRateLimit(buckets[index - 1])) {
+      return index;
+    }
+  }
+
+  return fallbackStartedAt
+    ? buckets.findIndex((bucket) => bucket.periodStart === fallbackStartedAt)
+    : -1;
+}
+
 function hasActivity(bucket: AnalyticsLiveUsageBucket) {
   return (
     bucket.requestCount > 0 ||
@@ -48,6 +66,10 @@ function hasActivity(bucket: AnalyticsLiveUsageBucket) {
     bucket.processedRps > 0 ||
     bucket.rateLimitedRps > 0
   );
+}
+
+function hasRateLimit(bucket: AnalyticsLiveUsageBucket) {
+  return bucket.rateLimitedRequestCount > 0 || bucket.rateLimitedRps > 0;
 }
 
 function findBucketIntervalMs(buckets: AnalyticsLiveUsageBucket[]) {

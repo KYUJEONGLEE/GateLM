@@ -2,7 +2,10 @@
 
 import { useMemo, useState } from "react";
 import { compactAnalyticsValueRows } from "@/features/analytics/analytics-chart-data";
-import { analyticsLiveChartStartIndex } from "@/features/analytics/analytics-live-chart-window";
+import {
+  analyticsLiveChartStartIndex,
+  latestAnalyticsRateLimitStartIndex
+} from "@/features/analytics/analytics-live-chart-window";
 import type { AnalyticsValueRow } from "@/features/analytics/analytics-read-model";
 import type { AnalyticsLiveUsageBucket } from "@/features/analytics/analytics-live-usage-contract";
 import type { AnalyticsRequestVolumePoint } from "@/features/analytics/analytics-usage-merge";
@@ -820,9 +823,10 @@ export function AnalyticsLiveRequestTrendChart({
     () => buckets.map((bucket) => formatLiveBucket(bucket.periodStart, locale)),
     [buckets, locale]
   );
-  const markerIndex = rateLimitStartedAt
-    ? buckets.findIndex((bucket) => bucket.periodStart === rateLimitStartedAt)
-    : -1;
+  const markerIndex = useMemo(
+    () => latestAnalyticsRateLimitStartIndex(buckets, rateLimitStartedAt),
+    [buckets, rateLimitStartedAt]
+  );
   const visibleStartIndex = useMemo(
     () => analyticsLiveChartStartIndex(buckets),
     [buckets]
