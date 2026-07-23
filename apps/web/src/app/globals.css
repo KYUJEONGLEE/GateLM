@@ -809,13 +809,21 @@ html:not([data-theme="dark"]) .console-sidebar .console-subnav-link {
   color: #1e3a5f;
 }
 
-.console-nav-sidebar-toggle:hover {
+.console-mobile-topbar .console-sidebar-toggle {
+  background: #ffffff;
+  border-color: #dbe3ec;
+  color: #1e3a5f;
+}
+
+.console-nav-sidebar-toggle:hover,
+.console-mobile-topbar .console-sidebar-toggle:hover {
   background: #f8fafc;
   border-color: var(--sidebar-ring);
   color: #1d4ed8;
 }
 
-.console-nav-sidebar-toggle:focus-visible {
+.console-nav-sidebar-toggle:focus-visible,
+.console-mobile-topbar .console-sidebar-toggle:focus-visible {
   outline-color: var(--sidebar-ring);
 }
 
@@ -14305,6 +14313,11 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
     flex: 1;
   }
 
+  .console-user-settings-row .theme-segmented-control {
+    width: auto;
+    max-width: 100%;
+  }
+
   .project-sort-control,
   .project-sort-buttons {
     width: 100%;
@@ -15703,6 +15716,25 @@ html[data-theme="dark"] .application-launcher-button-primary:disabled {
 .landing-google-button:hover {
   border-color: var(--brand-blue-strong);
   background: var(--brand-blue-strong);
+}
+
+@media (max-width: 360px) {
+  .console-user-settings-choice-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .console-user-settings-choice-row > span {
+    flex: 0 0 auto;
+  }
+
+  .console-user-settings-choice-row .theme-segmented-control {
+    width: 100%;
+  }
+
+  .console-user-settings-choice-row .theme-segmented-control button {
+    min-width: 0;
+  }
 }
 
 html[data-theme="dark"] .landing-google-button:hover {
@@ -20741,6 +20773,14 @@ html:has(.tenant-management-content) {
   width: 21px;
   height: 21px;
   object-fit: contain;
+}
+
+.tenant-routing-provider-icon[data-family="claude"] img {
+  filter: none;
+}
+
+html[data-theme="dark"] .tenant-routing-provider-icon[data-family="openai"] img {
+  filter: brightness(0) invert(1);
 }
 
 .tenant-routing-provider-control select,
@@ -25905,11 +25945,11 @@ html:not([data-theme="dark"]) .console-shell {
   --shadow-md: 0 6px 16px rgba(15, 23, 42, 0.07);
 }
 
-html:not([data-theme="dark"]) .console-content {
+.console-content {
   background: var(--background);
 }
 
-html:not([data-theme="dark"]) :is(
+:is(
     .console-panel,
     .dashboard-cost-over-time-panel,
     .dashboard-provider-usage-panel,
@@ -25924,9 +25964,7 @@ html:not([data-theme="dark"]) :is(
 }
 
 /* Keep the operational KPIs visually distinct and easy to scan. */
-html:not([data-theme="dark"])
-  .dashboard-overview-workspace
-  .dashboard-kpi-grid {
+.dashboard-overview-workspace .dashboard-kpi-grid {
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: var(--space-4);
   overflow: visible;
@@ -25936,24 +25974,20 @@ html:not([data-theme="dark"])
   box-shadow: none;
 }
 
-html:not([data-theme="dark"])
-  .dashboard-overview-workspace
-  .dashboard-kpi-card {
+.dashboard-overview-workspace .dashboard-kpi-card {
   border: 1px solid var(--border-strong);
   border-radius: 10px;
   background: var(--card);
   box-shadow: var(--shadow-xs);
 }
 
-html:not([data-theme="dark"])
-  .dashboard-kpi-card[data-tone]
-  .dashboard-kpi-icon {
+.dashboard-kpi-card[data-tone] .dashboard-kpi-icon {
   background: color-mix(in srgb, var(--brand-blue) 9%, var(--card));
   color: var(--brand-blue-strong);
 }
 
 /* Management pages use bounded section bands instead of loose rows on canvas. */
-html:not([data-theme="dark"]) .management-line-content > :is(
+.management-line-content > :is(
     .console-panel,
     .provider-line-panel,
     .credential-line-panel,
@@ -25966,24 +26000,18 @@ html:not([data-theme="dark"]) .management-line-content > :is(
   box-shadow: var(--shadow-xs);
 }
 
-html:not([data-theme="dark"])
-  .management-line-content
-  > .team-section:first-of-type {
+.management-line-content > .team-section:first-of-type {
   border-top: 1px solid var(--border);
 }
 
-html:not([data-theme="dark"])
-  .management-line-content
-  > .application-budget-summary {
+.management-line-content > .application-budget-summary {
   padding: 18px 22px;
   border: 1px solid var(--border);
   border-radius: 10px;
   background: var(--surface);
 }
 
-html:not([data-theme="dark"])
-  .management-line-content
-  :is(
+.management-line-content :is(
     .project-detail-section,
     .application-row,
     .provider-card,
@@ -25992,9 +26020,7 @@ html:not([data-theme="dark"])
     .budget-policy-card,
     .table-wrap
   ),
-html:not([data-theme="dark"])
-  .employee-panel
-  :is(
+.employee-panel :is(
     .employee-list-grid,
     .employee-usage-ranking,
     .employee-cost-insights
@@ -26002,30 +26028,26 @@ html:not([data-theme="dark"])
   background: var(--card);
 }
 
-html:not([data-theme="dark"])
-  .management-line-content
-  .project-detail-section
-  + .project-detail-section {
+.management-line-content .project-detail-section + .project-detail-section {
   border-top-color: var(--border);
 }
 
 /* Analytics keeps chart colors but removes competing card colors. */
-html:not([data-theme="dark"]) .analytics-v5-metric-grid {
+.analytics-v5-metric-grid {
   border-color: var(--border-strong);
   background: var(--border);
   box-shadow: var(--shadow-xs);
 }
 
-html:not([data-theme="dark"]) .analytics-v5-metric {
+.analytics-v5-metric {
   background: var(--card);
 }
 
-html:not([data-theme="dark"]) .analytics-v5-metric-primary {
+.analytics-v5-metric-primary {
   background: color-mix(in srgb, var(--primary) 4%, var(--card));
 }
 
-html:not([data-theme="dark"])
-  :is(.analytics-impact-kpi-grid, .analytics-domain-kpi-grid) {
+:is(.analytics-impact-kpi-grid, .analytics-domain-kpi-grid) {
   gap: 1px;
   overflow: hidden;
   border: 1px solid var(--border-strong);
@@ -26034,34 +26056,29 @@ html:not([data-theme="dark"])
   box-shadow: var(--shadow-xs);
 }
 
-html:not([data-theme="dark"])
-  :is(.analytics-kpi-card, .analytics-impact-kpi, .analytics-domain-kpi) {
+:is(.analytics-kpi-card, .analytics-impact-kpi, .analytics-domain-kpi) {
   background: var(--card);
 }
 
-html:not([data-theme="dark"])
-  :is(.analytics-impact-kpi, .analytics-domain-kpi) {
+:is(.analytics-impact-kpi, .analytics-domain-kpi) {
   border: 0;
   border-radius: 0;
   box-shadow: none;
 }
 
-html:not([data-theme="dark"])
-  :is(.analytics-kpi-card, .analytics-impact-kpi, .analytics-domain-kpi)[data-tone]
+:is(.analytics-kpi-card, .analytics-impact-kpi, .analytics-domain-kpi)[data-tone]
   :is(.analytics-kpi-title > span, div > span) {
   background: color-mix(in srgb, var(--brand-blue) 9%, var(--card));
   color: var(--brand-blue-strong);
 }
 
 @media (max-width: 760px) {
-  html:not([data-theme="dark"])
-    .dashboard-overview-workspace
-    .dashboard-kpi-grid,
-  html:not([data-theme="dark"]) .analytics-v5-metric-grid {
+  .dashboard-overview-workspace .dashboard-kpi-grid,
+  .analytics-v5-metric-grid {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  html:not([data-theme="dark"]) .management-line-content > :is(
+  .management-line-content > :is(
       .console-panel,
       .provider-line-panel,
       .credential-line-panel,
@@ -26072,15 +26089,13 @@ html:not([data-theme="dark"])
 }
 
 @media (min-width: 761px) and (max-width: 1100px) {
-  html:not([data-theme="dark"])
-    .dashboard-overview-workspace
-    .dashboard-kpi-grid {
+  .dashboard-overview-workspace .dashboard-kpi-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
 @media (min-width: 1101px) and (max-width: 1280px) {
-  html[data-presentation-mode="true"]:not([data-theme="dark"])
+  html[data-presentation-mode="true"]
     .dashboard-overview-workspace
     .dashboard-kpi-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -26088,7 +26103,7 @@ html:not([data-theme="dark"])
 }
 
 @media (min-width: 761px) and (max-width: 980px) {
-  html:not([data-theme="dark"]) .analytics-v5-metric-grid {
+  .analytics-v5-metric-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
