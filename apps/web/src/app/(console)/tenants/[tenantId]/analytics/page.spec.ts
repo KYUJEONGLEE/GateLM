@@ -172,6 +172,20 @@ test("Korean analytics copy removes the page subtitle and uses vertical ranked c
   expect(panelsSource).toContain('provider: "모델별 전체 응답 지연"');
 });
 
+test("analytics groups seven detail views into four primary categories", async () => {
+  const pageSource = await readFile(pageSourceUrl, "utf8");
+
+  expect(pageSource).toContain('type AnalyticsPrimaryTab = "impact" | "usage" | "performance" | "security"');
+  expect(pageSource).toContain('const costPolicyTabs: AnalyticsTab[] = ["impact", "cost", "cache"]');
+  expect(pageSource).toContain('const operationsTabs: AnalyticsTab[] = ["performance", "reliability"]');
+  expect(pageSource).toContain('impact: "비용·정책 효과"');
+  expect(pageSource).toContain('performance: "운영 성능"');
+  expect(pageSource).toContain('const activePrimaryTab = primaryTabFor(activeTab)');
+  expect(pageSource).toContain('tab === "cost" || tab === "cache"');
+  expect(pageSource).toContain('tab === "reliability"');
+  expect(pageSource).toContain('className="analytics-v3-subtabs"');
+});
+
 test("policy impact delegates Project/Application and Tenant Chat union to the Gateway contract", async () => {
   const pageSource = await readFile(pageSourceUrl, "utf8");
 

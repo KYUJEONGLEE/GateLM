@@ -40,8 +40,11 @@ func (w *TerminalLogWriter) WriteTerminalLog(ctx context.Context, entry invocati
 		return errors.New("fanout terminal log writer requires a primary writer")
 	}
 	primaryErr := w.primary.WriteTerminalLog(ctx, entry)
+	if primaryErr != nil {
+		return primaryErr
+	}
 	w.writeMirror(ctx, []invocationlog.TerminalLog{entry})
-	return primaryErr
+	return nil
 }
 
 func (w *TerminalLogWriter) WriteTerminalLogs(ctx context.Context, entries []invocationlog.TerminalLog) error {
@@ -62,8 +65,11 @@ func (w *TerminalLogWriter) WriteTerminalLogs(ctx context.Context, entries []inv
 			}
 		}
 	}
+	if primaryErr != nil {
+		return primaryErr
+	}
 	w.writeMirror(ctx, entries)
-	return primaryErr
+	return nil
 }
 
 func (w *TerminalLogWriter) writeMirror(ctx context.Context, entries []invocationlog.TerminalLog) {

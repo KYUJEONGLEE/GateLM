@@ -20,7 +20,14 @@ test("dashboard validates tenant access before projects or observability reads",
 test("month-to-date spend tolerates missing Tenant Chat usage", async () => {
   const pageSource = await readFile(pageSourceUrl, "utf8");
 
-  expect(pageSource).toContain("getLiveMonthToDateCostMicroUsd(tenantId, filters)");
+  expect(pageSource).toContain("getLiveMonthToDateCostMicroUsd(tenantId, {");
+  expect(pageSource).toContain("from: monthToDateRange.from");
+  expect(pageSource).toContain("to: monthToDateRange.to");
   expect(pageSource).not.toContain('range: "1w"');
+  expect(pageSource).toContain('surface === "tenant_chat" || projectApplicationCostMicroUsd');
+  expect(pageSource).toContain('surface === "project_application" || tenantChat !== undefined');
   expect(pageSource).toContain("tenantChat?.usage?.confirmedCostMicroUsd ?? 0");
+  expect(pageSource).toContain('<Suspense fallback="—">');
+  expect(pageSource).toContain('hasCurrentData ? formatDashboardMicroUsd(totalMicroUsd) : "—"');
+  expect(pageSource).not.toContain("fallbackMicroUsd");
 });

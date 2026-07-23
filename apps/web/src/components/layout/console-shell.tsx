@@ -295,6 +295,7 @@ export function ConsoleShell({
     activeMonitoringItem ?? navigationState.activeMonitoringItem;
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isResponsiveCompact, setIsResponsiveCompact] = useState(false);
+  const [isMobileViewportActive, setIsMobileViewportActive] = useState(false);
   const [isMobileNavigationOpen, setIsMobileNavigationOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [displayMode, setDisplayMode] = useState<ConsoleDisplayMode>("default");
@@ -313,12 +314,27 @@ export function ConsoleShell({
   }, []);
 
   useEffect(() => {
-    const mediaQuery = window.matchMedia("(min-width: 1101px) and (max-width: 1280px)");
-    const syncResponsiveCompactState = () => setIsResponsiveCompact(mediaQuery.matches);
+    const responsiveCompactQuery = window.matchMedia(
+      "(min-width: 1101px) and (max-width: 1280px)"
+    );
+    const mobileViewportQuery = window.matchMedia("(max-width: 1100px)");
+    const syncNavigationViewportState = () => {
+      setIsResponsiveCompact(responsiveCompactQuery.matches);
+      setIsMobileViewportActive(mobileViewportQuery.matches);
+      if (!mobileViewportQuery.matches) {
+        setIsMobileNavigationOpen(false);
+      }
+    };
 
-    syncResponsiveCompactState();
-    mediaQuery.addEventListener("change", syncResponsiveCompactState);
-    return () => mediaQuery.removeEventListener("change", syncResponsiveCompactState);
+    syncNavigationViewportState();
+    responsiveCompactQuery.addEventListener("change", syncNavigationViewportState);
+    mobileViewportQuery.addEventListener("change", syncNavigationViewportState);
+    window.addEventListener("resize", syncNavigationViewportState);
+    return () => {
+      responsiveCompactQuery.removeEventListener("change", syncNavigationViewportState);
+      mobileViewportQuery.removeEventListener("change", syncNavigationViewportState);
+      window.removeEventListener("resize", syncNavigationViewportState);
+    };
   }, []);
 
   useEffect(() => {
@@ -435,7 +451,9 @@ export function ConsoleShell({
   }
 
   const sidebarCollapsed = isSidebarCollapsed || isResponsiveCompact;
-  const isNavigationExpanded = isMobileNavigationOpen || !sidebarCollapsed;
+  const isNavigationExpanded = isMobileViewportActive
+    ? isMobileNavigationOpen
+    : !sidebarCollapsed;
 
   return (
     <div

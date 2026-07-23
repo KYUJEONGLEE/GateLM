@@ -1,10 +1,7 @@
 import {
   Activity,
-  Coins,
-  Database,
   Gauge,
   Shield,
-  ShieldCheck,
   Sparkles
 } from "lucide-react";
 import { notFound } from "next/navigation";
@@ -82,6 +79,7 @@ type AnalyticsPageProps = {
 };
 
 type AnalyticsTab = "impact" | "usage" | "cost" | "performance" | "reliability" | "security" | "cache";
+type AnalyticsPrimaryTab = "impact" | "usage" | "performance" | "security";
 
 type AnalyticsFilterState = {
   employeeId: string;
@@ -89,15 +87,15 @@ type AnalyticsFilterState = {
   range: LiveAnalyticsRange;
 };
 
-const tabConfig: Array<{ icon: typeof Activity; id: AnalyticsTab }> = [
+const primaryTabConfig: Array<{ icon: typeof Activity; id: AnalyticsPrimaryTab }> = [
   { icon: Sparkles, id: "impact" },
   { icon: Activity, id: "usage" },
-  { icon: Coins, id: "cost" },
   { icon: Gauge, id: "performance" },
-  { icon: ShieldCheck, id: "reliability" },
-  { icon: Shield, id: "security" },
-  { icon: Database, id: "cache" }
+  { icon: Shield, id: "security" }
 ];
+
+const costPolicyTabs: AnalyticsTab[] = ["impact", "cost", "cache"];
+const operationsTabs: AnalyticsTab[] = ["performance", "reliability"];
 
 const rangeValues: LiveAnalyticsRange[] = ["15m", "1h", "1d", "1w"];
 
@@ -109,9 +107,17 @@ const pageText = {
     employee: "Employee",
     project: "Project",
     projectUnavailable: "Selected project unavailable",
+    primaryNavAria: "Analytics categories",
     range: "Time range",
     rangeLabels: { "15m": "15 minutes", "1h": "1 hour", "1d": "24 hours", "1w": "7 days" },
+    secondaryNavAria: "Analytics details",
     subtitle: "Cost, policy, and operational performance",
+    primaryTabs: {
+      impact: "Cost & policy",
+      performance: "Operations",
+      security: "Security",
+      usage: "Usage"
+    },
     tabs: {
       cache: "Cache",
       cost: "Cost",
@@ -131,9 +137,17 @@ const pageText = {
     employee: "직원",
     project: "프로젝트",
     projectUnavailable: "선택한 프로젝트를 사용할 수 없음",
+    primaryNavAria: "분석 주요 카테고리",
     range: "시간 범위",
     rangeLabels: { "15m": "15분", "1h": "1시간", "1d": "24시간", "1w": "7일" },
+    secondaryNavAria: "분석 세부 항목",
     subtitle: "",
+    primaryTabs: {
+      impact: "비용·정책 효과",
+      performance: "운영 성능",
+      security: "보안",
+      usage: "사용량"
+    },
     tabs: {
       cache: "캐시",
       cost: "비용",
@@ -380,6 +394,12 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
   )
     ? filters.employeeId
     : "";
+  const activePrimaryTab = primaryTabFor(activeTab);
+  const secondaryTabs = costPolicyTabs.includes(activeTab)
+    ? costPolicyTabs
+    : operationsTabs.includes(activeTab)
+      ? operationsTabs
+      : [];
 
   return (
     <main className="console-content analytics-v3-page analytics-v4-page analytics-v5-page">
@@ -440,32 +460,45 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
         </div>
       </header>
 
-      <nav aria-label="Analytics sections" className="analytics-v3-tabs">
-        {tabConfig.map((tab) => {
+      <nav aria-label={text.primaryNavAria} className="analytics-v3-tabs">
+        {primaryTabConfig.map((tab) => {
           const Icon = tab.icon;
           return (
             <IntentPrefetchLink
-              aria-current={tab.id === activeTab ? "page" : undefined}
+              aria-current={tab.id === activePrimaryTab ? "page" : undefined}
               className="analytics-v3-tab"
-              data-active={tab.id === activeTab}
+              data-active={tab.id === activePrimaryTab}
               href={tabHref(effectiveTenantId, tab.id, filters)}
               key={tab.id}
             >
               <Icon aria-hidden="true" size={18} />
-              {text.tabs[tab.id]}
+              {text.primaryTabs[tab.id]}
             </IntentPrefetchLink>
           );
         })}
       </nav>
 
+      {secondaryTabs.length > 0 ? (
+        <nav aria-label={text.secondaryNavAria} className="analytics-v3-subtabs">
+          {secondaryTabs.map((tab) => (
+            <IntentPrefetchLink
+              aria-current={tab === activeTab ? "page" : undefined}
+              className="analytics-v3-subtab"
+              data-active={tab === activeTab}
+              href={tabHref(effectiveTenantId, tab, filters)}
+              key={tab}
+            >
+              {text.tabs[tab]}
+            </IntentPrefetchLink>
+          ))}
+        </nav>
+      ) : null}
+
       <AnalyticsPanelTransition>
       {activeTab === "impact" ? (
         <AnalyticsV5Overview
-          evidence={v5Evidence}
           locale={locale}
           model={model}
-          projectNameById={projectNameById}
-          range={filters.range}
         />
       ) : activeTab === "usage" ? (
         <AnalyticsUsagePanel
@@ -545,6 +578,18 @@ function normalizeTab(value: string | undefined): AnalyticsTab {
     value === "cache"
     ? value
     : "impact";
+}
+
+function primaryTabFor(tab: AnalyticsTab): AnalyticsPrimaryTab {
+  if (tab === "cost" || tab === "cache") {
+    return "impact";
+  }
+
+  if (tab === "reliability") {
+    return "performance";
+  }
+
+  return tab;
 }
 
 function normalizeText(value: string | undefined) {
