@@ -443,6 +443,7 @@ export function DashboardCostOverTimeEChart({
   return (
     <DashboardEChart
       ariaLabel={ariaLabel}
+      animateUpdates={false}
       className="dashboard-cost-over-time-chart"
       option={option}
       updateKey={updateKey}
@@ -464,9 +465,10 @@ export function DashboardCostDensityEChart({
     () => ({
       animation: false,
       grid: {
-        bottom: 18,
-        left: 8,
-        right: 10,
+        bottom: 6,
+        containLabel: true,
+        left: 34,
+        right: 34,
         top: 8
       },
       tooltip: {
@@ -496,7 +498,10 @@ export function DashboardCostDensityEChart({
           color: "#94a3b8",
           fontSize: 10,
           hideOverlap: true,
-          interval: readableCategoryInterval(labels.length)
+          interval: readableCategoryInterval(labels.length),
+          margin: 8,
+          showMaxLabel: true,
+          showMinLabel: true
         },
         axisLine: {
           lineStyle: {
@@ -569,6 +574,7 @@ export function DashboardCostDensityEChart({
   return (
     <DashboardEChart
       ariaLabel={ariaLabel}
+      animateUpdates={false}
       className="dashboard-cost-density-chart"
       option={option}
       updateKey={updateKey}
@@ -578,11 +584,13 @@ export function DashboardCostDensityEChart({
 
 function DashboardEChart({
   ariaLabel,
+  animateUpdates = true,
   className,
   option,
   updateKey
 }: {
   ariaLabel: string;
+  animateUpdates?: boolean;
   className: string;
   option: EChartOption;
   updateKey: string;
@@ -595,12 +603,16 @@ function DashboardEChart({
       ...option,
       animation: !reducedMotion,
       animationDuration: reducedMotion ? 0 : 350,
-      animationDurationUpdate: reducedMotion ? 0 : 280,
+      animationDurationUpdate: reducedMotion || !animateUpdates ? 0 : 280,
       animationEasingUpdate: "cubicOut"
     }),
-    [option, reducedMotion]
+    [animateUpdates, option, reducedMotion]
   );
-  const renderedOptionKey = `${updateKey}|motion:${reducedMotion ? "reduced" : "full"}`;
+  const renderedOptionKey = [
+    updateKey,
+    `motion:${reducedMotion ? "reduced" : "full"}`,
+    `updates:${animateUpdates ? "animated" : "instant"}`
+  ].join("|");
   const optionRef = useRef(renderedOption);
   const optionKeyRef = useRef(renderedOptionKey);
   const appliedOptionKeyRef = useRef<string | null>(null);
