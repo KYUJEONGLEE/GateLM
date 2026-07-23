@@ -1,0 +1,7 @@
+<clickhouse>
+    <!-- The EC2 host publishes HTTP only on its private address and the
+         ClickHouse security group limits 8123 to approved application roles.
+         ClickHouse must still listen on the container bridge interface for
+         Docker's private host-port mapping to reach the HTTP endpoint. -->
+    <listen_host>0.0.0.0</listen_host>
+</clickhouse>
