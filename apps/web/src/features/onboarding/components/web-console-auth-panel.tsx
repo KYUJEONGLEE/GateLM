@@ -10,7 +10,10 @@ import {
   UserPlus,
   X
 } from "lucide-react";
-import type { FormEvent } from "react";
+import { useState, type FormEvent } from "react";
+import { PasswordInput } from "@/features/auth/components/password-input";
+import { isPasswordPolicySatisfied } from "@/features/auth/password-policy";
+import type { Locale } from "@/lib/i18n/locale";
 import type { AuthMode, SignupStepId, WebConsoleInitText } from "./web-console-init-view";
 
 const signupStepOrder: SignupStepId[] = ["account", "verify", "organization", "ready"];
@@ -28,11 +31,13 @@ export type WebConsoleAuthPanelProps = {
   authNotice: string | null;
   isProjectInviteSignup: boolean;
   isSubmitting: boolean;
+  locale: Locale;
   signupStep: SignupStepId;
   text: WebConsoleInitText;
   onClose: () => void;
   onGoogleLogin: () => void;
   onLoginSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>;
+  onPasswordResetRequestSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>;
   onSelectAuthMode: (mode: AuthMode) => void;
   onSignupSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>;
 };
@@ -43,18 +48,27 @@ export function WebConsoleAuthPanel({
   authNotice,
   isProjectInviteSignup,
   isSubmitting,
+  locale,
   onClose,
   onGoogleLogin,
   onLoginSubmit,
+  onPasswordResetRequestSubmit,
   onSelectAuthMode,
   onSignupSubmit,
   signupStep,
   text
 }: WebConsoleAuthPanelProps) {
+  const panelTitle =
+    authMode === "login"
+      ? text.auth.loginTitle
+      : authMode === "recovery"
+        ? text.auth.recoveryTitle
+        : text.auth.signupTitle;
+
   return (
     <div className="landing-auth-overlay" role="presentation">
       <section
-        aria-label={authMode === "login" ? text.auth.loginTitle : text.auth.signupTitle}
+        aria-label={panelTitle}
         aria-modal="true"
         className="landing-auth-panel"
         role="dialog"
@@ -62,7 +76,7 @@ export function WebConsoleAuthPanel({
         <div className="landing-auth-panel-header">
           <div>
             <p>GateLM</p>
-            <h2>{authMode === "login" ? text.auth.loginTitle : text.auth.signupTitle}</h2>
+            <h2>{panelTitle}</h2>
           </div>
           <button
             aria-label={text.auth.close}
@@ -75,26 +89,28 @@ export function WebConsoleAuthPanel({
           </button>
         </div>
 
-        <div className="landing-auth-tabs" role="tablist" aria-label="Authentication mode">
-          <button
-            aria-selected={authMode === "login"}
-            data-active={authMode === "login"}
-            onClick={() => onSelectAuthMode("login")}
-            role="tab"
-            type="button"
-          >
-            {text.actions.login}
-          </button>
-          <button
-            aria-selected={authMode === "signup"}
-            data-active={authMode === "signup"}
-            onClick={() => onSelectAuthMode("signup")}
-            role="tab"
-            type="button"
-          >
-            {text.actions.signup}
-          </button>
-        </div>
+        {authMode !== "recovery" ? (
+          <div className="landing-auth-tabs" role="tablist" aria-label="Authentication mode">
+            <button
+              aria-selected={authMode === "login"}
+              data-active={authMode === "login"}
+              onClick={() => onSelectAuthMode("login")}
+              role="tab"
+              type="button"
+            >
+              {text.actions.login}
+            </button>
+            <button
+              aria-selected={authMode === "signup"}
+              data-active={authMode === "signup"}
+              onClick={() => onSelectAuthMode("signup")}
+              role="tab"
+              type="button"
+            >
+              {text.actions.signup}
+            </button>
+          </div>
+        ) : null}
 
         {authError ? (
           <p className="landing-auth-message landing-auth-message-error" role="alert">
@@ -110,14 +126,24 @@ export function WebConsoleAuthPanel({
         {authMode === "login" ? (
           <LoginForm
             isSubmitting={isSubmitting}
+            locale={locale}
             text={text}
+            onForgotPassword={() => onSelectAuthMode("recovery")}
             onGoogleLogin={onGoogleLogin}
             onSubmit={onLoginSubmit}
+          />
+        ) : authMode === "recovery" ? (
+          <RecoveryForm
+            isSubmitting={isSubmitting}
+            onBackToLogin={() => onSelectAuthMode("login")}
+            onSubmit={onPasswordResetRequestSubmit}
+            text={text}
           />
         ) : (
           <SignupFlow
             isProjectInviteSignup={isProjectInviteSignup}
             isSubmitting={isSubmitting}
+            locale={locale}
             signupStep={signupStep}
             text={text}
             onGoogleLogin={onGoogleLogin}
@@ -131,11 +157,15 @@ export function WebConsoleAuthPanel({
 
 function LoginForm({
   isSubmitting,
+  locale,
+  onForgotPassword,
   onGoogleLogin,
   onSubmit,
   text
 }: {
   isSubmitting: boolean;
+  locale: Locale;
+  onForgotPassword: () => void;
   onGoogleLogin: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>;
   text: WebConsoleInitText;
@@ -158,10 +188,27 @@ function LoginForm({
         <span>{text.auth.email}</span>
         <input autoComplete="email" name="email" required type="email" />
       </label>
-      <label>
-        <span>{text.auth.password}</span>
-        <input autoComplete="current-password" name="password" required type="password" />
-      </label>
+      <div className="landing-auth-field">
+        <label htmlFor="landing-login-password">{text.auth.password}</label>
+        <PasswordInput
+          autoComplete="current-password"
+          id="landing-login-password"
+          locale={locale}
+          maxLength={256}
+          name="password"
+          native
+          required
+        />
+      </div>
+      <p className="landing-auth-help">{text.auth.accountEmailHelp}</p>
+      <button
+        className="landing-auth-text-button"
+        disabled={isSubmitting}
+        onClick={onForgotPassword}
+        type="button"
+      >
+        {text.auth.forgotPassword}
+      </button>
       <button className="landing-auth-submit" disabled={isSubmitting} type="submit">
         <LogIn aria-hidden="true" size={18} strokeWidth={2.4} />
         <span>{text.actions.loginSubmit}</span>
@@ -170,9 +217,39 @@ function LoginForm({
   );
 }
 
+function RecoveryForm({
+  isSubmitting,
+  onBackToLogin,
+  onSubmit,
+  text
+}: {
+  isSubmitting: boolean;
+  onBackToLogin: () => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>;
+  text: WebConsoleInitText;
+}) {
+  return (
+    <form className="landing-auth-form" onSubmit={onSubmit}>
+      <p className="landing-auth-help">{text.auth.recoveryBody}</p>
+      <label>
+        <span>{text.auth.email}</span>
+        <input autoComplete="email" maxLength={254} name="email" required type="email" />
+      </label>
+      <button className="landing-auth-submit" disabled={isSubmitting} type="submit">
+        <MailCheck aria-hidden="true" size={18} strokeWidth={2.4} />
+        <span>{text.auth.sendResetLink}</span>
+      </button>
+      <button className="landing-auth-text-button" disabled={isSubmitting} onClick={onBackToLogin} type="button">
+        {text.auth.backToLogin}
+      </button>
+    </form>
+  );
+}
+
 function SignupFlow({
   isProjectInviteSignup,
   isSubmitting,
+  locale,
   onGoogleLogin,
   onSubmit,
   signupStep,
@@ -180,11 +257,19 @@ function SignupFlow({
 }: {
   isProjectInviteSignup: boolean;
   isSubmitting: boolean;
+  locale: Locale;
   onGoogleLogin: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>;
   signupStep: SignupStepId;
   text: WebConsoleInitText;
 }) {
+  const [password, setPassword] = useState("");
+  const [passwordConfirmation, setPasswordConfirmation] = useState("");
+  const isPasswordValid = isPasswordPolicySatisfied(password);
+  const isConfirmationValid =
+    isPasswordValid &&
+    passwordConfirmation.length > 0 &&
+    password === passwordConfirmation;
   const visibleSignupSteps = isProjectInviteSignup
     ? signupStepOrder.filter((step) => step !== "organization")
     : signupStepOrder;
@@ -221,10 +306,62 @@ function SignupFlow({
             <span>{text.auth.email}</span>
             <input autoComplete="email" name="email" required type="email" />
           </label>
-          <label>
-            <span>{text.auth.password}</span>
-            <input autoComplete="new-password" name="password" required type="password" />
-          </label>
+          <div className="landing-auth-field">
+            <label htmlFor="landing-signup-password">{text.auth.password}</label>
+            <PasswordInput
+              id="landing-signup-password"
+              aria-invalid={password.length > 0 && !isPasswordValid}
+              autoComplete="new-password"
+              isValid={isPasswordValid}
+              locale={locale}
+              maxLength={15}
+              minLength={8}
+              name="password"
+              native
+              onChange={(event) => setPassword(event.currentTarget.value)}
+              required
+              value={password}
+            />
+            <small className="landing-auth-help">{text.auth.passwordHint}</small>
+            {isPasswordValid ? (
+              <small className="password-validation-message password-validation-message-success" role="status">
+                ✓ {locale === "ko" ? "비밀번호 규칙을 충족했습니다." : "Password requirements met."}
+              </small>
+            ) : null}
+          </div>
+          <div className="landing-auth-field">
+            <label htmlFor="landing-signup-password-confirmation">{text.auth.confirmPassword}</label>
+            <PasswordInput
+              id="landing-signup-password-confirmation"
+              aria-invalid={passwordConfirmation.length > 0 && !isConfirmationValid}
+              autoComplete="new-password"
+              isValid={isConfirmationValid}
+              locale={locale}
+              maxLength={15}
+              minLength={8}
+              name="passwordConfirmation"
+              native
+              onChange={(event) => setPasswordConfirmation(event.currentTarget.value)}
+              required
+              value={passwordConfirmation}
+            />
+            {passwordConfirmation.length > 0 ? (
+              <small
+                className={`password-validation-message ${
+                  isConfirmationValid
+                    ? "password-validation-message-success"
+                    : "password-validation-message-error"
+                }`}
+                role={isConfirmationValid ? "status" : "alert"}
+              >
+                {isConfirmationValid
+                  ? locale === "ko"
+                    ? "✓ 비밀번호가 일치합니다."
+                    : "✓ The passwords match."
+                  : text.auth.passwordMismatch}
+              </small>
+            ) : null}
+          </div>
         </>
       ) : null}
 

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post, UseGuards } from '@nestjs/common';
 
 import { DataEnvelope } from '@/common/types/envelope';
 
@@ -8,7 +8,10 @@ import {
   TenantChatInvitationBindDto,
   TenantChatInvitationPasswordDto,
   TenantChatInvitationTokenDto,
+  TenantChatPasswordChangeDto,
   TenantChatPasswordDto,
+  TenantChatPasswordResetConfirmDto,
+  TenantChatPasswordResetRequestDto,
 } from './dto/tenant-chat-identity.dto';
 import { TenantChatIdentityService } from './tenant-chat-identity.service';
 import { TenantChatServiceAuthGuard } from './tenant-chat-service-auth.guard';
@@ -21,6 +24,30 @@ export class TenantChatIdentityController {
   @Post('password')
   async password(@Body() body: TenantChatPasswordDto): Promise<DataEnvelope<unknown>> {
     return { data: await this.service.authenticatePassword(body) };
+  }
+
+  @Post('password-reset/request')
+  @HttpCode(HttpStatus.OK)
+  async requestPasswordReset(
+    @Body() body: TenantChatPasswordResetRequestDto,
+  ): Promise<DataEnvelope<unknown>> {
+    return { data: await this.service.requestPasswordReset(body) };
+  }
+
+  @Post('password-reset/confirm')
+  @HttpCode(HttpStatus.OK)
+  async confirmPasswordReset(
+    @Body() body: TenantChatPasswordResetConfirmDto,
+  ): Promise<DataEnvelope<unknown>> {
+    return { data: await this.service.confirmPasswordReset(body) };
+  }
+
+  @Post('password/change')
+  @HttpCode(HttpStatus.OK)
+  async changePassword(
+    @Body() body: TenantChatPasswordChangeDto,
+  ): Promise<DataEnvelope<unknown>> {
+    return { data: await this.service.changePassword(body) };
   }
 
   @Post('invitations/resolve')

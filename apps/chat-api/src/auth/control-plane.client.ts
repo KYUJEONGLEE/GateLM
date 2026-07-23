@@ -32,6 +32,34 @@ export class ControlPlaneClient {
     });
   }
 
+  requestPasswordReset(email: string): Promise<{ accepted: true }> {
+    return this.request('/internal/v1/tenant-chat/identity/password-reset/request', {
+      body: { email },
+      method: 'POST',
+    });
+  }
+
+  confirmPasswordReset(
+    token: string,
+    newPassword: string,
+  ): Promise<{ passwordReset: true }> {
+    return this.request('/internal/v1/tenant-chat/identity/password-reset/confirm', {
+      body: { newPassword, token },
+      method: 'POST',
+    });
+  }
+
+  changePassword(
+    userId: string,
+    currentPassword: string,
+    newPassword: string,
+  ): Promise<{ passwordChanged: true }> {
+    return this.request('/internal/v1/tenant-chat/identity/password/change', {
+      body: { currentPassword, newPassword, userId },
+      method: 'POST',
+    });
+  }
+
   resolveInvitation(token: string): Promise<Record<string, unknown>> {
     return this.request('/internal/v1/tenant-chat/identity/invitations/resolve', {
       body: { token },
