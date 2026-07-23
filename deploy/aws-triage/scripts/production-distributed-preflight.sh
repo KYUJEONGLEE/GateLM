@@ -91,8 +91,8 @@ if [[ "${check_dependencies}" == "true" ]]; then
       production_assert_tcp "AI Service" "${GATELM_PRODUCTION_DISTRIBUTED_AI_PRIVATE_IP}" 8001
       production_assert_http_ready "AI Service routing runtime" "http://${GATELM_PRODUCTION_DISTRIBUTED_AI_PRIVATE_IP}:8001/readyz"
       production_assert_tcp "Mock Provider" "${GATELM_PRODUCTION_DISTRIBUTED_AI_PRIVATE_IP}" 8090
-      production_assert_tcp "PII v3.14 Service" "${GATELM_PRODUCTION_DISTRIBUTED_PII_PRIVATE_IP}" 8001
-      production_assert_http_ready "PII v3.14 Service" "http://${GATELM_PRODUCTION_DISTRIBUTED_PII_PRIVATE_IP}:8001/readyz"
+      production_assert_tcp "PII v3.14 Service" "${GATELM_PRODUCTION_DISTRIBUTED_PII_UPSTREAM_HOST}" 8001
+      production_assert_http_ready "PII v3.14 Service" "http://${GATELM_PRODUCTION_DISTRIBUTED_PII_UPSTREAM_HOST}:8001/readyz"
       ;;
     data)
       production_assert_tcp "Private Gateway" "${GATELM_PRODUCTION_DISTRIBUTED_GATEWAY_UPSTREAM_HOST}" 8081

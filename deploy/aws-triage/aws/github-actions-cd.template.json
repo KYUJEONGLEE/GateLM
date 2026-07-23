@@ -35,6 +35,9 @@
     "PiiInstanceId": {
       "Type": "AWS::EC2::Instance::Id"
     },
+    "PiiSecondaryInstanceId": {
+      "Type": "AWS::EC2::Instance::Id"
+    },
     "CreateGitHubOidcProvider": {
       "Type": "String",
       "Default": "true",
@@ -122,7 +125,7 @@
     "GitHubDeployRole": {
       "Type": "AWS::IAM::Role",
       "Properties": {
-        "Description": "Allows the approved GateLM production GitHub environment to deploy six production targets through SSM.",
+        "Description": "Allows the approved GateLM production GitHub environment to deploy seven production targets through SSM.",
         "MaxSessionDuration": 10800,
         "AssumeRolePolicyDocument": {
           "Version": "2012-10-17",
@@ -185,6 +188,9 @@
                     },
                     {
                       "Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/${PiiInstanceId}"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/${PiiSecondaryInstanceId}"
                     }
                   ]
                 },
@@ -261,6 +267,11 @@
     "PiiInstanceId": {
       "Value": {
         "Ref": "PiiInstanceId"
+      }
+    },
+    "PiiSecondaryInstanceId": {
+      "Value": {
+        "Ref": "PiiSecondaryInstanceId"
       }
     }
   }
