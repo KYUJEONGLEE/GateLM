@@ -109,6 +109,27 @@ test("profile menu persists default and expanded display modes without a hydrati
   );
 });
 
+test("mobile navigation state closes when the viewport returns to desktop", () => {
+  expect(shellSource).toContain(
+    'const mobileViewportQuery = window.matchMedia("(max-width: 1100px)")'
+  );
+  expect(shellSource).toContain("setIsMobileViewportActive(mobileViewportQuery.matches)");
+  expect(shellSource).toContain("if (!mobileViewportQuery.matches)");
+  expect(shellSource).toContain("setIsMobileNavigationOpen(false)");
+  expect(shellSource).toContain(
+    'mobileViewportQuery.addEventListener("change", syncNavigationViewportState)'
+  );
+  expect(shellSource).toContain(
+    'window.addEventListener("resize", syncNavigationViewportState)'
+  );
+  expect(shellSource).toContain(
+    'window.removeEventListener("resize", syncNavigationViewportState)'
+  );
+  expect(shellSource).toContain("isMobileViewportActive");
+  expect(shellSource).toContain("? isMobileNavigationOpen");
+  expect(shellSource).toContain(": !sidebarCollapsed");
+});
+
 test("Chat App and legacy Tenant Chat routes activate one management item", () => {
   expect(getConsoleNavigationState("/tenants/tenant_demo_acme/chat-app")).toEqual({
     activeManagementItem: "chat-app",

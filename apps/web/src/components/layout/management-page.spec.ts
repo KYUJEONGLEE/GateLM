@@ -49,7 +49,13 @@ test("primary management screens share one responsive full-width page component"
 });
 
 test("API management uses the shared primary action scale", async () => {
-  const styles = await readFile(stylesSourceUrl, "utf8");
+  const [styles, apiKeyManagementSource] = await Promise.all([
+    readFile(stylesSourceUrl, "utf8"),
+    readFile(
+      new URL("../../features/api-keys/components/api-key-management.tsx", import.meta.url),
+      "utf8"
+    )
+  ]);
 
   expect(styles).toMatch(
     /\.api-key-list-toolbar \[data-slot="button"\]\.api-key-issue-trigger \{[\s\S]*?min-width: 0;[\s\S]*?min-height: var\(--primary-action-height\);[\s\S]*?padding-inline: var\(--primary-action-padding-inline\);/
@@ -57,6 +63,7 @@ test("API management uses the shared primary action scale", async () => {
   expect(styles).toMatch(
     /\.api-key-list-toolbar \[data-slot="button"\]\.api-key-issue-trigger svg \{\s*width: 16px;\s*height: 16px;/
   );
+  expect(apiKeyManagementSource).not.toContain("apiKey.scopes.join");
 });
 
 test("Provider cards keep a compact readable layout on mobile", async () => {

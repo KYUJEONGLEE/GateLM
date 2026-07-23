@@ -108,7 +108,6 @@ const copy: Record<Locale, Record<string, string>> = {
     rotateConfirm: "The current Key will be revoked immediately. The replacement plaintext is shown once.",
     rotateFailed: "API Key reissue failed.",
     rotateTitle: "Reissue API Key?",
-    scopes: "Scopes",
     status: "Status",
     title: "API Key Management"
   },
@@ -145,7 +144,6 @@ const copy: Record<Locale, Record<string, string>> = {
     rotateConfirm: "현재 Key가 즉시 폐기되고, 교체된 Key 원문은 한 번만 표시됩니다.",
     rotateFailed: "API Key 재발급에 실패했습니다.",
     rotateTitle: "API Key를 재발급할까요?",
-    scopes: "권한 범위",
     status: "상태",
     title: "API Key 관리"
   }
@@ -394,7 +392,6 @@ export function ApiKeyManagement({ canManage, locale, model }: ApiKeyManagementP
                     <article className="api-key-list-row" key={apiKey.credentialId}>
                       <div className="api-key-list-cell" data-label={text.name}>
                         <strong className="provider-name">{apiKey.displayName}</strong>
-                        <small className="project-muted">{apiKey.scopes.join(", ")}</small>
                       </div>
                       <div className="api-key-list-cell" data-label={text.project}>
                         <strong className="provider-name">{apiKey.projectName}</strong>

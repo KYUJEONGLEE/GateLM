@@ -100,12 +100,15 @@ export async function getLiveMonthToDateCostMicroUsd(
   filters: LiveCostOverTimeFilters = {}
 ): Promise<number | undefined> {
   const config = getLiveGatewayConfig();
-  const { from, to } = getCurrentUtcMonthRange();
+  const liveRange =
+    filters.from && filters.to
+      ? { from: filters.from, to: filters.to }
+      : getCurrentUtcMonthRange();
   const query = new URLSearchParams({
-    from,
+    from: liveRange.from,
     period: "month",
     tenantId: toGatewayTenantId(tenantId),
-    to
+    to: liveRange.to
   });
   appendOptionalQuery(query, "budgetScopeId", filters.budgetScopeId);
   appendOptionalQuery(query, "budgetScopeType", filters.budgetScopeType);
