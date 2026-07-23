@@ -23,6 +23,7 @@ need_command() {
 role=""
 target_sha=""
 gateway_upstream_host="10.78.2.20"
+pii_upstream_host="10.78.2.50"
 mode="deploy"
 while (( $# > 0 )); do
   case "$1" in
@@ -41,6 +42,11 @@ while (( $# > 0 )); do
       gateway_upstream_host="$2"
       shift 2
       ;;
+    --pii-upstream-host)
+      [[ $# -ge 2 ]] || deploy_fail "--pii-upstream-host requires 10.78.2.50 or 10.78.2.11."
+      pii_upstream_host="$2"
+      shift 2
+      ;;
     --rollback)
       mode="rollback"
       shift
@@ -57,6 +63,8 @@ case "${role}" in edge|gateway|data|ai|pii) ;; *) deploy_fail "A valid --role is
 [[ "${target_sha}" =~ ^[0-9a-f]{40}$ ]] || deploy_fail "A full lowercase Git SHA is required."
 [[ "${gateway_upstream_host}" == "10.78.2.20" || "${gateway_upstream_host}" == "10.78.2.10" ]] || \
   deploy_fail "Gateway upstream host must be the primary Gateway or the internal NLB."
+[[ "${pii_upstream_host}" == "10.78.2.50" || "${pii_upstream_host}" == "10.78.2.11" ]] || \
+  deploy_fail "PII upstream host must be the primary PII service or the internal NLB."
 
 repo_dir="${GATELM_PRODUCTION_DISTRIBUTED_REPO_DIR:-/home/ubuntu/GateLM}"
 orchestration_dir="${GATELM_PRODUCTION_DISTRIBUTED_ORCHESTRATION_DIR:-/home/ubuntu/gatelm-production-orchestration}"
@@ -66,7 +74,8 @@ pii_release_model_dir="/opt/gatelm/pii-v314/releases/8a5cb146/model"
 pii_release_artifact_key="pii/v36/v314-8a5cb146/model.tar.gz"
 pii_release_archive_sha256="fbecea25a4508696e42c36fa3b9f40cb3abd5be82f645860c011935d96df7f13"
 gateway_upstream_state_key="${gateway_upstream_host//./-}"
-state_dir="${state_root}/${target_sha}-${role}-upstream-${gateway_upstream_state_key}"
+pii_upstream_state_key="${pii_upstream_host//./-}"
+state_dir="${state_root}/${target_sha}-${role}-gateway-${gateway_upstream_state_key}-pii-${pii_upstream_state_key}"
 lock_file="/tmp/gatelm-production-distributed-${role}.lock"
 cutover_started=false
 deployment_succeeded=false
@@ -313,6 +322,7 @@ source "${orchestration_dir}/scripts/perf-lib.sh"
 set_env_value GATELM_PRODUCTION_DISTRIBUTED_SOURCE_SHA "${target_sha}"
 set_env_value GATELM_PRODUCTION_DISTRIBUTED_IMAGE_TAG "${target_sha:0:12}"
 upsert_env_value GATELM_PRODUCTION_DISTRIBUTED_GATEWAY_UPSTREAM_HOST "${gateway_upstream_host}"
+upsert_env_value GATELM_PRODUCTION_DISTRIBUTED_PII_UPSTREAM_HOST "${pii_upstream_host}"
 promote_pii_release_env
 
 if [[ "${role}" == "gateway" || "${role}" == "ai" ]]; then

@@ -435,6 +435,7 @@ export function ConsoleShell({
   }
 
   const sidebarCollapsed = isSidebarCollapsed || isResponsiveCompact;
+  const isNavigationExpanded = isMobileNavigationOpen || !sidebarCollapsed;
 
   return (
     <div
@@ -495,21 +496,25 @@ export function ConsoleShell({
                       <span>{label}</span>
                       {item.section === "monitoring" ? (
                         <button
-                          aria-expanded={!sidebarCollapsed}
+                          aria-expanded={isNavigationExpanded}
                           aria-label={
-                            sidebarCollapsed ? text.expandNavigation : text.collapseNavigation
+                            isNavigationExpanded
+                              ? text.collapseNavigation
+                              : text.expandNavigation
                           }
                           className="console-sidebar-toggle console-nav-sidebar-toggle"
                           onClick={toggleSidebar}
                           title={
-                            sidebarCollapsed ? text.expandNavigation : text.collapseNavigation
+                            isNavigationExpanded
+                              ? text.collapseNavigation
+                              : text.expandNavigation
                           }
                           type="button"
                         >
-                          {sidebarCollapsed ? (
-                            <PanelLeftOpen aria-hidden="true" size={19} strokeWidth={2.2} />
-                          ) : (
+                          {isNavigationExpanded ? (
                             <PanelLeftClose aria-hidden="true" size={19} strokeWidth={2.2} />
+                          ) : (
+                            <PanelLeftOpen aria-hidden="true" size={19} strokeWidth={2.2} />
                           )}
                         </button>
                       ) : null}
@@ -688,7 +693,7 @@ function ConsoleTopbarActions({
               </span>
               <LanguageSwitcher ariaLabel={text.language} locale={locale} />
             </div>
-            <div className="console-user-settings-row">
+            <div className="console-user-settings-row console-user-settings-choice-row">
               <span>{text.theme}</span>
               <div className="theme-segmented-control" data-density="compact">
                 <button
@@ -707,7 +712,7 @@ function ConsoleTopbarActions({
                 </button>
               </div>
             </div>
-            <div className="console-user-settings-row">
+            <div className="console-user-settings-row console-user-settings-choice-row">
               <span>{text.display}</span>
               <div
                 aria-label={text.display}

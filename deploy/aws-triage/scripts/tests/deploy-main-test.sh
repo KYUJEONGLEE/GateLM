@@ -102,7 +102,7 @@ if (!trustJson.includes(":environment:${GitHubEnvironment}")) {
 
 const policies = resources.GitHubDeployRole.Properties.Policies ?? [];
 const policyJson = JSON.stringify(policies);
-for (const instanceParameter of ["EdgeInstanceId", "GatewayInstanceId", "GatewaySecondaryInstanceId", "DataInstanceId", "AiInstanceId", "PiiInstanceId"]) {
+for (const instanceParameter of ["EdgeInstanceId", "GatewayInstanceId", "GatewaySecondaryInstanceId", "DataInstanceId", "AiInstanceId", "PiiInstanceId", "PiiSecondaryInstanceId"]) {
   if (!policyJson.includes(`\${${instanceParameter}}`)) {
     throw new Error(`SSM SendCommand is missing the ${instanceParameter} restriction`);
   }
@@ -121,12 +121,14 @@ grep -Fq "send-ssm-deploy-distributed.sh" "${WORKFLOW_FILE}" || \
   fail "Production deployment must use the distributed SSM sender"
 grep -Fq "Roll back distributed application roles after failed smoke" "${WORKFLOW_FILE}" || \
   fail "A failed public or authenticated smoke must roll back distributed application roles"
-for role_variable in AWS_EDGE_INSTANCE_ID AWS_GATEWAY_INSTANCE_ID AWS_GATEWAY_SECONDARY_INSTANCE_ID AWS_DATA_INSTANCE_ID AWS_AI_INSTANCE_ID AWS_PII_INSTANCE_ID; do
+for role_variable in AWS_EDGE_INSTANCE_ID AWS_GATEWAY_INSTANCE_ID AWS_GATEWAY_SECONDARY_INSTANCE_ID AWS_DATA_INSTANCE_ID AWS_AI_INSTANCE_ID AWS_PII_INSTANCE_ID AWS_PII_SECONDARY_INSTANCE_ID; do
   grep -Fq "${role_variable}" "${WORKFLOW_FILE}" || \
     fail "Distributed production instance variable is missing: ${role_variable}"
 done
 grep -Fq 'GATELM_GATEWAY_UPSTREAM_HOST' "${WORKFLOW_FILE}" || \
   fail "Distributed production Gateway upstream variable is missing"
+grep -Fq 'GATELM_PII_UPSTREAM_HOST' "${WORKFLOW_FILE}" || \
+  fail "Distributed production PII upstream variable is missing"
 for required_smoke_secret in \
   'secrets.TENANT_CHAT_SMOKE_EMAIL' \
   'secrets.TENANT_CHAT_SMOKE_PASSWORD'
@@ -531,6 +533,51 @@ const comments = lines.filter((line) => line.startsWith("GateLM distributed depl
 const expectedRoles = ["pii", "ai", "data", "gateway-primary", "edge"];
 if (comments.length !== expectedRoles.length || comments.some((line, index) => !line.endsWith(` ${expectedRoles[index]}`))) {
   throw new Error(`Unexpected distributed deploy order: ${comments.join(", ")}`);
+}
+NODE
+
+: > "${fake_log}"
+PATH="${fake_bin}:${PATH}" \
+FAKE_AWS_LOG="${fake_log}" \
+AWS_REGION=ap-northeast-2 \
+GATELM_SSM_POLL_INTERVAL_SECONDS=0 \
+bash "${DISTRIBUTED_SSM_SCRIPT}" \
+  i-0123456789abcde01 \
+  i-0123456789abcde02 \
+  i-0123456789abcde03 \
+  i-0123456789abcde04 \
+  i-0123456789abcde05 \
+  0000000000000000000000000000000000000000 \
+  https://gatelm.co.kr \
+  https://chat.gatelm.co.kr \
+  deploy \
+  i-0123456789abcde06 \
+  10.78.2.10 \
+  i-0123456789abcde07 \
+  10.78.2.11 >/dev/null
+
+node - "${fake_log}" <<'NODE'
+const fs = require("node:fs");
+const lines = fs.readFileSync(process.argv[2], "utf8").split(/\r?\n/);
+const parameters = lines
+  .filter((line) => line.startsWith('{"commands":'))
+  .map((line) => JSON.parse(line));
+if (parameters.length !== 7) {
+  throw new Error(`Expected seven distributed SSM commands, observed ${parameters.length}`);
+}
+const comments = lines.filter((line) => line.startsWith("GateLM distributed deploy "));
+const expectedRoles = ["pii-secondary", "pii", "ai", "data", "gateway-secondary", "gateway-primary", "edge"];
+if (comments.length !== expectedRoles.length || comments.some((line, index) => !line.endsWith(` ${expectedRoles[index]}`))) {
+  throw new Error(`Unexpected dual-PII deploy order: ${comments.join(", ")}`);
+}
+for (const parameter of parameters) {
+  const command = parameter.commands?.[0];
+  const match = command?.match(/^printf '%s' '([A-Za-z0-9+/=]+)' \| base64 --decode \| bash$/);
+  if (!match) throw new Error("Dual-PII SSM payload is not POSIX-safe");
+  const remoteScript = Buffer.from(match[1], "base64").toString("utf8");
+  if (!remoteScript.includes('pii_upstream_host=10.78.2.11')) {
+    throw new Error("Dual-PII payload did not pin the internal PII NLB upstream");
+  }
 }
 NODE
 
