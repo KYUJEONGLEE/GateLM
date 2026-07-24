@@ -48,7 +48,7 @@ type policyRow struct {
 func (r *ProjectReader) queryPolicyImpact(ctx context.Context, filter invocationlog.AnalyticsPolicyImpactFilter) (invocationlog.AnalyticsPolicyImpactFields, error) {
 	where, params := rollupWhere(filter.TenantID, filter.ProjectID, filter.From, filter.To)
 	config := policyBucketConfig(filter)
-	bucket := costBucketExpressionForColumn(config, "source.bucket")
+	bucket := rollupBucketExpressionForColumn(config, "source.bucket")
 	cte := fmt.Sprintf(`WITH filtered AS (SELECT *,
  cache_outcome='hit' AS cache_hit, masking_action='redacted' AS pii_masked, safety_outcome='blocked' AS safety_blocked,
  terminal_status='rate_limited' AS rate_limited, fallback_outcome='success' AS fallback_success,

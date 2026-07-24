@@ -136,6 +136,65 @@ func TestProjectReaderUsesClickHouseCompatibleAliasesAndBucketConversions(t *tes
 	}
 }
 
+func TestProjectReaderFiveMinuteCostReportUsesSecondRollupBucketDirectly(t *testing.T) {
+	var query string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		body, err := io.ReadAll(request.Body)
+		if err != nil {
+			t.Errorf("read cost report query: %v", err)
+			return
+		}
+		query = string(body)
+		w.Header().Set("Content-Type", "application/x-ndjson")
+	}))
+	defer server.Close()
+
+	reader, err := NewProjectReader(QueryConfig{
+		EndpointURL: server.URL,
+		Database:    "analytics",
+		Table:       "llm_invocations",
+		Timeout:     time.Second,
+	})
+	if err != nil {
+		t.Fatalf("new project reader: %v", err)
+	}
+	from := time.Date(2026, 7, 24, 1, 20, 0, 0, time.UTC)
+	_, err = reader.GetCostReport(context.Background(), invocationlog.CostReportFilter{
+		TenantID: "00000000-0000-4000-8000-000000000100",
+		Period:   "hour",
+		From:     from,
+		To:       from.Add(5 * time.Minute),
+	})
+	if err != nil {
+		t.Fatalf("five-minute cost report: %v", err)
+	}
+	if !strings.Contains(query, "FROM analytics.llm_invocations_dashboard_second_rollup") {
+		t.Fatalf("five-minute cost report must use the dashboard rollup: %s", query)
+	}
+	if strings.Contains(query, "toStartOfSecond(bucket") {
+		t.Fatalf("second-aligned DateTime rollup bucket must not be truncated again: %s", query)
+	}
+	if !strings.Contains(query, "toUnixTimestamp(bucket)*1000") {
+		t.Fatalf("five-minute cost report must convert the rollup bucket directly: %s", query)
+	}
+
+	_, err = reader.GetAnalyticsPolicyImpact(context.Background(), invocationlog.AnalyticsPolicyImpactFilter{
+		TenantID: "00000000-0000-4000-8000-000000000100",
+		Period:   "hour",
+		From:     from,
+		To:       from.Add(5 * time.Minute),
+	})
+	if err != nil {
+		t.Fatalf("five-minute policy impact: %v", err)
+	}
+	if strings.Contains(query, "toStartOfSecond(source.bucket") {
+		t.Fatalf("qualified second-aligned rollup bucket must not be truncated again: %s", query)
+	}
+	if !strings.Contains(query, "toUnixTimestamp(source.bucket)*1000") {
+		t.Fatalf("policy impact must keep the direct rollup bucket qualified: %s", query)
+	}
+}
+
 func TestProjectReaderDashboardUsesSecondRollup(t *testing.T) {
 	var mu sync.Mutex
 	queries := []string{}

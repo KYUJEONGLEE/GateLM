@@ -429,7 +429,7 @@ func (r *ProjectReader) queryCostReport(ctx context.Context, filter invocationlo
 	addStringFilter(&where, params, "model", "model", filter.Model)
 	addScopeFilter(&where, params, filter.BudgetScope)
 	bucketConfig := costBucketConfig(filter)
-	bucketExpr := costBucketExpressionForColumn(bucketConfig, "bucket")
+	bucketExpr := rollupBucketExpression(bucketConfig)
 	cte := fmt.Sprintf("WITH filtered AS (SELECT * FROM %s.%s WHERE %s)\n", r.client.database, r.client.dashboardRollupTable(), strings.Join(where, " AND "))
 	query := cte + fmt.Sprintf(`SELECT 'bucket' kind,toUnixTimestamp(%s)*1000 bucket_ms,'' key1,'' key2,'' key3,sum(requests) requests,sum(prompt_tokens) prompt,sum(completion_tokens) completion,sum(total_tokens) tokens,sum(cost_micro_usd) cost,sum(saved_cost_micro_usd) saved,toUnixTimestamp64Milli(max(last_created_at)) last_ms FROM filtered GROUP BY %s
 UNION ALL SELECT 'project',0,toString(project_id),'','',sum(requests),sum(prompt_tokens),sum(completion_tokens),sum(total_tokens),sum(cost_micro_usd),sum(saved_cost_micro_usd),NULL FROM filtered GROUP BY project_id
@@ -549,6 +549,20 @@ func addScopeFilter(where *[]string, params map[string]string, scope budget.Scop
 func costBucketExpression(config invocationlog.TimeSeriesBucketConfig) string {
 	return costBucketExpressionForColumn(config, "created_at")
 }
+
+func rollupBucketExpression(config invocationlog.TimeSeriesBucketConfig) string {
+	return rollupBucketExpressionForColumn(config, "bucket")
+}
+
+func rollupBucketExpressionForColumn(config invocationlog.TimeSeriesBucketConfig, column string) string {
+	if config.Unit == "second" {
+		// The dashboard rollup bucket is already stored as a second-aligned
+		// DateTime. ClickHouse 25.3 only accepts DateTime64 here.
+		return column
+	}
+	return costBucketExpressionForColumn(config, column)
+}
+
 func costBucketExpressionForColumn(config invocationlog.TimeSeriesBucketConfig, column string) string {
 	switch config.Unit {
 	case "second":
