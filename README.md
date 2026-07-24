@@ -1,145 +1,131 @@
 # GateLM
 
-GateLM은 기업의 LLM 요청을 승인된 Gateway 경로로 모아 보안, 비용, 정책, 로그, 관측을 중앙에서 관리하는 B2B LLM Gateway입니다.
+[![CI](https://github.com/KYUJEONGLEE/GateLM/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/KYUJEONGLEE/GateLM/actions/workflows/ci.yml)
 
-현재 개발은 `dev` 브랜치에서 계속 진행 중이며 다음 제품 SemVer는 아직 확정되지 않았습니다. 공식 GitHub 최신 릴리스는 `v0.0.1`, 최신 versioned 문서는 `docs/v2.1.0/`입니다. `v2.0.0` workstream은 active가 아니며 문서는 historical baseline으로 유지합니다.
+**기업의 LLM 트래픽을 한곳에서 통제하는 셀프 호스팅 LLM Gateway**
 
-## 1. Documentation
+GateLM은 애플리케이션과 LLM Provider 사이에서 인증, 정책, 비용, 안전, 라우팅, 로그를 일관되게 관리합니다. 각 애플리케이션이 Provider별 연동과 운영 정책을 따로 구현하지 않아도 되도록 제어 영역과 요청 처리 경로를 분리해 제공합니다.
 
-개발자와 구현 에이전트는 다음 두 문서부터 읽습니다.
+> GateLM은 현재 활발히 개발 중입니다. 코드가 존재하더라도 모든 기능이 GA 또는 릴리스 완료 상태를 의미하지는 않습니다. 정확한 범위는 [현재 구현 상태](docs/current/implementation-status.md)에서 확인해 주세요.
 
-1. [`docs/current/README.md`](docs/current/README.md)
-2. [`docs/current/source-of-truth.md`](docs/current/source-of-truth.md)
+## 핵심 기능
 
-필요할 때만 다음 문서를 추가로 읽습니다.
+- **중앙 관리**: Tenant, Project, Application, 직원 권한, Provider 연결, RuntimeSnapshot을 한곳에서 관리합니다.
+- **요청 통제**: API 인증, Rate Limit, 예산·쿼터, PII·Secret 마스킹과 차단을 Provider 호출 전에 적용합니다.
+- **지능형 실행**: Exact Cache, 선택적 Semantic Cache, category × difficulty 라우팅, Provider fallback을 지원합니다.
+- **멀티 Provider**: OpenAI-compatible, Gemini-compatible, Anthropic Messages, 로컬 Mock Provider 어댑터를 제공합니다.
+- **관측 가능성**: Request Log, Live Requests, 요청 상세, Dashboard, Prometheus·Grafana 연동을 제공합니다.
+- **Tenant Chat**: 독립 인증·세션, private Gateway, 사용량 원장, Chat UI 구성요소를 포함합니다.
+- **셀프 호스팅**: PostgreSQL과 Redis를 기반으로 한 Docker Compose 배포 구성을 제공합니다.
 
-- [`docs/README.md`](docs/README.md): 전체 문서 분류가 필요할 때
-- [`docs/current/implementation-status.md`](docs/current/implementation-status.md): 현재 구현 사실을 확인할 때
-- [`docs/current/documentation-gaps.md`](docs/current/documentation-gaps.md): 충돌이나 미결정 사항을 확인할 때
-- [`docs/tenant-chat/README.md`](docs/tenant-chat/README.md): 신규 Tenant Chat 계약/구현 작업을 할 때
-
-일반 작업은 current 문서와 실제 코드/타입을 기준으로 시작합니다. historical v2 구현 계획을 매 작업의 할 일 목록으로 사용하지 않습니다.
-
-API, DB, Event, Metrics 또는 Security-sensitive field의 호환성을 확인해야 하고 current 대체 계약이 없을 때만 아래 v2.0.0 baseline을 참고합니다.
-
-1. `docs/v2.0.0/contracts.md`
-2. `docs/v2.0.0/schemas/*.schema.json`
-3. `docs/v2.0.0/fixtures/*.fixture.json`
-
-아래 파일은 historical plan/criteria입니다.
-
-- `docs/v2.0.0/implementation-plan.md`
-- `docs/v2.0.0/implementation-tasks.md`
-- `docs/v2.0.0/implementation-pr-packets.md`
-- `docs/v2.0.0/acceptance-test-matrix.md`
-- `docs/v2.0.0/db-migration-plan.md`
-
-문서별 정확한 상태와 권한은 [`docs/current/source-of-truth.md`](docs/current/source-of-truth.md)에서 확인합니다.
-
-## 2. Current Product Path
-
-현재 `dev` 구현에서 확인되는 기본 제품 흐름은 다음과 같습니다.
+## 요청 처리 흐름
 
 ```text
-Tenant / Project / Application setup
--> Provider connection and policy configuration
--> Employee access and control
--> Gateway auth and published runtime policy
--> budget / rate limit / safety / routing / cache
--> Provider Adapter or fallback
--> Request Log / Live Requests / Request Detail / Dashboard
+관리자      Web Console -> Control Plane -> RuntimeSnapshot 발행
+
+애플리케이션 -> Gateway
+             -> 인증
+             -> Rate Limit / 예산 / 쿼터
+             -> PII·Secret 안전 정책
+             -> Cache
+             -> Routing
+             -> Provider / Fallback
+
+관측 데이터  Gateway -> Request Log / Dashboard / Prometheus
 ```
 
-Advanced Routing, Semantic Cache, Safety sidecar, self-host bundle처럼 release 상태와 기본 활성화 여부가 다른 기능은 [`docs/current/implementation-status.md`](docs/current/implementation-status.md)의 상태 구분을 따릅니다.
+정책은 Control Plane에서 관리하고, 실제 LLM 요청에 대한 최종 집행은 Gateway에서 수행합니다.
 
-## 3. Repository Layout
+## 기술 구성
 
-| Path | Purpose |
-|---|---|
-| `apps/control-plane-api` | NestJS/Prisma Control Plane API |
-| `apps/gateway-core` | Go Gateway data plane and governance pipeline |
-| `apps/web` | Next.js/React 관리 콘솔, Dashboard, Request Detail |
-| `apps/application` | Next.js/React Application/Chat surface |
-| `apps/ai-service` | FastAPI safety/evaluation service |
-| `deploy/selfhost` | Single-node Docker Compose self-host bundle |
-| `infra/observability` | Prometheus/Grafana 관측 설정 |
-| `docs/current` | Active documentation entrypoint and implementation snapshot |
-| `docs/tenant-chat` | 신규 Tenant Chat active scoped contract와 schema/fixture/implementation handoff |
-| `docs/v2.1.0` | Latest versioned self-host/routing evidence scope |
-| `docs/v2.0.0` | Historical behavior baseline and past planning/acceptance records |
+| 경로 | 역할 | 주요 기술 |
+|---|---|---|
+| `apps/gateway-core` | 요청 처리와 정책 집행 | Go 1.24 |
+| `apps/control-plane-api` | 관리 API와 RuntimeSnapshot 발행 | NestJS, Prisma |
+| `apps/web` | 운영자용 Web Console과 Dashboard | Next.js 15, React 19 |
+| `apps/chat-api`, `apps/chat-web` | Tenant Chat API와 사용자 화면 | NestJS, Next.js 15 |
+| `apps/ai-service` | 선택적 AI Safety와 평가 서비스 | Python 3.12, FastAPI |
+| `deploy/selfhost` | 단일 노드 셀프 호스팅 번들 | Docker Compose |
+| `infra/observability` | 메트릭 수집과 시각화 | Prometheus, Grafana |
 
-## 4. Local Baseline
+기본 개발 환경은 Node.js 22, pnpm 9.15.0, PostgreSQL 16, Redis 7을 사용합니다.
 
-| Runtime | Version |
-|---|---|
-| Node.js | `22` |
-| pnpm | `9.15.0` |
-| PostgreSQL | `16` |
-| Redis | `7` |
+## 빠른 시작
 
-루트 `.nvmrc`, `.node-version`, `package.json`은 Node 22와 pnpm 9.15.0을 기준으로 합니다.
+다음 명령은 소스 개발에 필요한 의존성과 PostgreSQL, Redis, Mock Provider를 준비합니다.
 
-기본 문서 검증:
+```bash
+git clone https://github.com/KYUJEONGLEE/GateLM.git
+cd GateLM
+
+# macOS / Linux
+cp .env.example .env
+
+corepack enable
+pnpm install --frozen-lockfile
+docker compose up -d postgres redis mock-provider
+docker compose ps
+```
+
+Windows PowerShell에서는 환경 파일을 다음과 같이 복사합니다.
 
 ```powershell
+Copy-Item .env.example .env
+```
+
+주요 개발 서버의 진입 명령은 다음과 같습니다.
+
+```bash
+pnpm dev:control-plane
+pnpm dev:web
+go run ./apps/gateway-core/cmd/gateway
+```
+
+Control Plane의 migration과 seed를 포함한 상세 절차는 [Control Plane 로컬 가이드](apps/control-plane-api/README.md)를 참고하세요. 전체 셀프 호스팅 구성은 [Self-host Compose 가이드](deploy/selfhost/README.md)에서 확인할 수 있습니다. 외부에 서비스를 노출하기 전에는 `.env`의 예시 Secret을 반드시 교체해야 합니다.
+
+## 검증
+
+문서와 저장소 계약을 검증합니다.
+
+```bash
 corepack pnpm run verify:v2-docs
+corepack pnpm run verify:v2-final
 ```
 
-영향 범위에 따라 다음을 추가합니다.
+변경 범위에 따라 애플리케이션과 Gateway 검증을 추가합니다.
 
-```powershell
-corepack pnpm run verify:v2-final
+```bash
 pnpm --filter @gatelm/control-plane-api typecheck
 pnpm --filter @gatelm/web typecheck
 go test ./...
 ```
 
-## 5. Local Development
+## 문서
 
-로컬 의존성은 root Compose 기준으로 시작한다.
+- [현재 문서 진입점](docs/current/README.md): 작업 범위별로 어떤 문서를 읽어야 하는지 안내합니다.
+- [문서 Source of Truth](docs/current/source-of-truth.md): 계약과 구현이 충돌할 때의 판단 기준입니다.
+- [현재 구현 상태](docs/current/implementation-status.md): 구현된 기능과 제품 성숙도 경계를 정리합니다.
+- [기술적 난제](docs/current/technical-challenges.md): 주요 설계 문제와 코드·테스트 근거를 설명합니다.
+- [Gateway 라우팅 계약](docs/routing/README.md): category × difficulty 라우팅과 RuntimeSnapshot 계약입니다.
+- [Tenant Chat](docs/tenant-chat/README.md): Tenant Chat의 계약, 스키마, 구현 범위를 설명합니다.
+- [Self-host 운영 가이드](deploy/selfhost/README.md): 설치, migration, smoke test, 운영 문서로 연결합니다.
 
-```powershell
-docker compose up -d
-docker compose ps
-```
+과거 버전 문서는 현재 작업의 기본 기준이 아닐 수 있습니다. 개발을 시작할 때는 항상 `docs/current`의 안내를 먼저 확인해 주세요.
 
-volume까지 초기화해야 할 때만 아래 명령을 사용한다. PostgreSQL과 Redis의 로컬 데이터가 삭제된다.
+## 기여하기
 
-```powershell
-docker compose down --remove-orphans -v
-docker compose up -d
-```
+기본 개발 흐름은 최신 `dev`에서 작업 브랜치를 만들고, 검증 후 `dev` 대상 Pull Request를 여는 방식입니다.
 
-Gateway의 `GATEWAY_RUNTIME_SNAPSHOT_MODE` 기본값은 `demo`다. `strict` 또는 `strict_snapshot`은 Control Plane base URL과 internal token이 필요하며, active RuntimeSnapshot을 가져오지 못하면 조용히 demo/static 경로로 대체하지 않는다.
+1. 변경 범위와 관련 문서를 먼저 확인합니다.
+2. 기능과 테스트를 함께 수정합니다.
+3. 위 검증 명령 중 영향 범위에 해당하는 항목을 실행합니다.
+4. API, DB, Event, Metrics, 보안 필드의 의미가 바뀌면 구현과 함께 계약 변경 근거를 제시합니다.
 
-Tenant Chat 전체 로컬 stack은 E5 106D 하이브리드 난이도 runtime을 기본 Gateway profile로 사용한다. 최초 환경에서 pinned encoder와 native package cache가 없을 때만 다음 setup을 먼저 실행한다.
+릴리스 정보는 [GitHub Releases](https://github.com/KYUJEONGLEE/GateLM/releases)에서 확인할 수 있습니다.
 
-```powershell
-corepack pnpm run v2.1:routing:setup-e5-encoder
-corepack pnpm run v2.1:routing:setup-gateway-e5-runtime-native
-```
+## 보안 원칙
 
-그다음 local wrapper로 stack을 시작한다. `build` 또는 `up`은 검증된 `.tmp/gateway-e5-runtime-bundle`을 다시 조립하고 E5 runtime image를 사용한다. E5 초기화나 request inference가 실패하면 해당 Gateway process 또는 요청은 기존 rule difficulty로 fallback한다.
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev/tenant-chat-local-compose.ps1 up -d postgres redis mock-provider control-plane-api gateway-core chat-api chat-web
-```
-
-## 6. Development Flow
-
-현재 기본 통합 흐름은 feature/fix/docs 브랜치에서 `dev` 대상 PR을 만들고, 검증된 `dev`를 별도 PR로 `main`에 승격하는 방식입니다.
-
-열린 PR이나 원격 feature 브랜치의 내용은 `dev`에 병합되기 전까지 현재 구현으로 문서화하지 않습니다.
-
-## 7. Security Guardrails
-
-다음 값은 API response, DB record, fixture, structured log, metric label, UI에 평문으로 남기지 않습니다.
-
-- raw prompt 또는 raw response
-- raw detected value 또는 raw prompt fragment
-- API Key, App Token, Provider Key
-- Authorization header
-- provider raw error body
-- actual secret
-
-Provider와 Model은 catalog/config data로 유지하며 DB enum 또는 code enum으로 고정하지 않습니다.
+- 실제 API Key, App Token, Provider Key, Authorization Header를 커밋하지 않습니다.
+- raw prompt, raw response, raw detected value를 로그·메트릭·fixture·UI에 평문으로 남기지 않습니다.
+- Provider 자격 증명은 서버 측 환경 변수 또는 승인된 Secret 관리 시스템에서 주입합니다.
+- 운영 환경에서는 예시 Secret, 기본 비밀번호, 공개 포트, TLS 구성을 반드시 점검합니다.
