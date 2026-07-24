@@ -28,8 +28,10 @@ export function nextAnalyticsLivePoll(
   }
 
   const successCount = state.successCount + 1;
-  const stableSuccessCount = outcome.changed ? 0 : state.stableSuccessCount + 1;
-  const delayMs = outcome.changed
+  const isBootstrap = successCount <= 5;
+  const stableSuccessCount =
+    outcome.changed || isBootstrap ? 0 : state.stableSuccessCount + 1;
+  const delayMs = isBootstrap || outcome.changed
     ? 2_000
     : stableSuccessCount < 2
       ? 5_000

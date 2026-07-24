@@ -171,8 +171,9 @@ visible:
 1. activation, filter change, retry, and tab re-exposure trigger an immediate
    read;
 2. the first five successful reads schedule the next read after 2 seconds;
-3. changed snapshots schedule after 5 seconds;
-4. two consecutive unchanged snapshots schedule after 10 seconds;
+3. changed snapshots continue at 2 seconds for demo responsiveness;
+4. after bootstrap, one unchanged snapshot schedules after 5 seconds and two
+   consecutive unchanged snapshots schedule after 10 seconds;
 5. errors back off through 2, 4, 8, and at most 10 seconds.
 
 The next timeout is scheduled only after the current request completes.
@@ -198,8 +199,10 @@ labels.
 
 The endpoint can be deployed before the Console view. Existing installations
 must have the Phase 6 second rollup created and reconciled before live view is
-used. No DB migration, reset, backfill, or event change is introduced by this
-feature.
+used. The live feature introduces no new table, reset, backfill, or event
+change. This implementation PR separately closes an existing canonical
+Project/Application invocation-log schema gap with an additive nullable
+`p0_llm_invocation_logs.ttft_ms` migration; existing rows remain `NULL`.
 
 Rollback removes or hides the live UI and route. Static Analytics aggregates,
 the canonical PostgreSQL log, the ClickHouse mirror, and request enforcement

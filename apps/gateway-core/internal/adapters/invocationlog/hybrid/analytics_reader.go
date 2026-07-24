@@ -79,7 +79,7 @@ func (r *AnalyticsReader) GetAnalyticsPerformance(ctx context.Context, filter in
 	projectFilter := normalized
 	projectFilter.Surface = invocationlog.AnalyticsSurfaceProjectApplication
 	projectFilter.IncludeTenantChat = false
-	includeTenantChat := normalized.ProjectID == "" || normalized.IncludeTenantChat
+	includeTenantChat := normalized.ProjectID == "" && normalized.IncludeTenantChat
 	if !includeTenantChat {
 		return r.project.GetAnalyticsPerformance(ctx, projectFilter)
 	}

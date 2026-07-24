@@ -74,9 +74,10 @@ func TestAnalyticsReaderMergesClickHouseProjectAndPostgresTenantChat(t *testing.
 	}
 
 	result, err := reader.GetAnalyticsPerformance(context.Background(), invocationlog.AnalyticsPerformanceFilter{
-		TenantID: "00000000-0000-4000-8000-000000000100",
-		From:     from,
-		To:       from.Add(10 * time.Minute),
+		TenantID:          "00000000-0000-4000-8000-000000000100",
+		From:              from,
+		To:                from.Add(10 * time.Minute),
+		IncludeTenantChat: true,
 	})
 	if err != nil {
 		t.Fatalf("get performance: %v", err)
@@ -95,6 +96,36 @@ func TestAnalyticsReaderMergesClickHouseProjectAndPostgresTenantChat(t *testing.
 	}
 	if len(result.SlowestRequests) != 2 || result.SlowestRequests[0].LatencyMs != 900 {
 		t.Fatalf("unexpected merged slow requests: %+v", result.SlowestRequests)
+	}
+}
+
+func TestAnalyticsReaderTenantScopeCanExcludeTenantChat(t *testing.T) {
+	from := time.Date(2026, 7, 21, 12, 0, 0, 0, time.UTC)
+	project := &performanceStub{result: performanceFields(invocationlog.AnalyticsSurfaceProjectApplication, 8, 1, 800, from)}
+	project.result.LatencyDistribution = []invocationlog.AnalyticsLatencyDistributionBucket{{
+		Bucket:   from,
+		Requests: 8,
+		Surface:  invocationlog.AnalyticsSurfaceProjectApplication,
+	}}
+	tenant := &performanceStub{result: performanceFields(invocationlog.AnalyticsSurfaceTenantChat, 0, 0, 0, from)}
+	reader, err := NewAnalyticsReader(tenant, project)
+	if err != nil {
+		t.Fatalf("new hybrid reader: %v", err)
+	}
+
+	result, err := reader.GetAnalyticsPerformance(context.Background(), invocationlog.AnalyticsPerformanceFilter{
+		TenantID: "00000000-0000-4000-8000-000000000100",
+		From:     from,
+		To:       from.Add(10 * time.Minute),
+	})
+	if err != nil {
+		t.Fatalf("get project-only performance: %v", err)
+	}
+	if tenant.calls != 0 || project.calls != 1 {
+		t.Fatalf("unexpected reader routing: project=%d tenant=%d", project.calls, tenant.calls)
+	}
+	if len(result.LatencyDistribution) != 1 || result.LatencyDistribution[0].Requests != 8 {
+		t.Fatalf("project distribution must be preserved: %+v", result.LatencyDistribution)
 	}
 }
 

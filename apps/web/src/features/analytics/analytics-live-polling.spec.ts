@@ -15,6 +15,27 @@ test("keeps changing live reads at two seconds", () => {
   }
 });
 
+test("keeps the first five successful reads at two seconds", () => {
+  let state = initialAnalyticsLivePollingState;
+  for (let index = 0; index < 5; index += 1) {
+    const next = nextAnalyticsLivePoll(state, { changed: false, status: "success" });
+    expect(next.delayMs).toBe(2_000);
+    state = next.state;
+  }
+
+  const firstPostBootstrapStable = nextAnalyticsLivePoll(state, {
+    changed: false,
+    status: "success"
+  });
+  expect(firstPostBootstrapStable.delayMs).toBe(5_000);
+
+  const secondPostBootstrapStable = nextAnalyticsLivePoll(firstPostBootstrapStable.state, {
+    changed: false,
+    status: "success"
+  });
+  expect(secondPostBootstrapStable.delayMs).toBe(10_000);
+});
+
 test("moves stable snapshots from five to ten seconds", () => {
   let state = {
     errorCount: 0,
