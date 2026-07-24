@@ -199,10 +199,9 @@ labels.
 
 The endpoint can be deployed before the Console view. Existing installations
 must have the Phase 6 second rollup created and reconciled before live view is
-used. The live feature introduces no new table, reset, backfill, or event
-change. This implementation PR separately closes an existing canonical
-Project/Application invocation-log schema gap with an additive nullable
-`p0_llm_invocation_logs.ttft_ms` migration; existing rows remain `NULL`.
+used. No DB migration, reset, backfill, or event change is introduced by this
+feature. The existing Gateway-owned migration chain remains authoritative for
+the canonical Project/Application invocation log.
 
 Rollback removes or hides the live UI and route. Static Analytics aggregates,
 the canonical PostgreSQL log, the ClickHouse mirror, and request enforcement
