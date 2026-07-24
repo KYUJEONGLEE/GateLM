@@ -88,8 +88,8 @@ cutover.
 - `gatelm_clickhouse_analytics_reads_total{endpoint="performance",status}`
 - `gatelm_clickhouse_analytics_read_duration_seconds{endpoint="performance",status}`
 
-The bounded `endpoint` values for Phase 4 are `logs`, `log_filter_options`,
-`dashboard`, `cost`, `performance`, `policy_impact`, and `reliability`.
+The bounded `endpoint` values are `logs`, `log_filter_options`, `dashboard`,
+`cost`, `performance`, `policy_impact`, `reliability`, and `live_usage`.
 
 Allowed status values are `success`, `timeout`, and `error`. Tenant, project,
 employee, and request identifiers are forbidden metric labels.

@@ -106,6 +106,10 @@ func TestProjectReaderUsesClickHouseCompatibleAliasesAndBucketConversions(t *tes
 			t.Fatalf("aggregate query must not scan the raw invocation table: %s", statement)
 		}
 	}
+	if strings.Contains(queries[3], "sum(requests)") ||
+		strings.Contains(queries[3], "sumIf(requests") {
+		t.Fatalf("policy impact aggregate source columns must be qualified to avoid ClickHouse alias shadowing: %s", queries[3])
+	}
 
 	reliability, err := reader.GetAnalyticsReliability(context.Background(), invocationlog.AnalyticsReliabilityFilter{
 		TenantID: filter.TenantID, ProjectID: filter.ProjectID, Surface: invocationlog.AnalyticsReliabilitySurfaceProjectApplication,
@@ -122,6 +126,10 @@ func TestProjectReaderUsesClickHouseCompatibleAliasesAndBucketConversions(t *tes
 	}
 	if !strings.Contains(queries[4], "llm_invocations_dashboard_second_rollup") {
 		t.Fatalf("reliability totals must use the rollup: %s", queries[4])
+	}
+	if strings.Contains(queries[4], "sum(requests)") ||
+		strings.Contains(queries[4], "sumIf(requests") {
+		t.Fatalf("reliability aggregate source columns must be qualified to avoid ClickHouse alias shadowing: %s", queries[4])
 	}
 	if !strings.Contains(queries[5], "llm_invocations_by_time FINAL") {
 		t.Fatalf("reliability incidents must use the time-ordered read model: %s", queries[5])
@@ -168,6 +176,22 @@ func TestProjectReaderFiveMinuteCostReportUsesSecondRollupBucketDirectly(t *test
 	}
 	if !strings.Contains(query, "toUnixTimestamp(bucket)*1000") {
 		t.Fatalf("five-minute cost report must convert the rollup bucket directly: %s", query)
+	}
+
+	_, err = reader.GetAnalyticsPolicyImpact(context.Background(), invocationlog.AnalyticsPolicyImpactFilter{
+		TenantID: "00000000-0000-4000-8000-000000000100",
+		Period:   "hour",
+		From:     from,
+		To:       from.Add(5 * time.Minute),
+	})
+	if err != nil {
+		t.Fatalf("five-minute policy impact: %v", err)
+	}
+	if strings.Contains(query, "toStartOfSecond(source.bucket") {
+		t.Fatalf("qualified second-aligned rollup bucket must not be truncated again: %s", query)
+	}
+	if !strings.Contains(query, "toUnixTimestamp(source.bucket)*1000") {
+		t.Fatalf("policy impact must keep the direct rollup bucket qualified: %s", query)
 	}
 }
 

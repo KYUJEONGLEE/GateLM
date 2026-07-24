@@ -37,6 +37,7 @@ func TestNewRouterProtectsEveryObservabilityReadRouteWhenTokenConfigured(t *test
 		{name: "request detail", path: "/api/llm-requests/request_001"},
 		{name: "dashboard", path: "/api/dashboard/overview?from=2026-06-25T00:00:00Z&to=2026-06-26T00:00:00Z"},
 		{name: "analytics", path: "/api/analytics/performance?from=2026-06-25T00:00:00Z&to=2026-06-26T00:00:00Z"},
+		{name: "live usage", path: "/api/analytics/live-usage?from=2026-06-25T00:00:00Z&to=2026-06-25T00:15:00Z"},
 		{name: "policy impact", path: "/api/analytics/policy-impact?period=hour&from=2026-06-25T00:00:00Z&to=2026-06-26T00:00:00Z"},
 		{name: "analytics reliability", path: "/api/analytics/reliability?from=2026-06-25T00:00:00Z&to=2026-06-26T00:00:00Z"},
 		{name: "cost report", path: "/api/reports/costs?period=day&from=2026-06-25T00:00:00Z&to=2026-06-26T00:00:00Z"},

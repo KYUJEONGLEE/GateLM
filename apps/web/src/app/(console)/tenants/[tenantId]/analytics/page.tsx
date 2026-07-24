@@ -11,9 +11,9 @@ import {
   AnalyticsCostPanel,
   AnalyticsPerformancePanel,
   AnalyticsReliabilityPanel,
-  AnalyticsSecurityPanel,
-  AnalyticsUsagePanel
+  AnalyticsSecurityPanel
 } from "@/features/analytics/components/analytics-panels";
+import { AnalyticsLiveUsagePanel } from "@/features/analytics/components/analytics-live-usage-panel";
 import {
   AnalyticsFilterFrame,
   AnalyticsFilterSelect,
@@ -166,7 +166,7 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
   const { tenantId } = await params;
   const resolvedSearchParams = await searchParams;
   const activeTab = normalizeTab(resolvedSearchParams?.tab);
-  const requestedFilters = buildFilters(resolvedSearchParams);
+  const requestedFilters = buildFilters(resolvedSearchParams, activeTab);
   const [locale, auth] = await Promise.all([
     getRequestLocale(),
     getCurrentConsoleAuth()
@@ -201,15 +201,16 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
   const shouldIncludeTenantChat = analyticsSurfaceScope === "all";
   const shouldLoadTenantChatDashboard =
     shouldIncludeTenantChat &&
-    (activeTab === "usage" || activeTab === "cost" || activeTab === "cache" || activeTab === "security");
+    (activeTab === "cost" || activeTab === "cache" || activeTab === "security");
   const shouldLoadTenantChatSeries =
-    shouldLoadTenantChatDashboard && (activeTab === "usage" || activeTab === "cost");
+    shouldLoadTenantChatDashboard && activeTab === "cost";
   const needsPerformance = activeTab === "usage" || activeTab === "performance";
   const needsCostTrend = activeTab === "cost";
   const needsV5Evidence = activeTab === "impact";
   const needsReliabilityEvidence = activeTab === "reliability";
   const needsSecurityEvidence = activeTab === "security";
-  const needsEmployeeUsage = !projectScoped && activeTab !== "security";
+  const needsEmployeeUsage =
+    !projectScoped && activeTab !== "security" && activeTab !== "usage";
   const needsEmployeeSecurity = !projectScoped && activeTab === "security";
   const reliabilityRange = getAnalyticsPerformanceRange(filters.range);
 
@@ -311,7 +312,9 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
     ? mergeCostOverTime(projectApplicationCostTrend, tenantChatCostTrend)
     : projectApplicationCostTrend ?? tenantChatCostTrend;
   const selectedOverview =
-    activeTab === "usage" || activeTab === "cost" || activeTab === "cache" || activeTab === "security"
+    activeTab === "usage"
+      ? projectApplicationOverview
+      : activeTab === "cost" || activeTab === "cache" || activeTab === "security"
     ? selectDashboardSurfaceOverview(
         shouldIncludeTenantChat ? "all" : "project_application",
         projectApplicationOverview,
@@ -319,12 +322,8 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
         { tenantChatNotConfigured: tenantChatDashboard === null }
       )
     : projectApplicationOverview;
-  const overview = activeTab === "usage" && usageSeriesIsPartial({
-    performanceAvailable: Boolean(performance),
-    projectApplicationAvailable: Boolean(projectApplicationOverview),
-    tenantChatAvailable: Boolean(tenantChatOverview),
-    tenantChatSeriesAvailable: Boolean(tenantChatSeries)
-  })
+  const overview = activeTab === "usage" &&
+    (!performance || !projectApplicationOverview)
     ? markAnalyticsUsagePartial(selectedOverview)
     : activeTab === "cost" && costSeriesIsPartial({
         projectApplicationAvailable: Boolean(projectApplicationOverview),
@@ -342,8 +341,8 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
           ? performance?.latencyDistribution
           : undefined,
         range: filters.range,
-        tenantChatOverview,
-        tenantChatSeries: tenantChatOverview ? tenantChatSeries : undefined
+        tenantChatOverview: undefined,
+        tenantChatSeries: undefined
       })
     : undefined;
   const cacheEvidence = activeTab === "cache"
@@ -423,7 +422,7 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
           className="analytics-v3-filter-bar"
           role="group"
         >
-          <label className="analytics-v3-employee-filter">
+          {activeTab !== "usage" ? <label className="analytics-v3-employee-filter">
             <span>{text.employee}</span>
             <AnalyticsFilterSelect defaultValue={selectedEmployeeId} name="employeeId">
               <option value="">{text.allEmployees}</option>
@@ -434,7 +433,7 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
               ))}
             </AnalyticsFilterSelect>
             <i aria-hidden="true" className="analytics-v3-select-caret" />
-          </label>
+          </label> : null}
           <label>
             <span>{text.range}</span>
             <AnalyticsFilterSelect defaultValue={filters.range} name="range">
@@ -468,7 +467,7 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
               aria-current={tab.id === activePrimaryTab ? "page" : undefined}
               className="analytics-v3-tab"
               data-active={tab.id === activePrimaryTab}
-              href={tabHref(effectiveTenantId, tab.id, filters)}
+              href={tabHref(effectiveTenantId, tab.id, filters, activeTab)}
               key={tab.id}
             >
               <Icon aria-hidden="true" size={18} />
@@ -485,7 +484,7 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
               aria-current={tab === activeTab ? "page" : undefined}
               className="analytics-v3-subtab"
               data-active={tab === activeTab}
-              href={tabHref(effectiveTenantId, tab, filters)}
+              href={tabHref(effectiveTenantId, tab, filters, activeTab)}
               key={tab}
             >
               {text.tabs[tab]}
@@ -501,12 +500,24 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
           model={model}
         />
       ) : activeTab === "usage" ? (
-        <AnalyticsUsagePanel
-          employeeUsage={employeeUsage}
+        <AnalyticsLiveUsagePanel
+          fallback={{
+            dataAsOf: model.dataAsOf,
+            dataState: model.dataState,
+            rateLimitedRequestCount:
+              projectApplicationOverview?.rateLimitedRequests ?? 0,
+            requestCount: model.usage.totalRequests,
+            requestVolume: model.usage.requestVolume,
+            sourceMix: model.usage.sourceMix.map((row) => ({
+              id: row.id,
+              value: row.value
+            }))
+          }}
           locale={locale}
-          model={model}
-          projectNameById={projectNameById}
-          selectedEmployeeId={selectedEmployeeId}
+          projectId={filters.projectId}
+          projects={projects}
+          range={filters.range}
+          tenantId={effectiveTenantId}
         />
       ) : activeTab === "cost" ? (
         <AnalyticsCostPanel
@@ -554,19 +565,23 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
 }
 
 function buildFilters(
-  searchParams: Awaited<AnalyticsPageProps["searchParams"]>
+  searchParams: Awaited<AnalyticsPageProps["searchParams"]>,
+  activeTab: AnalyticsTab
 ): AnalyticsFilterState {
   return {
     employeeId: normalizeText(searchParams?.employeeId),
     projectId: normalizeText(searchParams?.projectId),
-    range: normalizeRange(searchParams?.range)
+    range: normalizeRange(searchParams?.range, activeTab === "usage" ? "15m" : "1w")
   };
 }
 
-function normalizeRange(value: string | undefined): LiveAnalyticsRange {
+function normalizeRange(
+  value: string | undefined,
+  fallback: LiveAnalyticsRange
+): LiveAnalyticsRange {
   return value === "15m" || value === "1h" || value === "1d" || value === "1w"
     ? value
-    : "1w";
+    : fallback;
 }
 
 function normalizeTab(value: string | undefined): AnalyticsTab {
@@ -599,9 +614,11 @@ function normalizeText(value: string | undefined) {
 function tabHref(
   tenantId: string,
   tab: AnalyticsTab,
-  filters: AnalyticsFilterState
+  filters: AnalyticsFilterState,
+  activeTab: AnalyticsTab
 ) {
-  const query = new URLSearchParams({ range: filters.range, tab });
+  const range = tab === "usage" && activeTab !== "usage" ? "15m" : filters.range;
+  const query = new URLSearchParams({ range, tab });
   appendQuery(query, "projectId", filters.projectId);
   appendQuery(query, "employeeId", filters.employeeId);
   return `/tenants/${tenantId}/analytics?${query.toString()}`;
@@ -611,18 +628,6 @@ function appendQuery(query: URLSearchParams, key: string, value: string) {
   if (value) {
     query.set(key, value);
   }
-}
-
-function usageSeriesIsPartial(input: {
-  performanceAvailable: boolean;
-  projectApplicationAvailable: boolean;
-  tenantChatAvailable: boolean;
-  tenantChatSeriesAvailable: boolean;
-}) {
-  return (
-    (input.projectApplicationAvailable && !input.performanceAvailable) ||
-    (input.tenantChatAvailable && !input.tenantChatSeriesAvailable)
-  );
 }
 
 function costSeriesIsPartial(input: {
