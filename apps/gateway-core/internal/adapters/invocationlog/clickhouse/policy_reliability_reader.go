@@ -48,7 +48,7 @@ type policyRow struct {
 func (r *ProjectReader) queryPolicyImpact(ctx context.Context, filter invocationlog.AnalyticsPolicyImpactFilter) (invocationlog.AnalyticsPolicyImpactFields, error) {
 	where, params := rollupWhere(filter.TenantID, filter.ProjectID, filter.From, filter.To)
 	config := policyBucketConfig(filter)
-	bucket := rollupBucketExpression(config)
+	bucket := rollupBucketExpressionForColumn(config, "source.bucket")
 	cte := fmt.Sprintf(`WITH filtered AS (SELECT *,
  cache_outcome='hit' AS cache_hit, masking_action='redacted' AS pii_masked, safety_outcome='blocked' AS safety_blocked,
  terminal_status='rate_limited' AS rate_limited, fallback_outcome='success' AS fallback_success,
@@ -57,16 +57,34 @@ func (r *ProjectReader) queryPolicyImpact(ctx context.Context, filter invocation
  (masking_action IN ('redacted','blocked') OR safety_outcome='blocked') AS protected_request
  FROM %s.%s WHERE %s)
 `, r.client.database, r.client.dashboardRollupTable(), strings.Join(where, " AND "))
-	query := cte + fmt.Sprintf(`SELECT 'total' kind,'' key1,'' key2,0 bucket_ms,sum(requests) requests,sum(cost_micro_usd) cost,sum(saved_cost_micro_usd) known_saved,sum(saved_cost_known_requests) saved_known,sum(requests)-sum(saved_cost_known_requests) saved_unknown,sumIf(requests,avoided_call) avoided,sumIf(requests,protected_request) protected,sumIf(requests,routing_difficulty='complex') high,sumIf(requests,routing_difficulty!='') high_eligible,sumIf(requests,masking_action!='') masking_known,sumIf(requests,routing_difficulty!='') routing_known,sumIf(requests,provider!='' AND model!='') model_known,if(sum(requests)=0,NULL,toUnixTimestamp64Milli(max(last_created_at))) last_ms FROM filtered
-UNION ALL SELECT 'outcome','cache_hit','',0,sumIf(requests,cache_hit),0,0,0,0,0,0,0,0,0,0,0,NULL FROM filtered
-UNION ALL SELECT 'outcome','pii_masked','',0,sumIf(requests,pii_masked),0,0,0,0,0,0,0,0,0,0,0,NULL FROM filtered
-UNION ALL SELECT 'outcome','safety_blocked','',0,sumIf(requests,safety_blocked),0,0,0,0,0,0,0,0,0,0,0,NULL FROM filtered
-UNION ALL SELECT 'outcome','rate_limited','',0,sumIf(requests,rate_limited),0,0,0,0,0,0,0,0,0,0,0,NULL FROM filtered
-UNION ALL SELECT 'outcome','fallback_success','',0,sumIf(requests,fallback_success),0,0,0,0,0,0,0,0,0,0,0,NULL FROM filtered
-UNION ALL SELECT 'outcome','budget_blocked','',0,sumIf(requests,budget_blocked),0,0,0,0,0,0,0,0,0,0,0,NULL FROM filtered
-UNION ALL SELECT 'routing','difficulty',routing_difficulty,0,sum(requests),0,0,0,0,0,0,0,0,0,0,0,NULL FROM filtered WHERE routing_difficulty IN ('simple','complex') GROUP BY routing_difficulty
-UNION ALL SELECT 'model',provider,model,toUnixTimestamp(%s)*1000,sum(requests),0,0,0,0,0,0,0,0,0,0,0,NULL FROM filtered WHERE provider!='' AND model!='' GROUP BY %s,provider,model
-UNION ALL SELECT 'usage',toString(project_id),'',0,sum(requests),sum(cost_micro_usd),0,0,0,0,0,0,0,0,0,0,NULL FROM filtered GROUP BY project_id
+	query := cte + fmt.Sprintf(`SELECT
+  'total' kind,
+  '' key1,
+  '' key2,
+  0 bucket_ms,
+  sum(source.requests) requests,
+  sum(source.cost_micro_usd) cost,
+  sum(source.saved_cost_micro_usd) known_saved,
+  sum(source.saved_cost_known_requests) saved_known,
+  sum(source.requests) - sum(source.saved_cost_known_requests) saved_unknown,
+  sumIf(source.requests, source.avoided_call) avoided,
+  sumIf(source.requests, source.protected_request) protected,
+  sumIf(source.requests, source.routing_difficulty = 'complex') high,
+  sumIf(source.requests, source.routing_difficulty != '') high_eligible,
+  sumIf(source.requests, source.masking_action != '') masking_known,
+  sumIf(source.requests, source.routing_difficulty != '') routing_known,
+  sumIf(source.requests, source.provider != '' AND source.model != '') model_known,
+  if(sum(source.requests) = 0, NULL, toUnixTimestamp64Milli(max(source.last_created_at))) last_ms
+FROM filtered AS source
+UNION ALL SELECT 'outcome','cache_hit','',0,sumIf(source.requests,source.cache_hit),0,0,0,0,0,0,0,0,0,0,0,NULL FROM filtered AS source
+UNION ALL SELECT 'outcome','pii_masked','',0,sumIf(source.requests,source.pii_masked),0,0,0,0,0,0,0,0,0,0,0,NULL FROM filtered AS source
+UNION ALL SELECT 'outcome','safety_blocked','',0,sumIf(source.requests,source.safety_blocked),0,0,0,0,0,0,0,0,0,0,0,NULL FROM filtered AS source
+UNION ALL SELECT 'outcome','rate_limited','',0,sumIf(source.requests,source.rate_limited),0,0,0,0,0,0,0,0,0,0,0,NULL FROM filtered AS source
+UNION ALL SELECT 'outcome','fallback_success','',0,sumIf(source.requests,source.fallback_success),0,0,0,0,0,0,0,0,0,0,0,NULL FROM filtered AS source
+UNION ALL SELECT 'outcome','budget_blocked','',0,sumIf(source.requests,source.budget_blocked),0,0,0,0,0,0,0,0,0,0,0,NULL FROM filtered AS source
+UNION ALL SELECT 'routing','difficulty',source.routing_difficulty,0,sum(source.requests),0,0,0,0,0,0,0,0,0,0,0,NULL FROM filtered AS source WHERE source.routing_difficulty IN ('simple','complex') GROUP BY source.routing_difficulty
+UNION ALL SELECT 'model',source.provider,source.model,toUnixTimestamp(%s)*1000,sum(source.requests),0,0,0,0,0,0,0,0,0,0,0,NULL FROM filtered AS source WHERE source.provider!='' AND source.model!='' GROUP BY %s,source.provider,source.model
+UNION ALL SELECT 'usage',toString(source.project_id),'',0,sum(source.requests),sum(source.cost_micro_usd),0,0,0,0,0,0,0,0,0,0,NULL FROM filtered AS source GROUP BY source.project_id
 FORMAT JSONEachRow`, bucket, bucket)
 	rows, err := queryJSONEachRow[policyRow](ctx, r.client, query, params)
 	if err != nil {
@@ -165,9 +183,9 @@ func (r *ProjectReader) queryReliability(ctx context.Context, filter invocationl
 	rollupConditions, params := rollupWhere(filter.TenantID, filter.ProjectID, filter.From, filter.To)
 	timeConditions, _ := projectWhere(filter.TenantID, filter.ProjectID, filter.From, filter.To)
 	params["limit"] = strconv.Itoa(filter.IncidentLimit)
-	rollupBase := fmt.Sprintf("FROM %s.%s WHERE %s", r.client.database, r.client.dashboardRollupTable(), strings.Join(rollupConditions, " AND "))
+	rollupBase := fmt.Sprintf("FROM %s.%s AS source WHERE %s", r.client.database, r.client.dashboardRollupTable(), strings.Join(rollupConditions, " AND "))
 	timeBase := fmt.Sprintf("FROM %s.%s FINAL WHERE %s", r.client.database, r.client.timeTable(), strings.Join(timeConditions, " AND "))
-	totals, err := queryJSONEachRow[reliabilityTotalRow](ctx, r.client, `SELECT sum(requests) requests,sumIf(requests,terminal_status='success') success,sumIf(requests,terminal_status='failed') failed,sumIf(requests,terminal_status='blocked') blocked,sumIf(requests,terminal_status='rate_limited') rate_limited,sumIf(requests,terminal_status='cancelled') cancelled,sumIf(requests,terminal_status NOT IN ('success','failed','blocked','rate_limited','cancelled')) unknown,sumIf(requests,fallback_outcome NOT IN ('','not_called','not_needed')) fallback_requests,sumIf(requests,fallback_outcome='success') fallback_success,if(sum(requests)=0,NULL,toUnixTimestamp64Milli(max(last_created_at))) last_ms `+rollupBase+` FORMAT JSONEachRow`, params)
+	totals, err := queryJSONEachRow[reliabilityTotalRow](ctx, r.client, `SELECT sum(source.requests) requests,sumIf(source.requests,source.terminal_status='success') success,sumIf(source.requests,source.terminal_status='failed') failed,sumIf(source.requests,source.terminal_status='blocked') blocked,sumIf(source.requests,source.terminal_status='rate_limited') rate_limited,sumIf(source.requests,source.terminal_status='cancelled') cancelled,sumIf(source.requests,source.terminal_status NOT IN ('success','failed','blocked','rate_limited','cancelled')) unknown,sumIf(source.requests,source.fallback_outcome NOT IN ('','not_called','not_needed')) fallback_requests,sumIf(source.requests,source.fallback_outcome='success') fallback_success,if(sum(source.requests)=0,NULL,toUnixTimestamp64Milli(max(source.last_created_at))) last_ms `+rollupBase+` FORMAT JSONEachRow`, params)
 	if err != nil {
 		return invocationlog.AnalyticsReliabilityFields{}, err
 	}

@@ -65,11 +65,21 @@ export function AnalyticsEChart({
   const chartRef = useRef<EChartInstance | null>(null);
   const optionRef = useRef(option);
   const [isReady, setIsReady] = useState(false);
+  const [reduceMotion, setReduceMotion] = useState(false);
 
   useEffect(() => {
-    optionRef.current = option;
-    chartRef.current?.setOption(option, true);
-  }, [option]);
+    const resolvedOption = reduceMotion ? { ...option, animation: false } : option;
+    optionRef.current = resolvedOption;
+    chartRef.current?.setOption(resolvedOption, true);
+  }, [option, reduceMotion]);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const update = () => setReduceMotion(mediaQuery.matches);
+    update();
+    mediaQuery.addEventListener("change", update);
+    return () => mediaQuery.removeEventListener("change", update);
+  }, []);
 
   useEffect(() => {
     let isDisposed = false;
@@ -158,11 +168,34 @@ export function analyticsTooltip(unit: string, theme: AnalyticsChartTheme) {
 }
 
 export function compactAxisNumber(value: number) {
-  if (Math.abs(value) >= 1000) {
-    return `${Number((value / 1000).toFixed(1))}K`;
+  const absolute = Math.abs(value);
+  if (absolute >= 1_000_000_000) {
+    return `${Number((value / 1_000_000_000).toFixed(1))}B`;
+  }
+  if (absolute >= 1_000_000) {
+    return `${Number((value / 1_000_000).toFixed(1))}M`;
+  }
+  if (absolute >= 1_000) {
+    return `${Number((value / 1_000).toFixed(1))}K`;
   }
 
   return `${Math.round(value)}`;
+}
+
+export function formatAnalyticsRps(value: number) {
+  if (!Number.isFinite(value) || value === 0) {
+    return "0";
+  }
+  if (Math.abs(value) >= 1_000) {
+    return compactAxisNumber(value);
+  }
+  if (Math.abs(value) < 0.0001) {
+    return value > 0 ? "<0.0001" : ">-0.0001";
+  }
+  return new Intl.NumberFormat("en-US", {
+    maximumFractionDigits: 4,
+    maximumSignificantDigits: 3
+  }).format(value);
 }
 
 export function formatChartNumber(value: number) {
@@ -188,6 +221,7 @@ function loadAnalyticsEchartsRuntime() {
       charts.PieChart,
       components.GridComponent,
       components.LegendComponent,
+      components.MarkLineComponent,
       components.TooltipComponent,
       renderers.SVGRenderer
     ]);

@@ -60,6 +60,16 @@ func (r *AnalyticsReader) GetCostReport(ctx context.Context, filter invocationlo
 	return reader.GetCostReport(ctx, filter)
 }
 
+func (r *AnalyticsReader) GetAnalyticsLiveUsage(ctx context.Context, filter invocationlog.AnalyticsLiveUsageFilter) (invocationlog.AnalyticsLiveUsageFields, error) {
+	reader, ok := r.project.(interface {
+		GetAnalyticsLiveUsage(context.Context, invocationlog.AnalyticsLiveUsageFilter) (invocationlog.AnalyticsLiveUsageFields, error)
+	})
+	if !ok {
+		return invocationlog.AnalyticsLiveUsageFields{}, invocationlog.ErrAnalyticsDataUnavailable
+	}
+	return reader.GetAnalyticsLiveUsage(ctx, filter)
+}
+
 func (r *AnalyticsReader) GetAnalyticsPerformance(ctx context.Context, filter invocationlog.AnalyticsPerformanceFilter) (invocationlog.AnalyticsPerformanceFields, error) {
 	normalized, err := invocationlog.NormalizeAnalyticsPerformanceFilter(filter)
 	if err != nil {
@@ -69,7 +79,7 @@ func (r *AnalyticsReader) GetAnalyticsPerformance(ctx context.Context, filter in
 	projectFilter := normalized
 	projectFilter.Surface = invocationlog.AnalyticsSurfaceProjectApplication
 	projectFilter.IncludeTenantChat = false
-	includeTenantChat := normalized.ProjectID == "" || normalized.IncludeTenantChat
+	includeTenantChat := normalized.ProjectID == "" && normalized.IncludeTenantChat
 	if !includeTenantChat {
 		return r.project.GetAnalyticsPerformance(ctx, projectFilter)
 	}

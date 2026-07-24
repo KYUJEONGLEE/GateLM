@@ -551,12 +551,16 @@ func costBucketExpression(config invocationlog.TimeSeriesBucketConfig) string {
 }
 
 func rollupBucketExpression(config invocationlog.TimeSeriesBucketConfig) string {
+	return rollupBucketExpressionForColumn(config, "bucket")
+}
+
+func rollupBucketExpressionForColumn(config invocationlog.TimeSeriesBucketConfig, column string) string {
 	if config.Unit == "second" {
 		// The dashboard rollup bucket is already stored as a second-aligned
 		// DateTime. ClickHouse 25.3 only accepts DateTime64 here.
-		return "bucket"
+		return column
 	}
-	return costBucketExpressionForColumn(config, "bucket")
+	return costBucketExpressionForColumn(config, column)
 }
 
 func costBucketExpressionForColumn(config invocationlog.TimeSeriesBucketConfig, column string) string {

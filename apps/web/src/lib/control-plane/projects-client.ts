@@ -396,6 +396,7 @@ function getFixtureProject(): ProjectRecord {
     description: "Customer support Gateway project from the v1 runtime config fixture.",
     id: runtimeConfig.projectId,
     name: "Customer Support",
+    rateLimit: null,
     runtimeApplicationId: null,
     status: runtimeConfig.projectStatus === "active" ? "ACTIVE" : "DISABLED",
     tenantId: runtimeConfig.tenantId,
@@ -429,6 +430,7 @@ function toProjectRecord(value: unknown): ProjectRecord | null {
     description: typeof record.description === "string" ? record.description : null,
     id: record.id,
     name: record.name,
+    rateLimit: normalizeRateLimitSummary(record.rateLimit),
     runtimeApplicationId:
       typeof record.runtimeApplicationId === "string" && record.runtimeApplicationId.trim()
         ? record.runtimeApplicationId
@@ -439,6 +441,29 @@ function toProjectRecord(value: unknown): ProjectRecord | null {
     updatedAt: record.updatedAt,
     warningThresholdPercent: normalizeWarningThresholdPercent(record.warningThresholdPercent)
   };
+}
+
+function normalizeRateLimitSummary(
+  value: unknown
+): ProjectRecord["rateLimit"] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+  return typeof record.enabled === "boolean" &&
+    typeof record.limit === "number" &&
+    Number.isInteger(record.limit) &&
+    record.limit >= 1 &&
+    typeof record.windowSeconds === "number" &&
+    Number.isInteger(record.windowSeconds) &&
+    record.windowSeconds >= 1
+    ? {
+        enabled: record.enabled,
+        limit: record.limit,
+        windowSeconds: record.windowSeconds
+      }
+    : null;
 }
 
 function normalizeNumber(value: unknown, fallback: number) {

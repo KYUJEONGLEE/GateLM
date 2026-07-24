@@ -494,6 +494,9 @@ func IsValidRoutingPolicy(policy RoutingPolicy) bool {
 	if mode != routing.RoutingPolicyModeAuto && mode != routing.RoutingPolicyModeManual {
 		return false
 	}
+	if bootstrapState != routing.BootstrapStateMock && bootstrapState != routing.BootstrapStateConfigured {
+		return false
+	}
 	if strings.TrimSpace(policy.RoutingPolicyHash) == "" {
 		return false
 	}
@@ -523,7 +526,11 @@ func IsValidRoutingPolicy(policy RoutingPolicy) bool {
 	if hasMockRef {
 		return bootstrapState == routing.BootstrapStateMock
 	}
-	return bootstrapState == routing.BootstrapStateConfigured
+	// Control Plane also marks catalog-backed models from a registered mock
+	// provider as mock_bootstrap. Their opaque modelRefs cannot be classified
+	// until the provider catalog stage, so accept either known state here. The
+	// catalog still has to resolve every selected modelRef before execution.
+	return true
 }
 
 // IsCanonicalRoutingPolicyHash validates the active v2 contract form. Legacy

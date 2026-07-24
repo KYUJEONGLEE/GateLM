@@ -315,6 +315,11 @@ describe('ProjectsService', () => {
           budgetPolicy: {
             warningThresholdPercent: 72,
           },
+          rateLimit: {
+            enabled: true,
+            limit: 120,
+            windowSeconds: 2,
+          },
         },
       },
     ]);
@@ -369,6 +374,14 @@ describe('ProjectsService', () => {
       72,
       80,
     ]);
+    expect(result.data.map((item) => item.rateLimit)).toEqual([
+      {
+        enabled: true,
+        limit: 120,
+        windowSeconds: 2,
+      },
+      null,
+    ]);
     expect(result.pagination).toEqual({
       limit: 2,
       nextCursor: '00000000-0000-4000-8000-000000000202',
@@ -394,6 +407,11 @@ describe('ProjectsService', () => {
           budgetPolicy: {
             warningThresholdPercent: 101,
           },
+          rateLimit: {
+            enabled: "true",
+            limit: 0,
+            windowSeconds: 0,
+          },
         },
       },
     ]);
@@ -404,6 +422,7 @@ describe('ProjectsService', () => {
     expect(result.data.map((item) => item.warningThresholdPercent)).toEqual([
       80,
     ]);
+    expect(result.data[0]?.rateLimit).toBeNull();
   });
 
   it('checks tenant budget when reactivating an archived project', async () => {

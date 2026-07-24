@@ -1,4 +1,6 @@
 # Hash-pinned datasets must retain their repository bytes on every platform.
+scripts/run-analytics-live-local.sh text eol=lf
+scripts/run-analytics-live-mock-traffic.sh text eol=lf
 docs/v2.1.0/fixtures/difficulty-label-contract-smoke.fixture.jsonl text eol=lf
 docs/v2.1.0/fixtures/difficulty-evaluation-training-pilot-500.fixture.jsonl text eol=lf
 scripts/routing_difficulty_model/artifacts/difficulty-e5-encoder-manifest.v1.json text eol=lf

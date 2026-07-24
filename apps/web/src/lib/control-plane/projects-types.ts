@@ -5,12 +5,19 @@ export type ProjectRecord = {
   description: string | null;
   id: string;
   name: string;
+  rateLimit: ProjectRateLimitSummary | null;
   runtimeApplicationId: string | null;
   status: ProjectStatus;
   tenantId: string;
   totalBudgetUsd: number;
   updatedAt: string;
   warningThresholdPercent: number;
+};
+
+export type ProjectRateLimitSummary = {
+  enabled: boolean;
+  limit: number;
+  windowSeconds: number;
 };
 
 export type ProjectBudgetThresholdRecord = {

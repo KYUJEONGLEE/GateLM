@@ -125,17 +125,17 @@ func (r *AnalyticsPerformanceReader) querySummaries(ctx context.Context, filter 
 	rows, err := queryJSONEachRow[performanceSummaryRow](ctx, r.client, fmt.Sprintf(`
 %s
 SELECT
-  sum(requests) AS total_requests,
-  if(sumIf(requests, latency_eligible = 1) = 0, NULL,
-    sumIf(latency_sum_ms, latency_eligible = 1) / sumIf(requests, latency_eligible = 1)) AS avg_latency_ms,
-  if(sumIf(requests, latency_eligible = 1) = 0, NULL,
-    arrayElement(quantilesTDigestMergeIf(0.50, 0.95, 0.99)(latency_quantiles, latency_eligible = 1), 2)) AS p95_latency_ms,
-  if(sumIf(requests, latency_eligible = 1) = 0, NULL,
-    arrayElement(quantilesTDigestMergeIf(0.50, 0.95, 0.99)(latency_quantiles, latency_eligible = 1), 3)) AS p99_latency_ms,
-  sum(system_error_requests) AS system_error_requests,
-  if(sum(requests) = 0, NULL, sum(system_error_requests) / sum(requests)) AS error_rate,
-  if(sum(requests) = 0, NULL, toUnixTimestamp64Milli(max(last_created_at))) AS last_event_at_ms
-FROM filtered
+  sum(source.requests) AS total_requests,
+  if(sumIf(source.requests, source.latency_eligible = 1) = 0, NULL,
+    sumIf(source.latency_sum_ms, source.latency_eligible = 1) / sumIf(source.requests, source.latency_eligible = 1)) AS avg_latency_ms,
+  if(sumIf(source.requests, source.latency_eligible = 1) = 0, NULL,
+    arrayElement(quantilesTDigestMergeIf(0.50, 0.95, 0.99)(source.latency_quantiles, source.latency_eligible = 1), 2)) AS p95_latency_ms,
+  if(sumIf(source.requests, source.latency_eligible = 1) = 0, NULL,
+    arrayElement(quantilesTDigestMergeIf(0.50, 0.95, 0.99)(source.latency_quantiles, source.latency_eligible = 1), 3)) AS p99_latency_ms,
+  sum(source.system_error_requests) AS system_error_requests,
+  if(sum(source.requests) = 0, NULL, sum(source.system_error_requests) / sum(source.requests)) AS error_rate,
+  if(sum(source.requests) = 0, NULL, toUnixTimestamp64Milli(max(source.last_created_at))) AS last_event_at_ms
+FROM filtered AS source
 FORMAT JSONEachRow`, r.filteredCTE(filter)), performanceParameters(filter))
 	if err != nil {
 		return nil, err
@@ -175,21 +175,21 @@ func (r *AnalyticsPerformanceReader) queryProviderModels(ctx context.Context, fi
 	rows, err := queryJSONEachRow[providerModelRow](ctx, r.client, fmt.Sprintf(`
 %s
 SELECT
-  provider,
-  model,
-  sum(requests) AS requests,
-  if(sumIf(requests, latency_eligible = 1) = 0, NULL,
-    sumIf(latency_sum_ms, latency_eligible = 1) / sumIf(requests, latency_eligible = 1)) AS avg_latency_ms,
-  if(sumIf(requests, latency_eligible = 1) = 0, NULL,
-    arrayElement(quantilesTDigestMergeIf(0.50, 0.95, 0.99)(latency_quantiles, latency_eligible = 1), 2)) AS p95_latency_ms,
-  if(sumIf(requests, latency_eligible = 1) = 0, NULL,
-    arrayElement(quantilesTDigestMergeIf(0.50, 0.95, 0.99)(latency_quantiles, latency_eligible = 1), 3)) AS p99_latency_ms,
-  sum(system_error_requests) / sum(requests) AS error_rate,
-  sum(cost_micro_usd) AS total_cost_micro_usd,
-  sumIf(requests, cache_outcome = 'hit') / sum(requests) AS cache_hit_rate
-FROM filtered
-WHERE provider != '' AND model != ''
-GROUP BY provider, model
+  source.provider AS provider,
+  source.model AS model,
+  sum(source.requests) AS requests,
+  if(sumIf(source.requests, source.latency_eligible = 1) = 0, NULL,
+    sumIf(source.latency_sum_ms, source.latency_eligible = 1) / sumIf(source.requests, source.latency_eligible = 1)) AS avg_latency_ms,
+  if(sumIf(source.requests, source.latency_eligible = 1) = 0, NULL,
+    arrayElement(quantilesTDigestMergeIf(0.50, 0.95, 0.99)(source.latency_quantiles, source.latency_eligible = 1), 2)) AS p95_latency_ms,
+  if(sumIf(source.requests, source.latency_eligible = 1) = 0, NULL,
+    arrayElement(quantilesTDigestMergeIf(0.50, 0.95, 0.99)(source.latency_quantiles, source.latency_eligible = 1), 3)) AS p99_latency_ms,
+  sum(source.system_error_requests) / sum(source.requests) AS error_rate,
+  sum(source.cost_micro_usd) AS total_cost_micro_usd,
+  sumIf(source.requests, source.cache_outcome = 'hit') / sum(source.requests) AS cache_hit_rate
+FROM filtered AS source
+WHERE source.provider != '' AND source.model != ''
+GROUP BY source.provider, source.model
 ORDER BY requests DESC, provider, model
 LIMIT 100
 FORMAT JSONEachRow`, r.filteredCTE(filter)), performanceParameters(filter))
@@ -230,13 +230,13 @@ func (r *AnalyticsPerformanceReader) queryProviderLatencies(ctx context.Context,
 	rows, err := queryJSONEachRow[providerLatencyRow](ctx, r.client, fmt.Sprintf(`
 %s
 SELECT
-  provider,
-  if(sumIf(requests, latency_eligible = 1) = 0, NULL,
-    arrayElement(quantilesTDigestMergeIf(0.50, 0.95, 0.99)(latency_quantiles, latency_eligible = 1), 2)) AS p95_latency_ms,
-  sum(requests) AS requests
-FROM filtered
-WHERE provider != ''
-GROUP BY provider
+  source.provider AS provider,
+  if(sumIf(source.requests, source.latency_eligible = 1) = 0, NULL,
+    arrayElement(quantilesTDigestMergeIf(0.50, 0.95, 0.99)(source.latency_quantiles, source.latency_eligible = 1), 2)) AS p95_latency_ms,
+  sum(source.requests) AS requests
+FROM filtered AS source
+WHERE source.provider != ''
+GROUP BY source.provider
 ORDER BY p95_latency_ms DESC, requests DESC, provider
 LIMIT 20
 FORMAT JSONEachRow`, r.filteredCTE(filter)), performanceParameters(filter))
@@ -264,19 +264,19 @@ type distributionRow struct {
 }
 
 func (r *AnalyticsPerformanceReader) queryDistribution(ctx context.Context, filter invocationlog.AnalyticsPerformanceFilter) ([]invocationlog.AnalyticsLatencyDistributionBucket, error) {
-	bucket := clickHouseBucketExpressionForColumn(invocationlog.TimeSeriesBucketConfigForRange(filter.From, filter.To), "bucket")
+	bucket := clickHouseBucketExpressionForColumn(invocationlog.TimeSeriesBucketConfigForRange(filter.From, filter.To), "source.bucket")
 	rows, err := queryJSONEachRow[distributionRow](ctx, r.client, fmt.Sprintf(`
 %s
 SELECT
   toInt64(toUnixTimestamp(%s)) * 1000 AS bucket_ms,
-  sum(requests) AS requests,
-  if(sumIf(requests, latency_eligible = 1) = 0, NULL,
-    arrayElement(quantilesTDigestMergeIf(0.50, 0.95, 0.99)(latency_quantiles, latency_eligible = 1), 1)) AS p50_latency_ms,
-  if(sumIf(requests, latency_eligible = 1) = 0, NULL,
-    arrayElement(quantilesTDigestMergeIf(0.50, 0.95, 0.99)(latency_quantiles, latency_eligible = 1), 2)) AS p95_latency_ms,
-  if(sumIf(requests, latency_eligible = 1) = 0, NULL,
-    arrayElement(quantilesTDigestMergeIf(0.50, 0.95, 0.99)(latency_quantiles, latency_eligible = 1), 3)) AS p99_latency_ms
-FROM filtered
+  sum(source.requests) AS requests,
+  if(sumIf(source.requests, source.latency_eligible = 1) = 0, NULL,
+    arrayElement(quantilesTDigestMergeIf(0.50, 0.95, 0.99)(source.latency_quantiles, source.latency_eligible = 1), 1)) AS p50_latency_ms,
+  if(sumIf(source.requests, source.latency_eligible = 1) = 0, NULL,
+    arrayElement(quantilesTDigestMergeIf(0.50, 0.95, 0.99)(source.latency_quantiles, source.latency_eligible = 1), 2)) AS p95_latency_ms,
+  if(sumIf(source.requests, source.latency_eligible = 1) = 0, NULL,
+    arrayElement(quantilesTDigestMergeIf(0.50, 0.95, 0.99)(source.latency_quantiles, source.latency_eligible = 1), 3)) AS p99_latency_ms
+FROM filtered AS source
 GROUP BY %s
 ORDER BY bucket_ms
 FORMAT JSONEachRow`, r.filteredCTE(filter), bucket, bucket), performanceParameters(filter))

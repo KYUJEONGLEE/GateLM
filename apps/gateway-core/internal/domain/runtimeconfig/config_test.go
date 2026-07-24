@@ -226,6 +226,34 @@ func TestRoutingPolicyRejectsConfiguredStateWhileAnyMockRouteRemains(t *testing.
 	}
 }
 
+func TestRoutingPolicyAcceptsCatalogBackedMockBootstrapModelRefs(t *testing.T) {
+	policy := BootstrapRoutingPolicy("hash_routing_policy_test")
+	policy.BootstrapState = routing.BootstrapStateMock
+	cell := routing.RouteCell{
+		ModelRefs: []string{"00000000-0000-4000-8000-000000000600:mock-fast"},
+	}
+	difficulties := routing.DifficultyRoutes{Simple: cell, Complex: cell}
+	policy.Routes = routing.RoutingMatrix{
+		General:       difficulties,
+		Code:          difficulties,
+		Translation:   difficulties,
+		Summarization: difficulties,
+		Reasoning:     difficulties,
+	}
+
+	if !IsValidRoutingPolicy(policy) {
+		t.Fatal("catalog-backed mock provider refs must pass runtime validation")
+	}
+}
+
+func TestRoutingPolicyRejectsUnknownBootstrapState(t *testing.T) {
+	policy := BootstrapRoutingPolicy("hash_routing_policy_test")
+	policy.BootstrapState = "unknown"
+	if IsValidRoutingPolicy(policy) {
+		t.Fatal("unknown bootstrap state must be rejected")
+	}
+}
+
 func TestIsCanonicalRoutingPolicyHash(t *testing.T) {
 	if !IsCanonicalRoutingPolicyHash("sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef") {
 		t.Fatal("expected lowercase sha256 hash to be canonical")

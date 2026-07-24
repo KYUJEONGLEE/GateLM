@@ -37,9 +37,9 @@ func TestAnalyticsPerformanceReaderQueriesBoundedProjectAggregates(t *testing.T)
 		switch {
 		case strings.Contains(statement, "AS total_requests"):
 			_, _ = io.WriteString(w, `{"total_requests":3,"avg_latency_ms":120,"p95_latency_ms":200,"p99_latency_ms":220,"system_error_requests":1,"error_rate":0.333333,"last_event_at_ms":1784638923000}`+"\n")
-		case strings.Contains(statement, "GROUP BY provider, model"):
+		case strings.Contains(statement, "GROUP BY source.provider, source.model"):
 			_, _ = io.WriteString(w, `{"provider":"mock","model":"mock-balanced","requests":3,"avg_latency_ms":120,"p95_latency_ms":200,"p99_latency_ms":220,"error_rate":0.333333,"total_cost_micro_usd":42,"cache_hit_rate":0.5}`+"\n")
-		case strings.Contains(statement, "GROUP BY provider"):
+		case strings.Contains(statement, "GROUP BY source.provider"):
 			_, _ = io.WriteString(w, `{"provider":"mock","p95_latency_ms":200,"requests":3}`+"\n")
 		case strings.Contains(statement, "AS bucket_ms"):
 			_, _ = io.WriteString(w, `{"bucket_ms":1784638860000,"requests":3,"p50_latency_ms":100,"p95_latency_ms":200,"p99_latency_ms":220}`+"\n")
@@ -87,6 +87,11 @@ func TestAnalyticsPerformanceReaderQueriesBoundedProjectAggregates(t *testing.T)
 		}
 		if !strings.Contains(statement, "FROM analytics.llm_invocations_dashboard_second_rollup") || strings.Contains(statement, "llm_invocations FINAL") {
 			t.Fatalf("performance aggregate must use the second rollup: %s", statement)
+		}
+		if strings.Contains(statement, "sum(requests)") ||
+			strings.Contains(statement, "sumIf(requests") ||
+			strings.Contains(statement, "sum(system_error_requests)") {
+			t.Fatalf("performance aggregate source columns must be qualified to avoid ClickHouse alias shadowing: %s", statement)
 		}
 	}
 	if result.Summary.TotalRequests != 3 || result.Summary.SystemErrorRequests != 1 || result.Summary.P95LatencyMs == nil || *result.Summary.P95LatencyMs != 200 {

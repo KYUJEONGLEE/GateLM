@@ -708,12 +708,14 @@ type routerTestInvocationLogReader struct {
 	detailFilter         invocationlog.RequestDetailFilter
 	dashboardFilter      invocationlog.DashboardOverviewFilter
 	analyticsFilter      invocationlog.AnalyticsPerformanceFilter
+	liveUsageFilter      invocationlog.AnalyticsLiveUsageFilter
 	policyImpactFilter   invocationlog.AnalyticsPolicyImpactFilter
 	reliabilityFilter    invocationlog.AnalyticsReliabilityFilter
 	items                []invocationlog.RequestLogListItem
 	detail               invocationlog.RequestDetail
 	overview             invocationlog.DashboardOverviewFields
 	analyticsPerformance invocationlog.AnalyticsPerformanceFields
+	liveUsage            invocationlog.AnalyticsLiveUsageFields
 	policyImpact         invocationlog.AnalyticsPolicyImpactFields
 	analyticsReliability invocationlog.AnalyticsReliabilityFields
 }
@@ -740,6 +742,11 @@ func (r *routerTestInvocationLogReader) GetCostReport(_ context.Context, _ invoc
 func (r *routerTestInvocationLogReader) GetAnalyticsPerformance(_ context.Context, filter invocationlog.AnalyticsPerformanceFilter) (invocationlog.AnalyticsPerformanceFields, error) {
 	r.analyticsFilter = filter
 	return r.analyticsPerformance, nil
+}
+
+func (r *routerTestInvocationLogReader) GetAnalyticsLiveUsage(_ context.Context, filter invocationlog.AnalyticsLiveUsageFilter) (invocationlog.AnalyticsLiveUsageFields, error) {
+	r.liveUsageFilter = filter
+	return r.liveUsage, nil
 }
 
 func (r *routerTestInvocationLogReader) GetAnalyticsPolicyImpact(_ context.Context, filter invocationlog.AnalyticsPolicyImpactFilter) (invocationlog.AnalyticsPolicyImpactFields, error) {
