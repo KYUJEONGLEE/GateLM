@@ -1,7 +1,5 @@
 # GateLM
 
-[![CI](https://github.com/KYUJEONGLEE/GateLM/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/KYUJEONGLEE/GateLM/actions/workflows/ci.yml)
-
 **기업의 LLM 트래픽을 한곳에서 통제하는 셀프 호스팅 LLM Gateway**
 
 GateLM은 애플리케이션과 LLM Provider 사이에서 인증, 정책, 비용, 안전, 라우팅, 로그를 일관되게 관리합니다. 각 애플리케이션이 Provider별 연동과 운영 정책을 따로 구현하지 않아도 되도록 제어 영역과 요청 처리 경로를 분리해 제공합니다.
@@ -18,20 +16,36 @@ GateLM은 애플리케이션과 LLM Provider 사이에서 인증, 정책, 비용
 - **Tenant Chat**: 독립 인증·세션, private Gateway, 사용량 원장, Chat UI 구성요소를 포함합니다.
 - **셀프 호스팅**: PostgreSQL과 Redis를 기반으로 한 Docker Compose 배포 구성을 제공합니다.
 
-## 요청 처리 흐름
+## 동작 구조
 
-```text
-관리자      Web Console -> Control Plane -> RuntimeSnapshot 발행
+```mermaid
+flowchart TB
+    subgraph management["정책 관리"]
+        direction LR
+        admin["관리자"] --> console["Web Console"]
+        console --> control["Control Plane"]
+        control --> snapshot["RuntimeSnapshot"]
+    end
 
-애플리케이션 -> Gateway
-             -> 인증
-             -> Rate Limit / 예산 / 쿼터
-             -> PII·Secret 안전 정책
-             -> Cache
-             -> Routing
-             -> Provider / Fallback
+    subgraph request["요청 처리"]
+        direction LR
+        client["애플리케이션<br/>Tenant Chat"] --> gateway["Gateway"]
+        gateway --> policy["정책 집행<br/>인증 · Rate Limit · 예산 · 쿼터<br/>PII/Secret 마스킹 · 차단"]
+        policy --> cache["Cache"]
+        cache --> routing["Routing"]
+        routing --> provider["LLM Provider"]
+        routing -.->|실패 시| fallback["Fallback Provider"]
+    end
 
-관측 데이터  Gateway -> Request Log / Dashboard / Prometheus
+    subgraph observability["관측"]
+        direction LR
+        requestLog["Request Log"] --> dashboard["Dashboard"]
+        metrics["Prometheus / Grafana"]
+    end
+
+    snapshot -.->|정책 배포| gateway
+    gateway --> requestLog
+    gateway --> metrics
 ```
 
 정책은 Control Plane에서 관리하고, 실제 LLM 요청에 대한 최종 집행은 Gateway에서 수행합니다.
