@@ -3,89 +3,120 @@
 | Field | Value |
 |---|---|
 | Status | Active as-built snapshot |
-| Baseline | `origin/dev @ 79bf254d` |
-| Verified at | 2026-07-13 |
-| Release meaning | Unreleased development snapshot |
+| Baseline | `origin/dev @ e54d35b94d0409cf4b6ceba8036735f1ee7afe6e` |
+| Main cross-check | `origin/main @ 7e6eff7d2bfb315998028c4382ca671065eace49` |
+| Verified at | 2026-07-27 |
+| Verification scope | code tree와 first-parent merge history 재조사; fresh-host/release gate 재실행 아님 |
+| Release meaning | `Unreleased`; refactor/release gate 완료 후 target `v1.0.0` |
 | Official latest release | `v0.0.1` |
 
-이 문서는 API/DB/Event/Metrics 계약을 새로 정의하지 않는다. 현재 `origin/dev`에 병합된 코드와 PR 흐름에서 확인되는 구현 상태만 요약한다.
+이 문서는 API/DB/Event/Metrics 계약을 새로 정의하지 않는다. 현재 `origin/dev`에 병합된 코드와 이력에서 확인한 as-built 상태만 요약한다. 구현 존재는 acceptance, GA, production-ready 또는 release 완료를 뜻하지 않는다.
 
 ## 1. Runtime Topology
 
 | Component | Verified implementation |
 |---|---|
-| Web Console | Next.js 15, React 19, TypeScript |
-| Tenant Chat Web | Next.js 15 기반 auth/invitation/tenant-selection BFF와 Chat shell |
-| Tenant Chat API | NestJS 기반 private auth/session API와 Control Plane identity/entitlement client |
-| Legacy Application surface | `apps/application`에 보존된 기존 Project/Application Chat reference |
-| Control Plane API | NestJS, Prisma |
-| Gateway data plane | Go 1.24 public `/v1` data plane과 opt-in Tenant Chat private listener |
-| AI service | Python 3.12, FastAPI |
-| State and dependencies | PostgreSQL, Redis, Mock Provider |
-| Delivery | Production Dockerfiles와 `deploy/selfhost` bundle |
-| Observability | Prometheus/Grafana 설정과 Gateway metrics/logging 경로 |
+| Web Console | Next.js 15, React 19, TypeScript 기반 관리·Dashboard·Analytics UI |
+| Tenant Chat Web | Next.js 15 기반 auth/tenant selection, conversation/composer, SSE와 RAG/usage UX |
+| Tenant Chat API | NestJS 기반 auth/session, EncryptedChatStore, conversation/turn/SSE, private execution과 RAG orchestration |
+| Legacy Application surface | `apps/application`에 남아 있는 기존 기본 챗봇. 신규 기능 동결 및 단계적 종료 후보 |
+| Control Plane API | NestJS, Prisma 기반 관리 plane, Tenant Chat runtime/usage/RAG/analytics module |
+| Gateway data plane | Go 1.24 public `/v1` data plane과 private Tenant Chat execution path |
+| AI Service | Python 3.12+ FastAPI 기반 PII, RAG extraction과 routing difficulty inference |
+| State and dependencies | PostgreSQL, Redis, ClickHouse analytics mirror, Mock Provider; RAG code에는 object storage/KMS adapter 경계가 존재 |
+| Delivery | production Dockerfiles, Compose와 `deploy/selfhost` bundle |
+| Observability | Prometheus/Grafana, dashboard rollup, live traffic와 request/usage analytics 경로 |
 
-`apps/worker`와 일부 package 디렉터리는 scaffold 수준이므로 완성된 독립 서비스로 분류하지 않는다.
+`apps/worker`와 일부 package 디렉터리는 독립 production service로 단정하지 않는다. 실제 RAG ingestion/deletion worker의 현재 process 소유권은 코드와 배포 profile을 함께 확인해야 한다.
 
 ## 2. Verified Product Areas
 
-현재 `dev`에서 코드와 병합 이력으로 확인되는 범위다.
+현재 baseline에서 코드와 병합 이력으로 확인되는 범위다.
 
-- Tenant, Project, Application, Provider connection, credential metadata, RuntimeConfig/RuntimeSnapshot 관리
-- 조직 초대, 직원 관리, 프로젝트 배정과 직원 통제 UI/API
-- Gateway auth, rate limit, budget, masking/safety, routing, cache, provider, fallback, outcome logging stages
-- OpenAI-compatible adapter(OpenAI/Gemini-compatible endpoint), Anthropic Messages adapter, Mock adapter 코드와 테스트
-- Category-aware/advanced routing 코드와 offline evaluation harness
-- Exact Cache와 optional Semantic Cache 코드, 평가 및 guard
-- 비용/예산/쿼터/Redis rate-limit 관련 domain과 Control Plane 모델
-- Request Log, Dashboard, Live Requests, Request Detail, Gateway Pipeline UI
-- Application Chat과 conversation 경로
-- Tenant Chat invitation/password/Google auth, rotating refresh session, tenant selection과 독립 Chat shell
-- Tenant Chat identity/runtime/publish 경계와 usage schema, outbox projector, 요청 목록/상세 및 집계 Dashboard
-- Tenant Chat private workload JWT/binding/JTI, admission/cancel/completion, Provider/fallback, quota/budget reservation과 confirmed/released/unconfirmed settlement
-- Tenant Chat provider-attempt, usage ledger/outbox, terminal replay와 동일 idempotency 요청의 in-flight attach
-- Self-host Compose bundle, migration/seed/smoke/운영 문서
-- mutation auth, demo/public 노출 제한, raw response capture 제한 등 보안 hardening
+- Tenant, Project, Application, Provider connection, credential metadata와 RuntimeConfig/RuntimeSnapshot 관리
+- 조직 초대, 직원 관리, 프로젝트 배정, 계정 복구와 관리자 계정 연결 UI/API
+- public Gateway auth, rate limit, budget, masking/safety, routing, cache, Provider/fallback과 outcome logging
+- OpenAI-compatible, Anthropic Messages, Gemini-compatible endpoint와 Mock adapter 코드/테스트
+- category × difficulty routing, authoritative private 106D difficulty runtime과 offline evaluation harness
+- Exact Cache와 optional Semantic Cache code/evaluation guard
+- Request Log, Dashboard rollup, Live Requests, Request Detail, Analytics와 Gateway Pipeline UI
+- PostgreSQL invocation log monthly partitioning과 ClickHouse mirror/backfill/readers/rollup/live traffic 경로
+- Tenant Chat invitation/password/Google auth, rotating refresh session과 tenant selection
+- Tenant Chat encrypted conversation CRUD/history, bounded turn/SSE, composer와 terminal replay fail-closed 경계
+- Tenant Chat private workload binding/JWT, admission/sanitization/completion/cancel, Provider/fallback와 usage settlement
+- Tenant Chat exact cache, weekly employee token quota, masking provenance/observability와 horizontal PII runtime 구성
+- Tenant Chat RAG admin/retrieval/ingestion code, conversation knowledge mode, citation, cost Dashboard와 exact-cache integration
+- Tenant Chat 직원 사용량 ranking API/UI와 tenant admin account link
+- Self-host Compose, migration/seed/smoke script와 운영 문서
+- mutation auth, demo/public 노출 제한, raw response capture 제한과 production secret/config hardening
+
+기존 기본 챗봇의 코드가 남아 있다는 사실은 계속 지원한다는 제품 결정이 아니다. 신규 개발 대상은 Tenant Chat이며, legacy surface 제거는 [`proposals/v1-release-candidate-refactoring-baseline.md`](proposals/v1-release-candidate-refactoring-baseline.md)의 `LEG-00` inventory와 별도 계약 결정을 먼저 거친다.
 
 ## 3. Status Boundaries
 
-구현 존재와 제품 활성 상태를 구분한다.
-
 | Area | Safe statement | Do not assume |
 |---|---|---|
-| Tenant Chat | 독립 `chat-web` auth shell, `chat-api` auth/session, Control Plane identity/runtime/projection, private Gateway admission/completion과 Provider/fallback/usage ledger 코드 및 테스트가 `dev`에 병합됨 | Chat API conversation/SSE/EncryptedChatStore와 Chat Web composer가 연결된 end-to-end 제품, Exact Cache/Safety 실행, fresh-host acceptance, release 완료 또는 GA |
-| Semantic Cache | 코드와 테스트가 존재하며 기본 설정은 disabled/shadow | 기본 live response path 또는 GA |
-| Advanced Routing | 분류/정책/evaluation harness가 존재 | 최신 정확도, SLA, production quality |
-| Provider adapters | adapter 코드와 테스트가 존재 | 모든 vendor의 production credential live 검증 완료 |
-| AI Safety | masking, NER/privacy evaluation, sidecar 경로가 존재 | production-grade DLP 또는 승인된 품질 수준 |
-| Self-host | bundle과 스크립트가 존재 | fresh-host acceptance와 release 완료 |
-| Observability | metrics/log/dashboard 코드와 설정이 존재 | 운영 SLA 또는 현재 HEAD 전체 evidence 완료 |
+| Tenant Chat | auth, encrypted conversation/SSE/composer, private execution, exact cache, quota, masking과 RAG code path가 `dev`에 병합됨 | employee notice acknowledgement, Admin Content Diagnostic, fresh-host acceptance, 전체 browser E2E, GA |
+| Tenant Chat RAG | admin/API/worker/retrieval/citation과 cost/cache integration code가 존재 | 실제 staging S3/KMS/embedding 검증, hard-delete/orphan 복구, production acceptance |
+| AI Safety/PII | v3.14 QInt8 local package와 synthetic/private offline evaluation, fail-closed/horizontal runtime code가 존재 | 운영 활성화, remote readiness와 Gateway E2E, production-grade DLP 선언 |
+| Advanced Routing | active 106D model-path contract, private inference와 rule fallback code가 존재 | 모든 traffic/locale의 운영 정확도와 SLA |
+| ClickHouse Analytics | mirror, backfill, reader, rollup과 live traffic code가 존재 | 모든 기간 parity, 장애 복구, 보존·비용 SLA 완료 |
+| Provider adapters | adapter code와 test가 존재 | 모든 vendor의 production credential live 검증 완료 |
+| Account recovery | Control Plane/Web code가 존재 | 실제 production email delivery와 abuse-resistance acceptance 완료 |
+| Legacy Application Chat | `apps/application`과 legacy conversation surface가 현재 존재 | 즉시 삭제해도 public `/v1`, Project/Application 관리와 데이터가 안전함 |
+| Self-host | bundle, image와 script가 존재 | 최신 SHA의 clean fresh-host, upgrade/rollback/restore 완료 |
+| Observability | metric/log/dashboard/rollup code와 설정이 존재 | 운영 SLA, alert delivery와 current baseline 전체 evidence 완료 |
 
-## 4. Recent Merged Development Flow
+## 4. Contracted But Unconnected Product Surfaces
 
-다음 항목은 2026-07-13(KST) 기준 `dev`에 병합된 최근 제품 변경의 예다.
+### Employee notice acknowledgement
 
-- PR #295: Tenant Chat active contract와 통합 경계 확정
-- PR #296: tenant RuntimeSnapshot/publish와 usage schema 기반 구현
-- PR #297: private listener, workload JWT/JTI, admission/cancel과 usage transaction 기반 구현
-- PR #298: 초대 인증, rotating session, tenant selection과 Chat Web auth shell 구현
-- PR #301: usage outbox projector와 Tenant Chat Dashboard 구현
-- PR #304: Chat API, Control Plane, Gateway 소유권과 가격 검증 경계 정렬
-- PR #305: cache-read 가격 제약 migration 이력 교정
-- PR #307: private completion, Provider/fallback, 정산과 terminal replay/attach 구현
-- PR #308: Web Console, 분석 화면, 내비게이션과 다국어 전환 UI 개선
+`employeeNoticeVersion`은 RuntimeSnapshot, private metadata와 execution binding으로 전달된다. 그러나 직원별 acknowledgement state/API/UI와 admission 비교는 baseline app code에서 확인되지 않았다. active Tenant Chat 계약의 `CHAT_POLICY_ACK_REQUIRED`와 구현 사이의 gap은 `DOC-026`으로 관리한다.
 
-열린 PR은 병합되기 전까지 위 current 구현 목록에 포함하지 않는다.
+### Admin Content Diagnostic
 
-## 5. Version Evidence
+active Tenant Chat 계약은 step-up, allowlisted purpose, 60초 one-time decrypt grant와 append-only audit를 가진 단건 diagnostic을 MVP로 두지만, 전역 forbidden-data policy의 raw prompt/response UI·API 금지와 충돌한다. baseline app code에도 해당 route, grant/audit persistence와 UI가 확인되지 않았다. `DOC-027`에서 기능 제외 또는 제한된 Security exception을 먼저 결정한다.
 
-현재 저장소의 버전 신호는 일치하지 않는다.
+## 5. Representative Merged Development Flow
+
+다음은 오래된 2026-07-13 snapshot 이후 현재 baseline에 포함된 대표 변경이다. 전체 release evidence 목록이 아니다.
+
+- PR #341: Tenant Chat encrypted conversation과 SSE
+- PR #377: Tenant Chat routing v2
+- PR #392: Tenant Chat RAG 기반 구현
+- PR #433: Tenant Chat 주간 직원 token quota
+- PR #442: Tenant Chat RAG Exact Cache
+- PR #457, #487: PII runtime 고도화와 v3.14 배포 준비
+- PR #497, #503, #524: PostgreSQL 월 partition, ClickHouse mirror와 log reader
+- PR #536: PII horizontal scale
+- PR #540: account recovery
+- PR #544, #551: Tenant Chat 직원 사용량 ranking UI/API
+- PR #553: Analytics live project traffic
+
+열린 PR이나 원격 feature branch는 `dev`에 병합되기 전까지 current 구현으로 기록하지 않는다.
+
+## 6. Verification Boundary
+
+DOC-01에서는 다음을 확인했다.
+
+- baseline commit과 main/dev ancestry 및 tree 차이
+- app/package topology와 manifest runtime version
+- current contract와 implementation gap의 code search
+- first-parent merged development history
+
+DOC-01에서 전체 app build, 모든 unit/integration/browser E2E, fresh migration, load/failover, real Provider/RAG staging과 security scan은 다시 실행하지 않았다. 과거 `main @ 7e6eff7d...` 감사 결과도 이 dev baseline의 PASS로 재표기하지 않는다. exact RC SHA를 고른 뒤 전체 release gate를 별도로 실행한다.
+
+## 7. Version Evidence
+
+현재 저장소의 목표 제품 버전은 정해졌지만 release identity는 아직 정렬되지 않았다.
 
 - GitHub latest release: `v0.0.1`
-- remote release tags: `v0.0.1`, `v0.0.1-rc.1`
+- remote tags: `v0.0.1`, `v0.0.1-rc.1`
+- local-only historical tag observed in this audit: `v1.0.0-rc.1` (`cd41a682...`); 원격 tag나 release evidence가 아니며 재사용하지 않음
+- target product release: `v1.0.0`
 - root package: `0.0.0`
 - 일부 app package: `0.1.0`
-- docs: `v2.0.0`, `v2.1.0`
+- pre-v1 workstream paths: `docs/v1.0.0`, `docs/v2.0.0`, `docs/v2.1.0`
 - self-host image examples: `2.1.0`
 
-따라서 이 문서는 `v2.1.0 released` 또는 새로운 SemVer를 선언하지 않는다. 다음 버전은 release owner의 결정과 tag/package/docs 정렬이 필요하다.
+따라서 이 문서는 현재 dev를 `v1.0.0` 또는 GA로 선언하지 않는다. 리팩토링 완료 후 exact release SHA를 선택하고 tag/package/image/docs와 전체 evidence를 정렬해야 한다.

@@ -1,16 +1,18 @@
-# GateLM v2.0.0 Documentation Status
+# GateLM Pre-v1 Compatibility Workstream (former v2.0.0)
 
 > [!NOTE]
 > **Superseded by active routing contract:** 일반 Gateway 라우팅 의미는 [`../routing/README.md`](../routing/README.md)가 대체한다. 이 주석은 historical 원문을 수정하거나 삭제하지 않는다.
 
 | Field | Value |
 |---|---|
-| Status | Historical baseline |
+| Status | Pre-v1 historical compatibility workstream |
+| Former label | `v2.0.0`; 정식 제품 릴리스가 아님 |
 | Lifecycle | Closed historical workstream; release/implementation completion not asserted |
 | Active entrypoint | [`../current/README.md`](../current/README.md) |
+| Pre-v1 registry | [`../pre-v1/README.md`](../pre-v1/README.md) |
 | Change policy | 상태 설명, errata, compatibility annotation만 허용 |
 
-이 폴더는 삭제하지 않는다. v2.0.0에서 합의한 행동 계약과 schema/fixture는 아직 대체되지 않은 영역의 baseline compatibility로 남기고, 구현 계획과 PR 문서는 과거 실행 evidence로 보존한다.
+이 폴더는 삭제하지 않는다. former v2.0.0 workstream에서 합의한 행동 계약과 schema/fixture는 아직 대체되지 않은 영역의 baseline compatibility로 남기고, 구현 계획과 PR 문서는 과거 실행 evidence로 보존한다.
 
 ## Baseline Compatibility
 

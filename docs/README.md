@@ -22,16 +22,17 @@
 |---|---|---|---|
 | `docs/current/` | Active | 현재 문서 라우팅과 구현 스냅샷 | 모든 작업의 첫 진입점 |
 | `docs/tenant-chat/` | Active scoped contract | 신규 Tenant Chat API/DB/Event/Metrics/Security 계약 | Tenant Chat 작업에서 current router를 통해 사용 |
-| `docs/v2.1.0/` | Versioned scope | Self-host delivery와 Advanced Routing offline evidence | 해당 범위에서만 사용 |
-| `docs/v2.0.0/` | Historical baseline | 아직 대체되지 않은 행동 계약의 compatibility 기준 | current 문서가 연결할 때만 사용 |
-| `docs/v1.0.0/` | Historical compatibility | v1 호환성 및 과거 evidence | 회귀/이력 조사에만 사용 |
+| `docs/pre-v1/` | Active migration index | 과거 release-like workstream의 상태와 이관 순서 | v1/v2 폴더를 해석하기 전에 확인 |
+| `docs/v2.1.0/` | Pre-v1 scoped workstream | Self-host delivery와 Advanced Routing offline evidence | current contract map이 연결한 범위에서만 사용 |
+| `docs/v2.0.0/` | Pre-v1 historical baseline | 아직 대체되지 않은 행동 계약의 compatibility 기준 | current 문서가 연결할 때만 사용 |
+| `docs/v1.0.0/` | Pre-v1 historical freeze | 초기 계약과 legacy fixture | 회귀/이력 조사에만 사용; 새 v1 문서로 덮어쓰지 않음 |
 | `docs/architecture/` | Supporting reference | 설계 배경 | 현재 코드와 계약으로 재검증 |
 | `docs/policies/` | Supporting policy | 코딩, 비용, PII 정책 | current 계약과 충돌 시 current 우선 |
 | `docs/testing/` | Design/evidence | 특정 시점의 실험, 테스트, 결과 | 날짜와 commit 범위를 확인 |
 | `docs/reference/` | Reference/draft | 장기 설계와 후보 계획 | 계약 권한 없음 |
 | `docs/archive/` | Archived | 과거 기록 | 현재 기준 선언에 사용 금지 |
 
-`current`는 새 계약을 복사해 두는 폴더가 아니다. 현재 어떤 versioned 문서가 어느 범위에서 유효한지 설명하는 안정적인 진입점이다.
+`current`는 새 계약을 복사해 두는 폴더가 아니다. 현재 어떤 scoped contract와 pre-v1 문서가 어느 범위에서 유효한지 설명하는 안정적인 진입점이다.
 
 ## 3. Source Of Truth Rules
 
@@ -45,19 +46,20 @@
 
 코드와 테스트는 현재 구현을 확인하는 evidence다. 계약과 코드가 다르면 코드를 자동으로 계약으로 승격하거나 과거 계약으로 코드를 되돌리지 않는다. 차이를 기록하고 별도 계약 결정을 요청한다.
 
-## 4. Current Version Evidence
+## 4. Release Version Policy
 
-저장소에는 서로 다른 버전 신호가 존재한다.
+현재 `dev` 개발본은 `Unreleased`이고, 리팩토링과 전체 release gate 완료 후 목표 제품 버전은 `v1.0.0`이다.
 
 - 공식 GitHub 최신 릴리스: `v0.0.1`
+- target product release: `v1.0.0`
 - root package version: `0.0.0`
 - app package versions: 일부 `0.1.0`
-- 최신 versioned 문서: `docs/v2.1.0/`
 - 현재 개발 통합 브랜치: `dev`
+- 기존 `docs/v1.0.0`, `v2.0.0`, `v2.1.0`: pre-v1 내부 workstream label
 
-따라서 다음 개발 SemVer는 아직 문서로 확정하지 않는다. `docs/current/`는 공식 릴리스 번호가 아니라 `origin/dev` 기준 active development snapshot을 설명한다.
+목표 버전이 정해졌다는 사실만으로 현재 dev를 v1.0.0이라고 부르지 않는다. exact release SHA, tag, package/image/docs 정렬과 전체 release evidence는 별도 gate에서 고정한다.
 
-## 5. Versioned Documentation
+## 5. Scoped And Pre-v1 Documentation
 
 ### Tenant Chat active scope
 
@@ -65,22 +67,22 @@
 
 독립 `chat-web`, `chat-api`, private Gateway, encrypted history와 usage ledger는 계약상 목표이며 현재 구현 사실은 `docs/current/implementation-status.md`에서 별도로 확인한다.
 
-### v2.1.0
+### Pre-v1 Self-host and Routing workstream (former v2.1.0)
 
 [`docs/v2.1.0/README.md`](v2.1.0/README.md)를 먼저 읽는다.
 
-v2.1.0 문서는 두 가지 범위를 포함한다.
+former v2.1.0 문서는 두 가지 pre-v1 범위를 포함한다.
 
 - Single-node Docker Compose self-host delivery
 - Advanced/category routing offline evaluation evidence
 
-이 폴더는 최근 UI, 직원 통제, 정책 관리 등 모든 post-v2 기능을 포괄하는 제품 계약이 아니다.
+이 폴더는 정식 v2 제품 릴리스를 뜻하지 않으며, 최근 UI, 직원 통제, 정책 관리 등 전체 제품을 포괄하는 계약도 아니다.
 
-### v2.0.0
+### Pre-v1 compatibility workstream (former v2.0.0)
 
 [`docs/v2.0.0/README.md`](v2.0.0/README.md)에서 문서별 상태를 확인한다.
 
-v2.0.0 workstream은 active가 아니며 문서는 historical baseline이다. 다음 항목은 아직 명시적으로 대체되지 않은 영역의 compatibility 검토에 사용한다.
+former v2.0.0 workstream은 출시되지 않은 historical baseline이다. 다음 항목은 아직 명시적으로 대체되지 않은 영역의 compatibility 검토에 사용한다.
 
 1. `docs/v2.0.0/contracts.md`
 2. `docs/v2.0.0/schemas/*.schema.json`
@@ -132,7 +134,7 @@ v2.0.0 workstream은 active가 아니며 문서는 historical baseline이다. �
 
 ```powershell
 git diff --check
-corepack pnpm run verify:v2-docs
+corepack pnpm run verify:docs
 ```
 
 v2.1 category evaluation 계약, schema 또는 fixture를 변경하면 다음도 실행한다.
@@ -147,4 +149,4 @@ v2.1 difficulty evaluation 계약, schema 또는 fixture를 변경하면 다음�
 corepack pnpm run verify:v2.1-difficulty-eval
 ```
 
-`verify:v2-docs`는 current entrypoint, version status README, v2 baseline schema/fixture를 검증하지만 일반 Markdown 링크와 anchor를 전부 검사하지 않는다. 링크 검사는 별도로 수행하고 결과를 작업 보고에 남긴다.
+`verify:docs`는 current entrypoint, pre-v1 상태 README, baseline schema/fixture와 관리 대상 상대 링크를 검증한다. 저장소 전체 Markdown anchor 검사는 아직 별도 범위다.

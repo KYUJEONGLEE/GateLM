@@ -70,7 +70,7 @@ const commands = [
   {
     name: "v2 docs",
     packageManager: true,
-    args: ["run", "verify:v2-docs"],
+    args: ["run", "verify:docs"],
   },
   {
     name: "v2.1 difficulty training candidate",

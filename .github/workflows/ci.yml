@@ -62,7 +62,7 @@ jobs:
           git diff --check "$diff_base" "$head_sha"
 
       - name: Verify current documentation
-        run: pnpm verify:v2-docs
+        run: pnpm verify:docs
 
       - name: Validate GitHub Actions workflows
         run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
