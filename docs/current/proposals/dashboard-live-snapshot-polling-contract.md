@@ -3,6 +3,8 @@
 | Field | Value |
 |---|---|
 | Status | Proposed; implementation companion, not active until merged and accepted |
+| Contract lifecycle | Proposed |
+| Document role | Contract proposal; implementation companion |
 | Applies to | Web Console Dashboard BFF and browser refresh behavior |
 | Baseline | `origin/dev @ cc23ffac` |
 | Polling target | 1 second after the previous request settles |

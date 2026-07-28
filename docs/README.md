@@ -4,10 +4,11 @@
 
 ## 1. Start Here
 
-현재 작업은 항상 다음 두 문서로 시작한다.
+현재 작업은 항상 다음 세 문서로 시작한다.
 
 1. [`docs/current/README.md`](current/README.md): 현재 문서 상태와 범위별 진입점
 2. [`docs/current/source-of-truth.md`](current/source-of-truth.md): 문서 권한, 충돌 처리, 계약 변경 규칙
+3. [`docs/current/contract-map.md`](current/contract-map.md): 범위별 active 계약과 proposal lifecycle
 
 필요할 때만 다음 문서를 추가로 읽는다.
 

@@ -2,7 +2,9 @@
 
 | Field | Value |
 |---|---|
-| Status | Proposed planning baseline; not an active contract |
+| Status | Planning baseline; not an active contract |
+| Contract lifecycle | N/A |
+| Document role | Refactoring planning baseline |
 | Applies to | target `v1.0.0` 준비를 위한 리팩토링 순서와 검증 경계 |
 | Implementation baseline | `origin/dev @ e54d35b94d0409cf4b6ceba8036735f1ee7afe6e` |
 | Main cross-check | `origin/main @ 7e6eff7d2bfb315998028c4382ca671065eace49` |

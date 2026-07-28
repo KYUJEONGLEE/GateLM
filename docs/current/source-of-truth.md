@@ -59,6 +59,10 @@ GateLM은 current 계약을 versioned 계약과 별도로 복제하지 않는다
 
 이 scope는 제품 release SemVer를 선언하지 않는다. 기존 Project/Application Chat과 public `/v1` 경로는 inherited compatibility로 보존한다. Tenant Chat 구현은 `origin/dev`에 존재하며, 현재 as-built 범위와 아직 연결되지 않은 end-to-end 경계는 [`implementation-status.md`](implementation-status.md)에서 구분한다. 구현 존재만으로 contract acceptance, release 완료 또는 GA를 선언하지 않는다.
 
+Tenant Chat RAG의 API/DB/Event/Metrics/Security 의미도 이 active scope에
+포함된다. `docs/rag/**`는 구현 계획과 검증 자료이며 이 범위의 Tenant Chat
+계약, OpenAPI 또는 schema를 덮어쓰지 않는다.
+
 ### General Gateway routing
 
 일반 Gateway의 category × difficulty 정책, auto/manual 요청 의미, RuntimeSnapshot routing, routing outcome과 provider-attempt 경계는 다음 active scoped contract를 사용한다.

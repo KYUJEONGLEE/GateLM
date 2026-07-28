@@ -3,6 +3,8 @@
 | Field | Value |
 |---|---|
 | Status | Proposed; not active until owner approval, implementation, and acceptance |
+| Contract lifecycle | Proposed |
+| Document role | Contract proposal |
 | Applies to | Web Analytics `reliability` tab and Gateway observability reliability reader |
 | Does not apply to | Billing or quota enforcement, SLA declaration, latency percentile merging, Request Detail mutation, or metrics labels |
 | Source surfaces | `project_application`, `tenant_chat` |

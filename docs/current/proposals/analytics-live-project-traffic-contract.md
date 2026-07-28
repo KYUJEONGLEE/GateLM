@@ -2,7 +2,9 @@
 
 | Field | Value |
 |---|---|
-| Status | Implementation companion proposal |
+| Status | Proposal with implementation; not active |
+| Contract lifecycle | Proposed |
+| Document role | Contract proposal; implementation companion |
 | Applies to | Console Analytics usage view, Web BFF, Gateway observability read, Control Plane project summaries |
 | Canonical write source | PostgreSQL terminal invocation log |
 | Live read source | ClickHouse `analytics.llm_invocations_dashboard_second_rollup` |

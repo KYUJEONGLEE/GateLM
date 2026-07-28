@@ -22,9 +22,14 @@
 | 문서 | 역할 | 현재 권위 |
 |---|---|---|
 | [`analytics-cache-surface-contract.md`](analytics-cache-surface-contract.md) | Contract proposal with feature-branch implementation | Non-authoritative |
+| [`analytics-live-project-traffic-contract.md`](analytics-live-project-traffic-contract.md) | Implementation companion proposal | Non-authoritative |
 | [`analytics-policy-impact-data-contract.md`](analytics-policy-impact-data-contract.md) | Contract proposal with feature-branch implementation | Non-authoritative |
+| [`clickhouse-analytics-mirror-contract.md`](clickhouse-analytics-mirror-contract.md) | Multi-phase implementation companion | Non-authoritative |
 | [`control-plane-account-recovery-contract.md`](control-plane-account-recovery-contract.md) | Contract proposal with implementation | Non-authoritative |
 | [`dashboard-live-snapshot-polling-contract.md`](dashboard-live-snapshot-polling-contract.md) | Contract proposal and implementation companion | Non-authoritative |
+| [`dashboard-observability-rollup-contract.md`](dashboard-observability-rollup-contract.md) | Feature-branch implementation behind rollout controls | Non-authoritative |
+| [`employee-security-analytics-contract.md`](employee-security-analytics-contract.md) | Implementation companion proposal | Non-authoritative |
+| [`employee-unified-usage-contract.md`](employee-unified-usage-contract.md) | Implementation companion proposal | Non-authoritative |
 | [`p0-invocation-log-monthly-partitioning.md`](p0-invocation-log-monthly-partitioning.md) | Contract proposal | Non-authoritative |
 | [`tenant-unified-reliability-read-contract.md`](tenant-unified-reliability-read-contract.md) | Contract proposal; owner approval 전 비활성 | Non-authoritative |
 | [`unified-analytics-performance-contract.md`](unified-analytics-performance-contract.md) | Contract proposal with feature-branch implementation | Non-authoritative |
@@ -50,19 +55,10 @@
 
 ## Non-contract Documents
 
-아래 분류는 계약 lifecycle이 아니라 문서 역할이다. Contract lifecycle은
-`N/A`이며 구현 또는 참고 자료가 존재해도 API/DB/Event/Metrics/Security
-변경 권한을 갖지 않는다.
-
-### Implementation Companion
-
-| 문서 | 역할 | Contract lifecycle | 현재 권위 |
-|---|---|---|---|
-| [`analytics-live-project-traffic-contract.md`](analytics-live-project-traffic-contract.md) | Implementation companion proposal | N/A | Non-authoritative |
-| [`clickhouse-analytics-mirror-contract.md`](clickhouse-analytics-mirror-contract.md) | Multi-phase implementation companion | N/A | Non-authoritative |
-| [`dashboard-observability-rollup-contract.md`](dashboard-observability-rollup-contract.md) | Feature-branch implementation behind rollout controls | N/A | Non-authoritative |
-| [`employee-security-analytics-contract.md`](employee-security-analytics-contract.md) | Implementation companion proposal | N/A | Non-authoritative |
-| [`employee-unified-usage-contract.md`](employee-unified-usage-contract.md) | Implementation companion proposal | N/A | Non-authoritative |
+아래 분류는 API/DB/Event/Metrics/Security 의미를 직접 정의하지 않는 자료이며
+Contract lifecycle은 `N/A`다. `Implementation companion`은 lifecycle이 아닌
+문서 역할이므로, 규범적인 계약 내용을 가진 문서는 위 lifecycle 표에 역할과
+함께 등록한다.
 
 ### Planning Baseline
 
@@ -79,13 +75,15 @@
 
 ## Registry Rules
 
-1. 새 계약 proposal은 Contract Lifecycle에 등록하고 원문 상단에 Status와
-   Applies to를 둔다.
-2. implementation companion, planning baseline, reference와 handoff는
-   Non-contract Documents에 역할로 등록한다.
-3. owner가 승인해도 [`../contract-map.md`](../contract-map.md)에서 해당
+1. 모든 proposal 문서는 원문 상단에 `Status`, `Contract lifecycle`,
+   `Document role`, `Applies to`를 둔다.
+2. `Implementation companion`은 문서 역할이며 `Proposed`, `Accepted`,
+   `Active`, `Superseded`, `Archived` lifecycle과 별도로 기록한다.
+3. 규범적인 계약 의미가 없는 planning baseline, reference와 handoff만
+   Non-contract Documents에 `N/A`로 등록한다.
+4. owner가 승인해도 [`../contract-map.md`](../contract-map.md)에서 해당
    범위를 Active로 연결하기 전에는 current active contract가 아니다.
-4. 승격 PR은 대체하는 문서, compatibility 기간, schema/fixture와 구현 gate를
+5. 승격 PR은 대체하는 문서, compatibility 기간, schema/fixture와 구현 gate를
    함께 기록한다.
-5. Superseded 문서는 current 후보 목록에 다시 노출하지 않는다.
-6. archive 이동은 링크와 이력 보존 계획을 별도 검토한 뒤 수행한다.
+6. Superseded 문서는 current 후보 목록에 다시 노출하지 않는다.
+7. archive 이동은 링크와 이력 보존 계획을 별도 검토한 뒤 수행한다.

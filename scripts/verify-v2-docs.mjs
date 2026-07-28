@@ -25,6 +25,7 @@ const requiredTopLevelSchemaFields = [
 const activeEntryDocs = [
   "docs/current/README.md",
   "docs/current/source-of-truth.md",
+  "docs/current/contract-map.md",
 ];
 
 const currentSnapshotDocs = [
@@ -466,17 +467,111 @@ function assertProposalRegistry() {
   const relativeDir = "docs/current/proposals";
   const registryPath = `${relativeDir}/README.md`;
   const registry = readText(registryPath);
+  const lifecycleValues = ["Proposed", "Accepted", "Active", "Superseded", "Archived"];
   const proposalFiles = readdirSync(toAbsolute(relativeDir))
     .filter((fileName) => fileName.endsWith(".md") && fileName !== "README.md")
     .sort();
+  const registrations = new Map();
+
+  function readRegistrySection(heading, stopPattern) {
+    const escapedHeading = heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const headingMatch = registry.match(new RegExp(`^${escapedHeading}\\r?$`, "m"));
+    if (!headingMatch || headingMatch.index === undefined) {
+      fail(`${registryPath}: missing lifecycle section ${heading}`);
+      return "";
+    }
+
+    const contentStart = registry.indexOf("\n", headingMatch.index);
+    if (contentStart < 0) {
+      fail(`${registryPath}: lifecycle section has no content ${heading}`);
+      return "";
+    }
+    const remaining = registry.slice(contentStart + 1);
+    const nextHeading = remaining.match(stopPattern);
+    return remaining.slice(0, nextHeading?.index ?? remaining.length);
+  }
+
+  function localProposalLinks(section) {
+    return section
+      .split(/\r?\n/)
+      .map((line) => line.match(/^\|\s*\[[^\]]*\]\(([^)]+)\)\s*\|/)?.[1])
+      .filter(Boolean)
+      .map((target) => target.split(/[?#]/, 1)[0].replace(/^\.\//, ""))
+      .filter((target) => target.endsWith(".md") && !target.includes("/") && target !== "README.md");
+  }
+
+  function register(fileName, lifecycle) {
+    const existing = registrations.get(fileName) ?? [];
+    existing.push(lifecycle);
+    registrations.set(fileName, existing);
+  }
+
+  for (const lifecycle of lifecycleValues) {
+    const section = readRegistrySection(`### ${lifecycle}`, /^#{2,3} /m);
+    for (const fileName of localProposalLinks(section)) {
+      register(fileName, lifecycle);
+    }
+  }
+
+  const nonContractSection = readRegistrySection("## Non-contract Documents", /^## /m);
+  for (const fileName of localProposalLinks(nonContractSection)) {
+    register(fileName, "N/A");
+  }
 
   for (const fileName of proposalFiles) {
-    if (!registry.includes(`](${fileName})`)) {
+    const fileRegistrations = registrations.get(fileName) ?? [];
+    if (fileRegistrations.length === 0) {
       fail(`${registryPath}: missing proposal registration ${fileName}`);
+    } else if (fileRegistrations.length > 1) {
+      fail(
+        `${registryPath}: proposal must be registered exactly once ${fileName} (${fileRegistrations.join(", ")})`,
+      );
     }
+
     const proposal = readText(`${relativeDir}/${fileName}`);
-    if (!/\|\s*Status\s*\|/.test(proposal.split(/\r?\n/).slice(0, 20).join("\n"))) {
+    const header = proposal.split(/\r?\n/).slice(0, 24).join("\n");
+    const statusMatch = header.match(/^\|\s*Status\s*\|\s*([^|]+?)\s*\|\s*$/m);
+    const lifecycleMatch = header.match(
+      /^\|\s*Contract lifecycle\s*\|\s*(Proposed|Accepted|Active|Superseded|Archived|N\/A)\s*\|\s*$/m,
+    );
+    const roleMatch = header.match(/^\|\s*Document role\s*\|\s*([^|]+?)\s*\|\s*$/m);
+    const appliesToMatch = header.match(/^\|\s*Applies to\s*\|\s*([^|]+?)\s*\|\s*$/m);
+
+    if (!statusMatch) {
       fail(`${relativeDir}/${fileName}: missing top-level Status metadata`);
+    }
+    if (!lifecycleMatch) {
+      fail(`${relativeDir}/${fileName}: missing or invalid Contract lifecycle metadata`);
+    }
+    if (!roleMatch) {
+      fail(`${relativeDir}/${fileName}: missing top-level Document role metadata`);
+    }
+    if (!appliesToMatch) {
+      fail(`${relativeDir}/${fileName}: missing top-level Applies to metadata`);
+    }
+
+    const expectedLifecycle = fileRegistrations[0];
+    const declaredLifecycle = lifecycleMatch?.[1];
+    if (declaredLifecycle && expectedLifecycle && declaredLifecycle !== expectedLifecycle) {
+      fail(
+        `${relativeDir}/${fileName}: registry lifecycle ${expectedLifecycle} does not match metadata ${declaredLifecycle}`,
+      );
+    }
+
+    const statusLifecycleToken = statusMatch?.[1]
+      .trim()
+      .match(/^(Proposed|Proposal|Accepted|Active|Superseded|Archived)\b/)?.[1];
+    const statusLifecycle = statusLifecycleToken === "Proposal" ? "Proposed" : statusLifecycleToken;
+    if (statusLifecycle && statusLifecycle !== declaredLifecycle) {
+      fail(
+        `${relativeDir}/${fileName}: Status begins with ${statusLifecycle} but Contract lifecycle is ${declaredLifecycle}`,
+      );
+    }
+  }
+
+  for (const fileName of registrations.keys()) {
+    if (!proposalFiles.includes(fileName)) {
+      fail(`${registryPath}: registered proposal file is missing ${fileName}`);
     }
   }
 
@@ -488,7 +583,6 @@ function assertProposalRegistry() {
     "### Superseded",
     "### Archived",
     "## Non-contract Documents",
-    "### Implementation Companion",
     "### Planning Baseline",
     "### Reference And Handoff",
   ]) {
@@ -501,6 +595,12 @@ function assertProposalRegistry() {
   if (currentReadme.includes("tenant-employee-cost-policy-contract.md")) {
     fail("docs/current/README.md: superseded proposal must not appear as a current candidate");
   }
+
+  assertIncludes(
+    "docs/current/proposals/tenant-employee-cost-policy-contract.md",
+    "../../tenant-chat/contracts.md",
+  );
+  assertIncludes("docs/current/proposals/employee-unified-usage-frontend-handoff.md", "../../tenant-chat/contracts.md");
 }
 
 function assertRelativeMarkdownLinks(relativePaths) {

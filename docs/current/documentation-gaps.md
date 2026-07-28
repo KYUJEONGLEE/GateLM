@@ -35,7 +35,7 @@
 | DOC-031 | employee daily-token usage 집계의 canonical ledger와 장애 복구 의미가 미결정이다 | Gateway main wiring에서 downstream enqueue 실패가 Redis daily-token usage 집계를 건너뛸 수 있어 파생 counter가 요청 처리/logging failure와 결합됨 | `BILL-00`/`LEDGER-00`에서 canonical source, idempotent replay/rebuild, queue·Redis·DB 장애 parity를 승인한 뒤 큰 module 분해보다 먼저 구현 |
 | DOC-032 | authoritative 106D routing artifact의 원본 aggregate 성능 보고서가 source control에 없다 | `reports/routing-difficulty-model/20260716-model-path-5000/REPORT.md`는 `.gitignore` 대상이며 현재 checkout에 없다. artifact와 runtime contract는 추적되지만 joint/difficulty accuracy 수치의 독립 재검증 문서는 없다 | 원본 manifest와 frozen output에서 민감정보 없는 aggregate evidence를 재현해 `docs/testing/`에 승격하기 전까지 정확도 수치를 release·이력서 근거로 사용하지 않음 |
 | DOC-033 | release-like pre-v1 문서 경로가 실행 코드, Docker, verifier와 provenance에 결합돼 있다 | `docs/v1.0.0`, `docs/v2.0.0`, `docs/v2.1.0`은 fixture import, Docker `COPY`, schema `$id`, manifest source path와 artifact hash consumer를 가짐 | `PVR-00`에서 consumer를 분리하고 기능별 계약 승격과 archive 이동을 hash/provenance 검증과 함께 수행 |
-| DOC-034 | target `v1.0.0` 전체 release gate와 freeze automation이 없다 | `verify:v2-final`과 `v2:rc:freeze`는 former v2 workstream의 범위·출력에 고정돼 있어 v1 release evidence로 사용할 수 없음 | exact v1 범위, package/image/docs 정렬, fresh-host·security·rollback evidence를 묶는 별도 release contract와 자동화 승인 |
+| DOC-034 | target `v1.0.0` 전체 release gate와 freeze automation이 없다 | `verify:v2-final`과 `v2:rc:freeze`는 former v2 workstream의 범위·출력에 고정돼 있어 v1 release evidence로 사용할 수 없음 | exact v1 범위와 baseline commit manifest, package/image/docs 정렬, 공개 registry image tag·digest·consumer 확인, fresh-host·security·rollback evidence를 묶는 별도 release contract와 자동화 승인 |
 
 ## Resolved Decisions
 

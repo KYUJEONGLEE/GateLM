@@ -3,6 +3,8 @@
 | Field | Value |
 |---|---|
 | Status | Proposed contract with implementation in `feat/analysis-tab` |
+| Contract lifecycle | Proposed |
+| Document role | Contract proposal; implementation companion |
 | Applies to | Web Analytics `impact` tab, Gateway aggregate observability, and Tenant Chat projection |
 | Does not apply to | Runtime routing decisions, billing ledger enforcement, quota enforcement, or Tenant Chat RAG retrieval |
 | Last reviewed | 2026-07-18 |

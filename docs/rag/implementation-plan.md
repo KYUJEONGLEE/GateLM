@@ -421,9 +421,14 @@ LIMIT $4;
 
 For retrieval profile version 1, `$3 = 0.30` cosine similarity and `$4 = 6`; both are server-owned constants, never client parameters. MVP uses exact cosine distance. No HNSW or other approximate index is created. Evaluation fixtures must validate these approved initial values before production enablement.
 
-## 7. API and internal contract drafts
+## 7. Active RAG 계약의 구현 요약
 
-The Knowledge Base enablement and document upload/list/status/delete shapes below are promoted into the active Tenant Chat contract by `docs/tenant-chat/openapi/admin-rag.openapi.json`. The private extraction/embedding, knowledge mode, RAG context, usage, retrieval errors, citation/SSE, and deletion contracts are also active in the linked Tenant Chat contract files.
+This section is a non-authoritative implementation summary. The normative
+Knowledge Base, upload/list/status/delete, extraction/embedding, knowledge mode,
+RAG context, usage, retrieval error, citation/SSE, deletion, and security
+meanings live in `docs/tenant-chat/contracts.md`, its OpenAPI files, and schemas.
+If this plan conflicts with those active Tenant Chat contract files, the Tenant
+Chat contract files win.
 
 ### Control Plane admin API
 

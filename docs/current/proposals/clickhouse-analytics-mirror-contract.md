@@ -2,7 +2,9 @@
 
 | Field | Value |
 |---|---|
-| Status | Phase 1 mirror through Phase 6 pre-aggregated Project/Application analytics read cutover implementation companion |
+| Status | Multi-phase implementation companion; not active |
+| Contract lifecycle | Proposed |
+| Document role | Contract proposal; implementation companion |
 | Applies to | Gateway terminal log mirror, ClickHouse analytics storage, employee usage and security reads, project employee policy usage reads, and Project/Application log-based reads |
 | Canonical source during mirror phase | PostgreSQL `p0_llm_invocation_logs` |
 | Initial read cutover | Explicitly gated employee usage and all Gateway Project/Application log-based reads |

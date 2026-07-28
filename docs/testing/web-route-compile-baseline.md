@@ -55,7 +55,12 @@ The script starts the raw `corepack pnpm --filter @gatelm/web dev` server, waits
 8. `/tenants/{tenantId}/projects/{projectId}/policies`
 9. `/tenants/{tenantId}/projects/{projectId}/applications/{applicationId}/policies`
 
-The root `pnpm dev:web` script intentionally starts apps/web through `scripts/dev/web-dev-prewarm.ps1`, which warms the common console routes after Next reports `Ready in ...`. Use `pnpm dev:web:raw` or `pnpm --filter @gatelm/web dev` when a truly cold first-route compile measurement is needed.
+The root `pnpm dev:web` script is the cross-platform canonical apps/web
+development command. On Windows, `pnpm dev:web:prewarm:windows` starts apps/web
+through `scripts/dev/web-dev-prewarm.ps1` and warms the common console routes
+after Next reports `Ready in ...`. Use `pnpm dev:web`, `pnpm dev:web:raw`, or
+`pnpm --filter @gatelm/web dev` when a truly cold first-route compile measurement
+is needed.
 
 Protected console routes use a non-secret probe cookie so middleware lets the route module compile before the auth layout redirects. The probe is not a valid user session and is not authentication evidence. Reports record only that the console probe was enabled; they must not record the cookie value or any other header value.
 

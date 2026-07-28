@@ -2,7 +2,9 @@
 
 | Field | Value |
 |---|---|
-| Status | Implemented in feature branch behind rollout controls |
+| Status | Proposal with implementation behind rollout controls; not active |
+| Contract lifecycle | Proposed |
+| Document role | Contract proposal; implementation companion |
 | Applies to | Project/Application and Tenant Chat Dashboard rollup writer, Policy Impact reader, Request Log TTFT |
 | Does not apply to | Billing ledger or quota enforcement period semantics |
 | Last reviewed | 2026-07-21 |

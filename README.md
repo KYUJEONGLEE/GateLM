@@ -97,6 +97,10 @@ pnpm dev:web
 go run ./apps/gateway-core/cmd/gateway
 ```
 
+`pnpm dev:web`은 Windows, macOS, Linux에서 같은 Web 개발 서버를 시작한다.
+Windows에서 주요 Console route를 미리 compile하려면
+`pnpm dev:web:prewarm:windows`를 사용할 수 있다.
+
 Control Plane의 migration과 seed를 포함한 상세 절차는 [Control Plane 로컬 가이드](apps/control-plane-api/README.md)를 참고하세요. 전체 셀프 호스팅 구성은 [Self-host Compose 가이드](deploy/selfhost/README.md)에서 확인할 수 있습니다. 외부에 서비스를 노출하기 전에는 `.env`의 예시 Secret을 반드시 교체해야 합니다.
 
 ## 검증

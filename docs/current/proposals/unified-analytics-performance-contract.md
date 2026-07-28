@@ -3,6 +3,8 @@
 | Field | Value |
 |---|---|
 | Status | Proposed contract with implementation in `feat/analysis-tab` |
+| Contract lifecycle | Proposed |
+| Document role | Contract proposal; implementation companion |
 | Applies to | Web Analytics `performance` tab and Gateway `GET /api/analytics/performance` observability reader |
 | Does not apply to | Billing/quota correctness, Tenant Chat employee identity, Request Detail, metrics labels, or public Gateway routes |
 | Last reviewed | 2026-07-18 |

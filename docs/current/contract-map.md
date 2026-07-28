@@ -20,7 +20,8 @@
 | 문서 거버넌스 | Active governance | [`README.md`](README.md), [`source-of-truth.md`](source-of-truth.md) | [`documentation-gaps.md`](documentation-gaps.md) |
 | 일반 Gateway routing | Active scoped contract | [`../routing/README.md`](../routing/README.md) | [`implementation-status.md`](implementation-status.md), [`documentation-gaps.md`](documentation-gaps.md) |
 | 신규 Tenant Chat Product | Active scoped contract | [`../tenant-chat/README.md`](../tenant-chat/README.md) | [`implementation-status.md`](implementation-status.md), [`documentation-gaps.md`](documentation-gaps.md) |
-| Tenant Chat RAG | Approved implementation planning; 계약 아님 | [`../rag/implementation-plan.md`](../rag/implementation-plan.md) | [`../rag/validation-matrix.md`](../rag/validation-matrix.md), [`documentation-gaps.md`](documentation-gaps.md) |
+| Tenant Chat RAG 제품 계약 | Active scoped contract | [`../tenant-chat/README.md`](../tenant-chat/README.md) | [`implementation-status.md`](implementation-status.md), [`documentation-gaps.md`](documentation-gaps.md) |
+| Tenant Chat RAG 구현 계획·성숙도 | Approved implementation planning; 계약 아님 | [`../rag/implementation-plan.md`](../rag/implementation-plan.md) | [`../rag/validation-matrix.md`](../rag/validation-matrix.md), [`documentation-gaps.md`](documentation-gaps.md) |
 | Self-host delivery | Active scoped contract; legacy pre-v1 path | [`../v2.1.0/README.md`](../v2.1.0/README.md) | [`implementation-status.md`](implementation-status.md), [`documentation-gaps.md`](documentation-gaps.md) |
 | Advanced Routing offline 평가 | Pre-v1 evidence scope | [`../v2.1.0/README.md`](../v2.1.0/README.md) | [`../testing/`](../testing/), [`documentation-gaps.md`](documentation-gaps.md) |
 | 아직 대체되지 않은 Gateway/API/DB/Event/Metrics/Security 의미 | Pre-v1 inherited baseline compatibility | [`../v2.0.0/README.md`](../v2.0.0/README.md) | [`documentation-gaps.md`](documentation-gaps.md) |
