@@ -47,12 +47,12 @@
 - Promotion merge evidence: PR #510 (`953e9f48`), main promotion PR #513 (`01d047a5`)
 - Production deployment evidence: [Actions run `29846604941`](https://github.com/KYUJEONGLEE/GateLM/actions/runs/29846604941), main SHA `fbe6b766737df142d9115e6ef06f5d6aa19ac673`, completed `success` (2026-07-22 KST)
 - Run evidence: v0.1.1(legacy v3.14) pin, private S3 download, artifact install/verify, PII role health와 authenticated Tenant Chat smoke 성공
-- Local concurrency evidence: [`../testing/pii-inference-concurrency-v0.1.1-20260731.md`](../testing/pii-inference-concurrency-v0.1.1-20260731.md)
-- Concurrency evidence Git SHAs: direct `970c0c08e315c45e535b9470bc5907a7cbf8c195`, HTTP `a8a82e0138a9d2b17c083a01e26d02666d29aba4`
+- Local concurrency evidence: [초기 동시성 측정](../testing/pii-inference-concurrency-v0.1.1-20260731.md), [고정 4 CPU 예산과 bounded HTTP 비교](../testing/pii-thread-budget-matrix-v0.1.1-20260731.md)
+- Concurrency evidence Git SHAs: 초기 direct `970c0c08e315c45e535b9470bc5907a7cbf8c195`, 초기 HTTP `a8a82e0138a9d2b17c083a01e26d02666d29aba4`, fixed-budget matrix/HTTP `63c3f6f1a83694386d915b3ca6519bd9942ce04b`
 
 위 파일의 `v314`, `v3.14` 표기는 2026-07-21에 생성된 증거와 배포 식별자의 일부이므로 고치거나 이름을 바꾸지 않는다. 현재 문서에서는 동일한 ONNX SHA-256을 `v0.1.1`로 부른다.
 
-동시성 evidence는 `perf/pii-inference-concurrency` 브랜치의 local 검증이며 `origin/dev` 병합이나 production 승격 근거가 아니다. 목표 4-vCPU Linux와 실제 network 경로에서 다시 검증해야 한다.
+동시성 evidence는 local 검증이며 `origin/dev` 병합이나 production 승격 근거가 아니다. 2×2는 후속 후보일 뿐이고, 목표 4-vCPU Linux와 실제 network 경로에서 다시 검증해야 한다.
 
 ## 2. First-pass Historical Aliases
 

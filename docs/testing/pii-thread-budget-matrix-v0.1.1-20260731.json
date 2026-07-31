@@ -1,0 +1,629 @@
+{
+  "configurationSummary": [
+    {
+      "adjustedResourceRoundMedian": {
+        "contextSwitches": {
+          "involuntary": 0.0,
+          "perCompletedRequest": 566.09,
+          "total": 566090.0,
+          "voluntary": 566090.0
+        },
+        "cpuAvailableUtilizationPct": 59.29,
+        "cpuCoreEquivalentPct": 237.159,
+        "peakRssMiB": 0.101,
+        "peakThreadCount": 1,
+        "processCpuSeconds": 26.703,
+        "samplingStatus": "collected"
+      },
+      "baselineComparison": {
+        "baselineConfigurationId": "concurrency-1-intra-op-4",
+        "roundMedianSuccessfulRpsChangePct": 0.0,
+        "roundP99MedianChangePct": 0.0,
+        "successfulRpsPerCoreEquivalentChangePct": 0.0
+      },
+      "completed": 3000,
+      "configurationId": "concurrency-1-intra-op-4",
+      "deadlineExceededCount": 1,
+      "deadlineExceededRatePct": 0.033,
+      "fixedThreadBudget": 4,
+      "inferenceErrorCount": 0,
+      "latencyMs": {
+        "population": "median_of_per_round_request_percentiles",
+        "roundP50Median": 4.51,
+        "roundP95Median": 42.282,
+        "roundP99Median": 49.772,
+        "worstRequest": 116.709,
+        "worstRoundP99": 51.358
+      },
+      "onnxAllowSpinning": false,
+      "onnxInterOpThreads": 1,
+      "onnxIntraOpThreads": 4,
+      "outputMismatchCount": 0,
+      "requestConcurrency": 1,
+      "requested": 3000,
+      "revalidationEligible": true,
+      "roundCount": 3,
+      "strictEligible": false,
+      "successful": 3000,
+      "successfulRps": {
+        "roundMax": 88.813,
+        "roundMedian": 88.296,
+        "roundMin": 87.738
+      },
+      "successfulRpsPerCoreEquivalent": 37.231
+    },
+    {
+      "adjustedResourceRoundMedian": {
+        "contextSwitches": {
+          "involuntary": 0.0,
+          "perCompletedRequest": 62.736,
+          "total": 62736.0,
+          "voluntary": 62736.0
+        },
+        "cpuAvailableUtilizationPct": 67.123,
+        "cpuCoreEquivalentPct": 268.493,
+        "peakRssMiB": 0.203,
+        "peakThreadCount": 2,
+        "processCpuSeconds": 22.203,
+        "samplingStatus": "collected"
+      },
+      "baselineComparison": {
+        "baselineConfigurationId": "concurrency-1-intra-op-4",
+        "roundMedianSuccessfulRpsChangePct": 33.571,
+        "roundP99MedianChangePct": 64.516,
+        "successfulRpsPerCoreEquivalentChangePct": 17.982
+      },
+      "completed": 3000,
+      "configurationId": "concurrency-2-intra-op-2",
+      "deadlineExceededCount": 2,
+      "deadlineExceededRatePct": 0.067,
+      "fixedThreadBudget": 4,
+      "inferenceErrorCount": 0,
+      "latencyMs": {
+        "population": "median_of_per_round_request_percentiles",
+        "roundP50Median": 4.317,
+        "roundP95Median": 71.075,
+        "roundP99Median": 81.883,
+        "worstRequest": 103.922,
+        "worstRoundP99": 84.297
+      },
+      "onnxAllowSpinning": false,
+      "onnxInterOpThreads": 1,
+      "onnxIntraOpThreads": 2,
+      "outputMismatchCount": 0,
+      "requestConcurrency": 2,
+      "requested": 3000,
+      "revalidationEligible": true,
+      "roundCount": 3,
+      "strictEligible": false,
+      "successful": 3000,
+      "successfulRps": {
+        "roundMax": 122.119,
+        "roundMedian": 117.938,
+        "roundMin": 117.302
+      },
+      "successfulRpsPerCoreEquivalent": 43.926
+    },
+    {
+      "adjustedResourceRoundMedian": {
+        "contextSwitches": {
+          "involuntary": 0.0,
+          "perCompletedRequest": 17.496,
+          "total": 17496.0,
+          "voluntary": 17496.0
+        },
+        "cpuAvailableUtilizationPct": 82.73,
+        "cpuCoreEquivalentPct": 330.919,
+        "peakRssMiB": 0.406,
+        "peakThreadCount": 4,
+        "processCpuSeconds": 22.797,
+        "samplingStatus": "collected"
+      },
+      "baselineComparison": {
+        "baselineConfigurationId": "concurrency-1-intra-op-4",
+        "roundMedianSuccessfulRpsChangePct": 60.443,
+        "roundP99MedianChangePct": 200.45,
+        "successfulRpsPerCoreEquivalentChangePct": 14.985
+      },
+      "completed": 3000,
+      "configurationId": "concurrency-4-intra-op-1",
+      "deadlineExceededCount": 496,
+      "deadlineExceededRatePct": 16.533,
+      "fixedThreadBudget": 4,
+      "inferenceErrorCount": 0,
+      "latencyMs": {
+        "population": "median_of_per_round_request_percentiles",
+        "roundP50Median": 4.856,
+        "roundP95Median": 126.619,
+        "roundP99Median": 149.54,
+        "worstRequest": 262.585,
+        "worstRoundP99": 193.483
+      },
+      "onnxAllowSpinning": false,
+      "onnxInterOpThreads": 1,
+      "onnxIntraOpThreads": 1,
+      "outputMismatchCount": 0,
+      "requestConcurrency": 4,
+      "requested": 3000,
+      "revalidationEligible": false,
+      "roundCount": 3,
+      "strictEligible": false,
+      "successful": 3000,
+      "successfulRps": {
+        "roundMax": 152.672,
+        "roundMedian": 141.665,
+        "roundMin": 138.2
+      },
+      "successfulRpsPerCoreEquivalent": 42.81
+    }
+  ],
+  "evidenceOnly": true,
+  "experiment": {
+    "configurationIds": [
+      "concurrency-1-intra-op-4",
+      "concurrency-2-intra-op-2",
+      "concurrency-4-intra-op-1"
+    ],
+    "cpuBudget": 4,
+    "deadlineMs": 100.0,
+    "goal": "compare_request_concurrency_and_onnx_intra_op_threads_under_one_fixed_cpu_budget",
+    "measuredRequestsPerConfigurationPerRound": 1000,
+    "measuredRequestsPerConfigurationTotal": 3000,
+    "processAffinityCpuCount": 4,
+    "roundStatisticSemantics": "median_across_independent_fresh_process_rounds",
+    "rounds": 3,
+    "threadBudgetRule": "request_concurrency_times_onnx_intra_op_threads_equals_cpu_budget",
+    "valueMode": "rendered_synthetic_values_in_memory_not_persisted",
+    "warmupRequestsPerConfigurationPerRound": 32
+  },
+  "generatedAt": "2026-07-31T14:56:06.239085Z",
+  "gitSha": "63c3f6f1a83694386d915b3ca6519bd9942ce04b",
+  "model": {
+    "artifactBytes": 15678950,
+    "artifactFileCount": 7,
+    "artifactManifestSha256": "c7eb7c6cafc6cf4a038f30988538825e482d81959e9b42fa71f338edf814fb78",
+    "legacyRevision": "v3.14",
+    "lifecycle": "production-deployed-and-role-healthy-model-active-e2e-unverified",
+    "modelId": "gatelm/koelectra-small-v3-pii-ner",
+    "modelOnnxBytes": 14595587,
+    "modelOnnxSha256": "8a5cb146e84d413910a423d304e662a6aba9f69e83db129f5061d007a6de9381",
+    "registrySha256": "2a1773d8d3938f6a6e0c3312445765348c70fbdc0610fb1233bc73bd288ed812",
+    "registryVersion": "gatelm.pii-model-canonical-registry.v1",
+    "runtime": "onnx-cpu-dynamic-qint8",
+    "sourceManifestSha256": [
+      "320a4afd888071052975158eee1a22973f66e8782300d18d3007dac25336f74b",
+      "a3168b3a3d9bea915a6c524bb31c7d2999dc0596f540406931d0795b07f706eb"
+    ],
+    "version": "v0.1.1"
+  },
+  "provenance": {
+    "corpusSha256": "b5e678d09af9e99a1c1a807def7caee4b0e081b18368fbee82e8168778467090",
+    "directRunnerSha256": "6a542288e9f8d36b7fa2a2ce6d264bf7c232e2767383a06365e303a54d52ab26",
+    "matrixRunnerSha256": "a8508230d244689f53dfdc78045fbd7bdfc82956ab6a1d65a7a417e98ff95690"
+  },
+  "reportVersion": "gatelm.pii-thread-budget-matrix-benchmark.v1",
+  "roundExecutionOrder": [
+    {
+      "configurationIds": [
+        "concurrency-1-intra-op-4",
+        "concurrency-2-intra-op-2",
+        "concurrency-4-intra-op-1"
+      ],
+      "round": 1
+    },
+    {
+      "configurationIds": [
+        "concurrency-4-intra-op-1",
+        "concurrency-2-intra-op-2",
+        "concurrency-1-intra-op-4"
+      ],
+      "round": 2
+    },
+    {
+      "configurationIds": [
+        "concurrency-2-intra-op-2",
+        "concurrency-4-intra-op-1",
+        "concurrency-1-intra-op-4"
+      ],
+      "round": 3
+    }
+  ],
+  "roundResults": [
+    {
+      "adjustedResources": {
+        "contextSwitches": {
+          "involuntary": 0.0,
+          "perCompletedRequest": 566.09,
+          "total": 566090.0,
+          "voluntary": 566090.0
+        },
+        "cpuAvailableUtilizationPct": 56.944,
+        "cpuCoreEquivalentPct": 227.776,
+        "peakRssMiB": 0.093,
+        "peakThreadCount": 1,
+        "processCpuSeconds": 25.797,
+        "samplingStatus": "collected"
+      },
+      "completed": 1000,
+      "configurationId": "concurrency-1-intra-op-4",
+      "deadlineExceededCount": 1,
+      "fixedThreadBudget": 4,
+      "inferenceErrorCount": 0,
+      "latencyMs": {
+        "max": 116.709,
+        "p50": 4.51,
+        "p95": 41.284,
+        "p99": 49.772,
+        "population": "successful_requests_across_all_rounds",
+        "sampleCount": 1000
+      },
+      "onnxAllowSpinning": false,
+      "onnxInterOpThreads": 1,
+      "onnxIntraOpThreads": 4,
+      "orderIndex": 0,
+      "outputMismatchCount": 0,
+      "requestConcurrency": 1,
+      "requested": 1000,
+      "round": 1,
+      "strictEligible": false,
+      "successful": 1000,
+      "successfulRps": 88.296
+    },
+    {
+      "adjustedResources": {
+        "contextSwitches": {
+          "involuntary": 0.0,
+          "perCompletedRequest": 64.352,
+          "total": 64352.0,
+          "voluntary": 64352.0
+        },
+        "cpuAvailableUtilizationPct": 67.123,
+        "cpuCoreEquivalentPct": 268.493,
+        "peakRssMiB": 0.204,
+        "peakThreadCount": 2,
+        "processCpuSeconds": 22.765,
+        "samplingStatus": "collected"
+      },
+      "completed": 1000,
+      "configurationId": "concurrency-2-intra-op-2",
+      "deadlineExceededCount": 1,
+      "fixedThreadBudget": 4,
+      "inferenceErrorCount": 0,
+      "latencyMs": {
+        "max": 103.656,
+        "p50": 3.999,
+        "p95": 72.568,
+        "p99": 81.883,
+        "population": "successful_requests_across_all_rounds",
+        "sampleCount": 1000
+      },
+      "onnxAllowSpinning": false,
+      "onnxInterOpThreads": 1,
+      "onnxIntraOpThreads": 2,
+      "orderIndex": 1,
+      "outputMismatchCount": 0,
+      "requestConcurrency": 2,
+      "requested": 1000,
+      "round": 1,
+      "strictEligible": false,
+      "successful": 1000,
+      "successfulRps": 117.938
+    },
+    {
+      "adjustedResources": {
+        "contextSwitches": {
+          "involuntary": 0.0,
+          "perCompletedRequest": 18.646,
+          "total": 18646.0,
+          "voluntary": 18646.0
+        },
+        "cpuAvailableUtilizationPct": 78.764,
+        "cpuCoreEquivalentPct": 315.054,
+        "peakRssMiB": 0.406,
+        "peakThreadCount": 4,
+        "processCpuSeconds": 22.797,
+        "samplingStatus": "collected"
+      },
+      "completed": 1000,
+      "configurationId": "concurrency-4-intra-op-1",
+      "deadlineExceededCount": 171,
+      "fixedThreadBudget": 4,
+      "inferenceErrorCount": 0,
+      "latencyMs": {
+        "max": 262.585,
+        "p50": 4.856,
+        "p95": 126.619,
+        "p99": 193.483,
+        "population": "successful_requests_across_all_rounds",
+        "sampleCount": 1000
+      },
+      "onnxAllowSpinning": false,
+      "onnxInterOpThreads": 1,
+      "onnxIntraOpThreads": 1,
+      "orderIndex": 2,
+      "outputMismatchCount": 0,
+      "requestConcurrency": 4,
+      "requested": 1000,
+      "round": 1,
+      "strictEligible": false,
+      "successful": 1000,
+      "successfulRps": 138.2
+    },
+    {
+      "adjustedResources": {
+        "contextSwitches": {
+          "involuntary": 0.0,
+          "perCompletedRequest": 17.496,
+          "total": 17496.0,
+          "voluntary": 17496.0
+        },
+        "cpuAvailableUtilizationPct": 82.73,
+        "cpuCoreEquivalentPct": 330.919,
+        "peakRssMiB": 0.402,
+        "peakThreadCount": 4,
+        "processCpuSeconds": 23.36,
+        "samplingStatus": "collected"
+      },
+      "completed": 1000,
+      "configurationId": "concurrency-4-intra-op-1",
+      "deadlineExceededCount": 187,
+      "fixedThreadBudget": 4,
+      "inferenceErrorCount": 0,
+      "latencyMs": {
+        "max": 226.145,
+        "p50": 4.925,
+        "p95": 127.949,
+        "p99": 149.54,
+        "population": "successful_requests_across_all_rounds",
+        "sampleCount": 1000
+      },
+      "onnxAllowSpinning": false,
+      "onnxInterOpThreads": 1,
+      "onnxIntraOpThreads": 1,
+      "orderIndex": 0,
+      "outputMismatchCount": 0,
+      "requestConcurrency": 4,
+      "requested": 1000,
+      "round": 2,
+      "strictEligible": false,
+      "successful": 1000,
+      "successfulRps": 141.665
+    },
+    {
+      "adjustedResources": {
+        "contextSwitches": {
+          "involuntary": 0.0,
+          "perCompletedRequest": 50.959,
+          "total": 50959.0,
+          "voluntary": 50959.0
+        },
+        "cpuAvailableUtilizationPct": 67.595,
+        "cpuCoreEquivalentPct": 270.38,
+        "peakRssMiB": 0.199,
+        "peakThreadCount": 2,
+        "processCpuSeconds": 22.141,
+        "samplingStatus": "collected"
+      },
+      "completed": 1000,
+      "configurationId": "concurrency-2-intra-op-2",
+      "deadlineExceededCount": 0,
+      "fixedThreadBudget": 4,
+      "inferenceErrorCount": 0,
+      "latencyMs": {
+        "max": 90.148,
+        "p50": 4.465,
+        "p95": 68.216,
+        "p99": 77.827,
+        "population": "successful_requests_across_all_rounds",
+        "sampleCount": 1000
+      },
+      "onnxAllowSpinning": false,
+      "onnxInterOpThreads": 1,
+      "onnxIntraOpThreads": 2,
+      "orderIndex": 1,
+      "outputMismatchCount": 0,
+      "requestConcurrency": 2,
+      "requested": 1000,
+      "round": 2,
+      "strictEligible": true,
+      "successful": 1000,
+      "successfulRps": 122.119
+    },
+    {
+      "adjustedResources": {
+        "contextSwitches": {
+          "involuntary": 0.0,
+          "perCompletedRequest": 572.39,
+          "total": 572390.0,
+          "voluntary": 572390.0
+        },
+        "cpuAvailableUtilizationPct": 59.29,
+        "cpuCoreEquivalentPct": 237.159,
+        "peakRssMiB": 0.102,
+        "peakThreadCount": 1,
+        "processCpuSeconds": 26.703,
+        "samplingStatus": "collected"
+      },
+      "completed": 1000,
+      "configurationId": "concurrency-1-intra-op-4",
+      "deadlineExceededCount": 0,
+      "fixedThreadBudget": 4,
+      "inferenceErrorCount": 0,
+      "latencyMs": {
+        "max": 57.53,
+        "p50": 4.51,
+        "p95": 42.282,
+        "p99": 49.347,
+        "population": "successful_requests_across_all_rounds",
+        "sampleCount": 1000
+      },
+      "onnxAllowSpinning": false,
+      "onnxInterOpThreads": 1,
+      "onnxIntraOpThreads": 4,
+      "orderIndex": 2,
+      "outputMismatchCount": 0,
+      "requestConcurrency": 1,
+      "requested": 1000,
+      "round": 2,
+      "strictEligible": true,
+      "successful": 1000,
+      "successfulRps": 88.813
+    },
+    {
+      "adjustedResources": {
+        "contextSwitches": {
+          "involuntary": 0.0,
+          "perCompletedRequest": 62.736,
+          "total": 62736.0,
+          "voluntary": 62736.0
+        },
+        "cpuAvailableUtilizationPct": 65.113,
+        "cpuCoreEquivalentPct": 260.452,
+        "peakRssMiB": 0.203,
+        "peakThreadCount": 2,
+        "processCpuSeconds": 22.203,
+        "samplingStatus": "collected"
+      },
+      "completed": 1000,
+      "configurationId": "concurrency-2-intra-op-2",
+      "deadlineExceededCount": 1,
+      "fixedThreadBudget": 4,
+      "inferenceErrorCount": 0,
+      "latencyMs": {
+        "max": 103.922,
+        "p50": 4.317,
+        "p95": 71.075,
+        "p99": 84.297,
+        "population": "successful_requests_across_all_rounds",
+        "sampleCount": 1000
+      },
+      "onnxAllowSpinning": false,
+      "onnxInterOpThreads": 1,
+      "onnxIntraOpThreads": 2,
+      "orderIndex": 0,
+      "outputMismatchCount": 0,
+      "requestConcurrency": 2,
+      "requested": 1000,
+      "round": 3,
+      "strictEligible": false,
+      "successful": 1000,
+      "successfulRps": 117.302
+    },
+    {
+      "adjustedResources": {
+        "contextSwitches": {
+          "involuntary": 0.0,
+          "perCompletedRequest": 13.648,
+          "total": 13648.0,
+          "voluntary": 13648.0
+        },
+        "cpuAvailableUtilizationPct": 83.552,
+        "cpuCoreEquivalentPct": 334.208,
+        "peakRssMiB": 0.406,
+        "peakThreadCount": 4,
+        "processCpuSeconds": 21.891,
+        "samplingStatus": "collected"
+      },
+      "completed": 1000,
+      "configurationId": "concurrency-4-intra-op-1",
+      "deadlineExceededCount": 138,
+      "fixedThreadBudget": 4,
+      "inferenceErrorCount": 0,
+      "latencyMs": {
+        "max": 179.253,
+        "p50": 4.723,
+        "p95": 116.56,
+        "p99": 138.366,
+        "population": "successful_requests_across_all_rounds",
+        "sampleCount": 1000
+      },
+      "onnxAllowSpinning": false,
+      "onnxInterOpThreads": 1,
+      "onnxIntraOpThreads": 1,
+      "orderIndex": 1,
+      "outputMismatchCount": 0,
+      "requestConcurrency": 4,
+      "requested": 1000,
+      "round": 3,
+      "strictEligible": false,
+      "successful": 1000,
+      "successfulRps": 152.672
+    },
+    {
+      "adjustedResources": {
+        "contextSwitches": {
+          "involuntary": 0.0,
+          "perCompletedRequest": 564.164,
+          "total": 564164.0,
+          "voluntary": 564164.0
+        },
+        "cpuAvailableUtilizationPct": 59.601,
+        "cpuCoreEquivalentPct": 238.405,
+        "peakRssMiB": 0.101,
+        "peakThreadCount": 1,
+        "processCpuSeconds": 27.172,
+        "samplingStatus": "collected"
+      },
+      "completed": 1000,
+      "configurationId": "concurrency-1-intra-op-4",
+      "deadlineExceededCount": 0,
+      "fixedThreadBudget": 4,
+      "inferenceErrorCount": 0,
+      "latencyMs": {
+        "max": 55.78,
+        "p50": 4.368,
+        "p95": 42.428,
+        "p99": 51.358,
+        "population": "successful_requests_across_all_rounds",
+        "sampleCount": 1000
+      },
+      "onnxAllowSpinning": false,
+      "onnxInterOpThreads": 1,
+      "onnxIntraOpThreads": 4,
+      "orderIndex": 2,
+      "outputMismatchCount": 0,
+      "requestConcurrency": 1,
+      "requested": 1000,
+      "round": 3,
+      "strictEligible": true,
+      "successful": 1000,
+      "successfulRps": 87.738
+    }
+  ],
+  "runtime": {
+    "cpuModel": "Intel64 Family 6 Model 189 Stepping 1, GenuineIntel",
+    "logicalCpuCount": 8,
+    "machine": "AMD64",
+    "onnxAvailableProviders": [
+      "AzureExecutionProvider",
+      "CPUExecutionProvider"
+    ],
+    "os": "Windows-11-10.0.26200-SP0",
+    "packageVersions": {
+      "numpy": "2.5.0",
+      "onnxruntime": "1.27.0",
+      "psutil": "7.0.0",
+      "tokenizers": "0.22.2",
+      "transformers": "4.57.6"
+    },
+    "peakSampleIntervalMs": 100.0,
+    "physicalCpuCount": 8,
+    "processAffinityCpuCount": 4,
+    "pythonVersion": "3.12.13",
+    "resourceControl": "same_wall_idle_process_control"
+  },
+  "selectionSummary": {
+    "highestStrictThroughputConfigurationId": null,
+    "productionDefaultChanged": false,
+    "promotionBoundary": "candidate_only_until_repeated_on_target_4_vcpu_linux_uvicorn_network_and_gateway_e2e",
+    "revalidationCandidateConfigurationId": "concurrency-2-intra-op-2",
+    "revalidationEligibilityRule": "all_rounds_complete_with_output_equivalence_and_worst_round_p99_at_or_below_deadline",
+    "revalidationEligibleConfigurationIds": [
+      "concurrency-1-intra-op-4",
+      "concurrency-2-intra-op-2"
+    ],
+    "strictEligibilityRule": "all_rounds_have_zero_inference_errors_output_mismatches_and_deadline_excesses",
+    "strictEligibleConfigurationIds": []
+  },
+  "trackedWorktreeDirty": false
+}
