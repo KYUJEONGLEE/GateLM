@@ -19,11 +19,6 @@ import type {
   ProjectStatus,
   ProjectUpdateValues
 } from "@/lib/control-plane/projects-types";
-import {
-  removeApplicationChatEnvProject,
-  syncApplicationChatEnvForProjects
-} from "@/lib/gateway/application-chat-env-file";
-import { syncApplicationChatEnvAfterProjectMutation } from "./application-chat-project-env-sync";
 
 type RequestPayload = {
   action?: unknown;
@@ -88,19 +83,6 @@ export async function POST(request: Request) {
     controlPlaneTenantReadCacheTag("projects", controlPlaneTenantId),
     controlPlaneReadCacheTags.runtimePolicy
   ]);
-
-  await syncApplicationChatEnvAfterProjectMutation({
-    controlPlaneTenantId,
-    listProjectsFresh: listControlPlaneProjectsFresh,
-    removeProjectEnv: removeApplicationChatEnvProject,
-    syncProjectsEnv: syncApplicationChatEnvForProjects,
-    updatedProject: result.data
-  }).catch((error) => {
-      console.warn(
-        "Application Chat env sync failed.",
-        error instanceof Error ? error.message : "unknown error"
-      );
-  });
 
   return NextResponse.json({
     project: result.data,

@@ -215,7 +215,6 @@ jobs:
           - operator-web
           - tenant-chat-api
           - tenant-chat-web
-          - legacy-application
 
     steps:
       - name: Checkout repository
@@ -263,11 +262,6 @@ jobs:
               pnpm --filter @gatelm/chat-web test
               pnpm --filter @gatelm/chat-web typecheck
               pnpm --filter @gatelm/chat-web build
-              ;;
-            legacy-application)
-              pnpm --filter @gatelm/application lint
-              pnpm --filter @gatelm/application typecheck
-              pnpm --filter @gatelm/application build
               ;;
             *)
               echo "Unknown application verification target: ${{ matrix.target }}" >&2
