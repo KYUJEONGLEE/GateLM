@@ -291,11 +291,19 @@ python -m app.services.pii_http_admission_concurrency_benchmark_runner \
   --koelectra-model-dir <canonical-koelectra-model-directory> \
   --model-version v0.1.1 \
   --capacity 1 \
+  --pending-capacity 4 \
+  --wait-timeout-ms 50 \
+  --cpu-affinity-count 4 \
   --parallel-requests 8 \
   --waves 20
 ```
 
 This runner first keeps only synthetic cases whose in-memory preflight confirms both hybrid execution and an accepted KoELECTRA contribution, then passes those requests through the actual FastAPI route with an in-process ASGI transport. It stores only aggregate selection counts, never case IDs, prompts, or detections. It is gate evidence, not a concurrency recommendation, and does not cover Uvicorn sockets, multiple worker processes, or Gateway fallback under network load.
+
+The v2 report records active and pending capacity, wait timeout, process CPU
+affinity, and ONNX thread settings. Set `AI_SERVICE_ONNX_INTRA_OP_THREADS` to
+the matrix candidate before launching this runner; the report makes a mismatch
+visible but does not promote the candidate to a production default.
 
 ## Safety Eval Runner
 
