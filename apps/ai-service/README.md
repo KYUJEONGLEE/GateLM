@@ -251,6 +251,32 @@ Each concurrency level is measured three times in crossed order. Only levels wit
 
 For a 4-vCPU deployment, evaluate concurrency 1, 2, and 4 first. Higher levels are oversubscription evidence, not automatic defaults. Repeat the benchmark on the same vCPU quota and ONNX thread profile used in deployment before changing the conservative process-local default of 1.
 
+To compare how the same four logical CPUs are divided between request-level
+concurrency and ONNX intra-op work, run the fixed-budget matrix:
+
+```bash
+cd apps/ai-service
+python -m app.services.pii_thread_budget_matrix_benchmark_runner \
+  --model-dir <canonical-koelectra-model-directory> \
+  --model-version v0.1.1 \
+  --cpu-budget 4 \
+  --configurations 1x4,2x2,4x1 \
+  --rounds 3 \
+  --warmup-requests 32 \
+  --measured-requests 1000 \
+  --deadline-ms 100 \
+  --sample-interval-ms 100
+```
+
+Every configuration runs in a fresh process with four-CPU affinity,
+`inter-op=1`, and spinning disabled. The runner crosses execution order and
+stores only aggregate RPS, p50/p95/p99, deadline counts, output-parity counts,
+CPU utilization, and context-switch statistics. Its highest-throughput
+configuration with output parity and a worst-round p99 within the deadline is
+only a target-environment revalidation candidate. It does not change the
+production default without a repeated 4-vCPU Linux, Uvicorn/network, and
+Gateway E2E run.
+
 ## PII HTTP Admission Gate Benchmark
 
 The direct runner selects a safe concurrency candidate but bypasses FastAPI admission. Use the HTTP runner separately to prove that one process returns bounded HTTP 200 and sanitized HTTP 503 sidecar-unavailable responses while retaining real hybrid KoELECTRA execution:
