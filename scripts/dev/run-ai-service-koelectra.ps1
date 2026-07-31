@@ -5,6 +5,10 @@ param(
   [string]$KoelectraModelPath = "",
   [ValidateRange(1, 32)]
   [int]$MaxConcurrent = 1,
+  [ValidateRange(0, 32)]
+  [int]$MaxPending = 4,
+  [ValidateRange(0, 1000)]
+  [int]$WaitTimeoutMs = 50,
   [switch]$AllowNetwork,
   [switch]$DryRun
 )
@@ -88,6 +92,8 @@ $env:AI_SERVICE_AI_SAFETY_DETECTOR_RUNTIME = "onnx"
 $env:AI_SERVICE_AI_SAFETY_PRELOAD_ENABLED = "true"
 $env:AI_SERVICE_AI_SAFETY_MICRO_BATCH_SIZE = "4"
 $env:AI_SERVICE_AI_SAFETY_MAX_CONCURRENT = [string]$MaxConcurrent
+$env:AI_SERVICE_AI_SAFETY_MAX_PENDING = [string]$MaxPending
+$env:AI_SERVICE_AI_SAFETY_WAIT_TIMEOUT_MS = [string]$WaitTimeoutMs
 $env:AI_SERVICE_ONNX_INTRA_OP_THREADS = "4"
 $env:AI_SERVICE_ONNX_INTER_OP_THREADS = "1"
 $env:AI_SERVICE_ONNX_ALLOW_SPINNING = "false"
@@ -110,6 +116,8 @@ Write-Host "GateLM AI Service Quantized KoELECTRA Sidecar"
 Write-Host "============================================="
 Write-Host "Runtime:             $env:AI_SERVICE_AI_SAFETY_DETECTOR_RUNTIME"
 Write-Host "Max concurrent:      $env:AI_SERVICE_AI_SAFETY_MAX_CONCURRENT"
+Write-Host "Max pending:         $env:AI_SERVICE_AI_SAFETY_MAX_PENDING"
+Write-Host "Wait timeout (ms):   $env:AI_SERVICE_AI_SAFETY_WAIT_TIMEOUT_MS"
 Write-Host "Primary detector:    $env:AI_SERVICE_AI_SAFETY_DETECTOR_MODEL_ID"
 Write-Host "Additional detector: $env:AI_SERVICE_AI_SAFETY_ADDITIONAL_DETECTOR_MODEL_IDS"
 Write-Host "Offline mode:        $(if ($AllowNetwork) { "disabled" } else { "enabled" })"
@@ -118,8 +126,9 @@ Write-Host ""
 Write-Host "Gateway sidecar env:"
 Write-Host "  GATEWAY_AI_SAFETY_SIDECAR_ENABLED=true"
 Write-Host "  GATEWAY_AI_SAFETY_SIDECAR_URL=http://127.0.0.1:$Port/internal/ai-safety/v1/detect"
-Write-Host "  GATEWAY_AI_SAFETY_SIDECAR_TIMEOUT_MS=750"
+Write-Host "  GATEWAY_AI_SAFETY_SIDECAR_TIMEOUT_MS=300"
 Write-Host "  GATEWAY_AI_SAFETY_SIDECAR_MODE=enforce"
+Write-Host "  GATEWAY_AI_SAFETY_OVERLOAD_POLICY=fail_closed"
 Write-Host ""
 
 if ($DryRun) {

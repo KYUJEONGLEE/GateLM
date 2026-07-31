@@ -249,3 +249,36 @@ func assertSidecarMetric(t *testing.T, output string, expected string) {
 		t.Fatalf("expected metric %q\n%s", expected, output)
 	}
 }
+
+func TestMaskingEngineMetricsFailClosedOverloadIsHTTPErrorWithoutFallback(t *testing.T) {
+	registry := metrics.NewRegistry()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = w.Write([]byte(`{"contractVersion":"ai-safety-detector.v1","error":{"code":"sidecar_unavailable","message":"sensitive upstream detail","retryable":true}}`))
+	}))
+	defer server.Close()
+	engine := NewMaskingEngine(MaskingEngineConfig{
+		EndpointURL:    server.URL,
+		HTTPClient:     server.Client(),
+		Timeout:        time.Second,
+		Mode:           ModeEnforce,
+		OverloadPolicy: OverloadPolicyFailClosed,
+		Surface:        "tenant_chat",
+		Metrics:        registry,
+	})
+
+	_, err := engine.Apply(context.Background(), maskdomain.ApplyRequest{Prompt: "safe overload marker"})
+	if !errors.Is(err, ErrSidecarUnavailable) {
+		t.Fatalf("expected fail-closed sentinel, got %v", err)
+	}
+
+	output := registry.RenderPrometheus()
+	assertSidecarMetric(t, output, `gatelm_ai_safety_sidecar_calls_total{inference_path="unknown",mode="enforce",outcome="http_error",surface="tenant_chat"} 1`)
+	if strings.Contains(output, "gatelm_ai_safety_sidecar_fallback_total{") {
+		t.Fatal("fail-closed overload must not increment fallback metric")
+	}
+	if strings.Contains(output, "sensitive upstream detail") || strings.Contains(output, "safe overload marker") {
+		t.Fatal("metrics must not contain input or upstream error detail")
+	}
+}

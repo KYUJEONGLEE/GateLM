@@ -230,7 +230,7 @@ func main() {
 	}
 	if cfg.AISafetySidecar.Enabled {
 		readinessChecks["ai_safety_sidecar"] = handlers.ReadinessCheck{
-			Required:       false,
+			Required:       cfg.AISafetySidecar.OverloadPolicy == config.AISafetyOverloadPolicyFailClosed,
 			FailureMessage: "not ready",
 			Check: handlers.HTTPReadinessCheck(
 				&http.Client{Timeout: cfg.AISafetySidecar.Timeout},
@@ -410,16 +410,17 @@ func main() {
 		)
 		if cfg.AISafetySidecar.Enabled {
 			tenantChatMaskingEngine = aiservice.NewMaskingEngine(aiservice.MaskingEngineConfig{
-				Local:         tenantChatMaskingEngine,
-				FallbackLocal: tenantChatFallbackMaskingEngine(cfg.AISafetySidecar.PersonNameModelOnly),
-				EndpointURL:   cfg.AISafetySidecar.EndpointURL,
-				Timeout:       cfg.AISafetySidecar.Timeout,
-				ModelID:       cfg.AISafetySidecar.ModelID,
-				DetectorSet:   cfg.AISafetySidecar.DetectorSet,
-				Locale:        cfg.AISafetySidecar.Locale,
-				Mode:          cfg.AISafetySidecar.Mode,
-				Surface:       "tenant_chat",
-				Metrics:       metricsRegistry,
+				Local:          tenantChatMaskingEngine,
+				FallbackLocal:  tenantChatFallbackMaskingEngine(cfg.AISafetySidecar.PersonNameModelOnly),
+				EndpointURL:    cfg.AISafetySidecar.EndpointURL,
+				Timeout:        cfg.AISafetySidecar.Timeout,
+				ModelID:        cfg.AISafetySidecar.ModelID,
+				DetectorSet:    cfg.AISafetySidecar.DetectorSet,
+				Locale:         cfg.AISafetySidecar.Locale,
+				Mode:           cfg.AISafetySidecar.Mode,
+				OverloadPolicy: cfg.AISafetySidecar.OverloadPolicy,
+				Surface:        "tenant_chat",
+				Metrics:        metricsRegistry,
 			})
 		}
 		tenantChatSafety := tenantsafety.NewEvaluatorWithEngine(tenantChatMaskingEngine)

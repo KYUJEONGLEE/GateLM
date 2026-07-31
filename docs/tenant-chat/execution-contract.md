@@ -274,6 +274,7 @@ Control Plane wrapping-only projection은 exact shape가 다음과 같고 unknow
 - attempt row에는 `pricing_version`과 실제 계산에 쓴 regular input/output/provider cache-read 단가를 복사해 catalog 변경 후에도 재현 가능하게 한다.
 - policies.safety.detectorSet은 detector별 allow/redact/block 규칙이며 mandatory secret detector의 allow를 거부한다. 새 user input은 routing/cache/Provider와 encrypted persistence보다 먼저 sanitization하고 redacted content만 Chat API에 반환한다.
 - 저장 전 sanitization은 safety enabled, detector set, masking engine이 모두 준비된 경우에만 성공한다. 비활성·미구성 상태에서 raw input을 sanitized로 인증하지 않고 CHAT_RUNTIME_UNAVAILABLE로 fail closed한다.
+- process-local sidecar overload는 operator-global `GATEWAY_AI_SAFETY_OVERLOAD_POLICY`로 처리하며 RuntimeSnapshot에 넣지 않는다. `local_fallback`은 complete local P0 성공 시에만 sanitization을 계속한다. `fail_closed`는 `enforce` mode에서만 유효하고, 정확한 contract version의 retryable `503 sidecar_unavailable`을 `503 CHAT_RUNTIME_UNAVAILABLE`로 변환해 ciphertext write, cache, routing, Provider 호출 전에 끝낸다. 그 밖의 timeout, transport, non-overload HTTP와 invalid response는 complete local P0 fallback을 유지한다.
 - sanitization request는 ordered user messages 1~64개와 optional bounded uppercase placeholderCounters만 받는다. detector type이나 raw entity mapping은 포함하지 않는다.
 - response는 exact-cardinality ordered itemIndex/content와 pinned policyDigest만 반환한다. partial, duplicate, reorder, blank result, digest mismatch면 전체를 폐기하고 ciphertext를 쓰지 않는다.
 - normal turn은 current user 한 건만 처리한다. 여러 item은 bounded schema v1 legacy migration에만 허용하고 같은 v2 history의 반복 검사에 사용하지 않는다.

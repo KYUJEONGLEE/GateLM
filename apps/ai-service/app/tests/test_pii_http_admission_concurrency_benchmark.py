@@ -39,7 +39,12 @@ class PiiHttpAdmissionConcurrencyBenchmarkTests(
         self,
     ) -> None:
         service = DelayedHybridService(delay_seconds=0.04)
-        app = create_app(Settings(ai_safety_max_concurrent=2))
+        app = create_app(
+            Settings(
+                ai_safety_max_concurrent=2,
+                ai_safety_max_pending=0,
+            )
+        )
         app.dependency_overrides[get_ai_safety_detector_service] = (
             lambda: service
         )
@@ -122,7 +127,12 @@ class PiiHttpAdmissionConcurrencyBenchmarkTests(
             delay_seconds=0.0,
             include_koelectra_detection=False,
         )
-        app = create_app(Settings(ai_safety_max_concurrent=4))
+        app = create_app(
+            Settings(
+                ai_safety_max_concurrent=4,
+                ai_safety_max_pending=0,
+            )
+        )
         app.dependency_overrides[get_ai_safety_detector_service] = (
             lambda: service
         )
