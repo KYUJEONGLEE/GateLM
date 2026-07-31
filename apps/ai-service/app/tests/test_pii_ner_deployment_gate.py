@@ -64,6 +64,7 @@ class PiiNerDeploymentGateTests(unittest.TestCase):
         self.assertIn("GATEWAY_AI_SAFETY_SIDECAR_ENABLED=true", candidate_env)
         self.assertIn("GATEWAY_AI_SAFETY_PERSON_NAME_MODEL_ONLY=true", candidate_env)
         self.assertIn("AI_SERVICE_AI_SAFETY_MICRO_BATCH_SIZE=1", candidate_env)
+        self.assertIn("AI_SERVICE_AI_SAFETY_MAX_CONCURRENT=1", candidate_env)
         self.assertIn(
             "AI_SERVICE_AI_SAFETY_ML_DETECTOR_THRESHOLDS="
             "email=0.99,organization_name=0.90,person_name=0.90,"

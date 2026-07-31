@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 
 from app.api.dependencies import (
+    AiSafetyConcurrencyGate,
     RoutingDifficultyConcurrencyGate,
     create_ai_safety_detector_service,
     create_routing_difficulty_batcher,
@@ -35,6 +36,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         redoc_url=None,
     )
     app.state.settings = resolved_settings
+    app.state.ai_safety_concurrency_gate = AiSafetyConcurrencyGate(
+        resolved_settings.ai_safety_max_concurrent
+    )
     detector_service = create_ai_safety_detector_service(resolved_settings)
     if resolved_settings.ai_safety_preload_enabled:
         detector_service.warmup()

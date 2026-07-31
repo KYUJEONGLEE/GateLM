@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import threading
 from pathlib import Path
 
 from fastapi import Request
@@ -12,6 +13,28 @@ from app.services.rag_extraction import RagExtractionService
 from app.services.routing_difficulty import RoutingDifficultyService
 from app.services.routing_difficulty_batcher import RoutingDifficultyBatcher
 from app.services.safety_evaluator import RemoteSafetyEvaluationService
+
+
+_AI_SAFETY_GATE_INIT_LOCK = threading.Lock()
+
+
+class AiSafetyConcurrencyGate:
+    def __init__(self, maximum_concurrency: int) -> None:
+        self._maximum_concurrency = maximum_concurrency
+        self._active = 0
+        self._lock = asyncio.Lock()
+
+    async def try_acquire(self) -> bool:
+        async with self._lock:
+            if self._active >= self._maximum_concurrency:
+                return False
+            self._active += 1
+            return True
+
+    async def release(self) -> None:
+        async with self._lock:
+            if self._active > 0:
+                self._active -= 1
 
 
 class RagExtractionConcurrencyGate:
@@ -70,6 +93,23 @@ def get_ai_safety_detector_service(request: Request) -> AiSafetyDetectorService:
     service = create_ai_safety_detector_service(settings)
     request.app.state.ai_safety_detector_service = service
     return service
+
+
+def get_ai_safety_concurrency_gate(
+    request: Request,
+) -> AiSafetyConcurrencyGate:
+    gate = getattr(request.app.state, "ai_safety_concurrency_gate", None)
+    if isinstance(gate, AiSafetyConcurrencyGate):
+        return gate
+    with _AI_SAFETY_GATE_INIT_LOCK:
+        gate = getattr(request.app.state, "ai_safety_concurrency_gate", None)
+        if isinstance(gate, AiSafetyConcurrencyGate):
+            return gate
+        gate = AiSafetyConcurrencyGate(
+            get_settings(request).ai_safety_max_concurrent
+        )
+        request.app.state.ai_safety_concurrency_gate = gate
+        return gate
 
 
 def create_ai_safety_detector_service(settings: Settings) -> AiSafetyDetectorService:

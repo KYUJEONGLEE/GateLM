@@ -73,6 +73,13 @@ const commands = [
     args: ["run", "verify:docs"],
   },
   {
+    name: "production distributed static validation",
+    command: "bash",
+    args: [
+      "deploy/aws-triage/scripts/tests/production-distributed-validation-test.sh",
+    ],
+  },
+  {
     name: "v2.1 difficulty training candidate",
     packageManager: true,
     args: ["run", "verify:v2.1-difficulty-training-candidate"],

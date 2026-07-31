@@ -70,6 +70,7 @@ AI_SERVICE_TRANSFORMERS_OFFLINE=1
 AI_SERVICE_AI_SAFETY_DETECTOR_RUNTIME=onnx
 AI_SERVICE_AI_SAFETY_PRELOAD_ENABLED=true
 AI_SERVICE_AI_SAFETY_MICRO_BATCH_SIZE=4
+AI_SERVICE_AI_SAFETY_MAX_CONCURRENT=1
 AI_SERVICE_ONNX_INTRA_OP_THREADS=4
 AI_SERVICE_ONNX_INTER_OP_THREADS=1
 AI_SERVICE_ONNX_ALLOW_SPINNING=false
@@ -80,6 +81,8 @@ AI_SERVICE_AI_SAFETY_ADDITIONAL_DETECTOR_MODEL_IDS=
 ```
 
 The primary model is loaded through the local ONNX Runtime pipeline and its detections are merged through the same sanitized GateLM policy path. Do not send raw prompts to hosted Hugging Face inference APIs for this path.
+
+`AI_SERVICE_AI_SAFETY_MAX_CONCURRENT` is a process-local admission limit from `1` to `32`; the conservative default is `1`. Single and batch requests each consume one slot, and a full process returns the sanitized retryable `503 sidecar_unavailable` response instead of building an unbounded queue. With multiple workers or replicas, the total possible concurrency is `worker-or-replica count × this value`. Raise it only after benchmarking the same vCPU and ONNX thread settings used in deployment.
 
 The pinned 2026-07-15 delivery bundle still contains the KoELECTRA artifact and the importer verifies all manifest-listed files, but a blank additional-model setting prevents that adapter from loading or warming up. If the allowlisted KoELECTRA path is explicitly enabled for an isolated evaluation, its accepted labels remain email, phone number, and resident registration number only. Person-name and organization-name detections remain rule backstops, and the supplied evaluation does not justify production-grade accuracy claims.
 
@@ -155,6 +158,7 @@ AI_SERVICE_TRANSFORMERS_OFFLINE=1 \
 AI_SERVICE_AI_SAFETY_DETECTOR_RUNTIME=onnx \
 AI_SERVICE_AI_SAFETY_PRELOAD_ENABLED=true \
 AI_SERVICE_AI_SAFETY_MICRO_BATCH_SIZE=4 \
+AI_SERVICE_AI_SAFETY_MAX_CONCURRENT=1 \
 AI_SERVICE_ONNX_INTRA_OP_THREADS=4 \
 AI_SERVICE_ONNX_INTER_OP_THREADS=1 \
 AI_SERVICE_ONNX_ALLOW_SPINNING=false \
@@ -203,6 +207,52 @@ python -m app.services.ai_safety_latency_benchmark_runner \
 ```
 
 The runner writes sanitized aggregate-only reports to `reports/ai-safety-lab/resource-latency-benchmark.json` and `.md`. It does not write source input text, detected sensitive values, raw offsets, model token text, request identifiers, trace identifiers, hashes, or raw error bodies.
+
+## PII Direct Inference Concurrency Benchmark
+
+Use the direct runner to find the point where additional concurrent ONNX calls stop improving throughput and start increasing latency or context switches:
+
+```bash
+cd apps/ai-service
+AI_SERVICE_ONNX_INTRA_OP_THREADS=4 \
+AI_SERVICE_ONNX_INTER_OP_THREADS=1 \
+AI_SERVICE_ONNX_ALLOW_SPINNING=false \
+python -m app.services.pii_direct_inference_concurrency_benchmark_runner \
+  --model-dir <canonical-koelectra-model-directory> \
+  --model-version v0.1.1 \
+  --concurrency-levels 1,2,4,8,16,32 \
+  --rounds 3 \
+  --warmup-requests 32 \
+  --measured-requests 1000 \
+  --deadline-ms 100 \
+  --sample-interval-ms 100
+```
+
+The runner verifies every model, tokenizer, and configuration file against the checked-in canonical model registry before loading ONNX. It renders the 50-case synthetic corpus only in memory, compares every concurrent result with a sequential baseline, and never stores prompts, detections, spans, or error bodies.
+
+Each concurrency level is measured three times in crossed order. Only levels with zero inference errors, output mismatches, and deadline excesses in every round are eligible for throughput comparison. The aggregate-only report separates p50/p95/p99 populations and records raw, same-wall idle-control, and adjusted CPU, RSS, thread, and context-switch measurements. A deadline excess is observed after inference finishes because Python cannot safely terminate a running ONNX call.
+
+For a 4-vCPU deployment, evaluate concurrency 1, 2, and 4 first. Higher levels are oversubscription evidence, not automatic defaults. Repeat the benchmark on the same vCPU quota and ONNX thread profile used in deployment before changing the conservative process-local default of 1.
+
+## PII HTTP Admission Gate Benchmark
+
+The direct runner selects a safe concurrency candidate but bypasses FastAPI admission. Use the HTTP runner separately to prove that one process returns bounded HTTP 200 and sanitized HTTP 503 sidecar-unavailable responses while retaining real hybrid KoELECTRA execution:
+
+```bash
+cd apps/ai-service
+AI_SERVICE_ONNX_INTRA_OP_THREADS=4 \
+AI_SERVICE_ONNX_INTER_OP_THREADS=1 \
+AI_SERVICE_ONNX_ALLOW_SPINNING=false \
+python -m app.services.pii_http_admission_concurrency_benchmark_runner \
+  --primary-model-dir <local-openai-privacy-filter-directory> \
+  --koelectra-model-dir <canonical-koelectra-model-directory> \
+  --model-version v0.1.1 \
+  --capacity 1 \
+  --parallel-requests 8 \
+  --waves 20
+```
+
+This runner passes requests through the actual FastAPI route with an in-process ASGI transport. It is gate evidence, not a concurrency recommendation, and does not cover Uvicorn sockets, multiple worker processes, or Gateway fallback under network load. The written report contains aggregate counts and latency distributions only.
 
 ## Safety Eval Runner
 

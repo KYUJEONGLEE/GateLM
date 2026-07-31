@@ -167,6 +167,7 @@ class AiServiceLauncherConfigTests(unittest.TestCase):
                 "ai_safety_ml_detector_thresholds",
                 "ai_safety_detector_runtime",
                 "ai_safety_preload_enabled",
+                "ai_safety_max_concurrent",
                 "deployment_mode",
                 "rag_enabled",
                 "rag_service_token",
@@ -206,6 +207,35 @@ class AiServiceLauncherConfigTests(unittest.TestCase):
             settings = load_settings()
 
         self.assertTrue(settings.ai_safety_preload_enabled)
+
+    def test_settings_defaults_ai_safety_max_concurrent_to_one(self) -> None:
+        with patch.dict(os.environ, {}, clear=True):
+            settings = load_settings()
+
+        self.assertEqual(settings.ai_safety_max_concurrent, 1)
+
+    def test_settings_loads_ai_safety_max_concurrent(self) -> None:
+        with patch.dict(
+            os.environ,
+            {"AI_SERVICE_AI_SAFETY_MAX_CONCURRENT": "2"},
+            clear=True,
+        ):
+            settings = load_settings()
+
+        self.assertEqual(settings.ai_safety_max_concurrent, 2)
+
+    def test_settings_rejects_out_of_range_ai_safety_max_concurrent(self) -> None:
+        for configured_value in ("0", "-1", "33"):
+            with self.subTest(configured_value=configured_value), patch.dict(
+                os.environ,
+                {"AI_SERVICE_AI_SAFETY_MAX_CONCURRENT": configured_value},
+                clear=True,
+            ):
+                with self.assertRaisesRegex(
+                    ValueError,
+                    "AI_SERVICE_AI_SAFETY_MAX_CONCURRENT",
+                ):
+                    load_settings()
 
     def test_settings_loads_person_name_model_only_flag(self) -> None:
         with patch.dict(
