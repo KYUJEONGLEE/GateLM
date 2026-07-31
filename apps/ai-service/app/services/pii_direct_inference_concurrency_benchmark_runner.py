@@ -283,7 +283,7 @@ def run(
             "PII concurrency benchmark report",
         )
         args.out.parent.mkdir(parents=True, exist_ok=True)
-        args.out.write_text(rendered + "\n", encoding="utf-8")
+        args.out.write_bytes((rendered + "\n").encode("utf-8"))
     except (BenchmarkError, OSError, RuntimeError, ValueError, json.JSONDecodeError):
         print(
             "FAIL: PII concurrency benchmark could not produce safe aggregate evidence.",

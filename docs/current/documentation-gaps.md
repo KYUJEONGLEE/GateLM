@@ -36,8 +36,8 @@
 | DOC-032 | authoritative 106D routing artifact의 원본 aggregate 성능 보고서가 source control에 없다 | `reports/routing-difficulty-model/20260716-model-path-5000/REPORT.md`는 `.gitignore` 대상이며 현재 checkout에 없다. artifact와 runtime contract는 추적되지만 joint/difficulty accuracy 수치의 독립 재검증 문서는 없다 | 원본 manifest와 frozen output에서 민감정보 없는 aggregate evidence를 재현해 `docs/testing/`에 승격하기 전까지 정확도 수치를 release·이력서 근거로 사용하지 않음 |
 | DOC-033 | release-like pre-v1 문서 경로가 실행 코드, Docker, verifier와 provenance에 결합돼 있다 | `docs/v1.0.0`, `docs/v2.0.0`, `docs/v2.1.0`은 fixture import, Docker `COPY`, schema `$id`, manifest source path와 artifact hash consumer를 가짐 | `PVR-00`에서 consumer를 분리하고 기능별 계약 승격과 archive 이동을 hash/provenance 검증과 함께 수행 |
 | DOC-034 | target `v1.0.0` 전체 release gate와 freeze automation이 없다 | `verify:v2-final`과 `v2:rc:freeze`는 former v2 workstream의 범위·출력에 고정돼 있어 v1 release evidence로 사용할 수 없음 | exact v1 범위와 baseline commit manifest, package/image/docs 정렬, 공개 registry image tag·digest·consumer 확인, fresh-host·security·rollback evidence를 묶는 별도 release contract와 자동화 승인 |
-
 | DOC-035 | PII 모델의 과거 alias와 SHA는 정리됐지만 `v0.0.1`~`v0.1.0` 및 `v0.1.1-dev.*` 평가·manifest의 source-control 재현성이 불완전하다 | current registry가 artifact SHA를 기록하지만 다수 원본은 ignored 실험 자료에만 있고, tracked 근거는 v0.1.0 (legacy v3.6) runtime manifest와 v0.1.1 (legacy v3.14) package evidence 중심이다 | 민감정보 없는 aggregate evaluation과 manifest를 추적 파일로 승격하기 전에는 과거 alias를 release 또는 production evidence로 사용하지 않음 |
+| DOC-036 | PII process-local admission과 동시성 evidence가 feature branch에만 있고 목표 운영 환경 검증은 남아 있다 | [`../testing/pii-inference-concurrency-v0.1.1-20260731.md`](../testing/pii-inference-concurrency-v0.1.1-20260731.md)는 Windows 8-CPU direct 측정과 in-process ASGI HTTP 측정이다. strict 100ms gate를 통과한 동시성은 없었고 Uvicorn·network·multi-worker·Gateway fallback은 제외됐다 | 기본값 1을 유지하고, `origin/dev` 병합 전 계약 검토와 목표 4-vCPU Linux에서의 반복 측정, Uvicorn/network 503 및 Gateway regex-only fallback 부하 E2E를 완료 |
 
 ## Resolved Decisions
 

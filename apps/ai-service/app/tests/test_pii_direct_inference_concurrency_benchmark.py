@@ -314,6 +314,7 @@ class PiiDirectInferenceConcurrencyBenchmarkTests(unittest.TestCase):
 
             self.assertEqual(exit_code, 0)
             report_text = out.read_text(encoding="utf-8")
+            self.assertNotIn(b"\r", out.read_bytes())
             report = json.loads(report_text)
             scan_text_for_forbidden_report_values(
                 report_text,

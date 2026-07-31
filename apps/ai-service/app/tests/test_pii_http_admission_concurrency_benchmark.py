@@ -102,6 +102,7 @@ class PiiHttpAdmissionConcurrencyBenchmarkTests(
             report_path = Path(temp_dir) / "aggregate.json"
             write_safe_report(report, report_path)
             report_text = report_path.read_text(encoding="utf-8")
+            self.assertNotIn(b"\r", report_path.read_bytes())
             public_report = json.loads(report_text)
 
         self.assertNotIn(INPUT_SENTINEL, report_text)

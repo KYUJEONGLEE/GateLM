@@ -888,7 +888,7 @@ def write_safe_report(report: Mapping[str, Any], path: Path) -> None:
         "PII HTTP admission benchmark report",
     )
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(rendered + "\n", encoding="utf-8")
+    path.write_bytes((rendered + "\n").encode("utf-8"))
 
 
 if __name__ == "__main__":
