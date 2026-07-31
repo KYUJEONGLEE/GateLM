@@ -37,7 +37,7 @@
 | DOC-033 | release-like pre-v1 문서 경로가 실행 코드, Docker, verifier와 provenance에 결합돼 있다 | `docs/v1.0.0`, `docs/v2.0.0`, `docs/v2.1.0`은 fixture import, Docker `COPY`, schema `$id`, manifest source path와 artifact hash consumer를 가짐 | `PVR-00`에서 consumer를 분리하고 기능별 계약 승격과 archive 이동을 hash/provenance 검증과 함께 수행 |
 | DOC-034 | target `v1.0.0` 전체 release gate와 freeze automation이 없다 | `verify:v2-final`과 `v2:rc:freeze`는 former v2 workstream의 범위·출력에 고정돼 있어 v1 release evidence로 사용할 수 없음 | exact v1 범위와 baseline commit manifest, package/image/docs 정렬, 공개 registry image tag·digest·consumer 확인, fresh-host·security·rollback evidence를 묶는 별도 release contract와 자동화 승인 |
 
-| DOC-035 | PII 모델의 과거 alias와 SHA는 정리됐지만 `v0.0.1`~`v0.1.0` 및 `v0.1.1-dev.*` 평가·manifest의 source-control 재현성이 불완전하다 | current registry가 artifact SHA를 기록하지만 다수 원본은 ignored 실험 자료에만 있고, tracked 근거는 v3.6 runtime manifest와 v3.14 package evidence 중심이다 | 민감정보 없는 aggregate evaluation과 manifest를 추적 파일로 승격하기 전에는 과거 alias를 release 또는 production evidence로 사용하지 않음 |
+| DOC-035 | PII 모델의 과거 alias와 SHA는 정리됐지만 `v0.0.1`~`v0.1.0` 및 `v0.1.1-dev.*` 평가·manifest의 source-control 재현성이 불완전하다 | current registry가 artifact SHA를 기록하지만 다수 원본은 ignored 실험 자료에만 있고, tracked 근거는 v0.1.0 (legacy v3.6) runtime manifest와 v0.1.1 (legacy v3.14) package evidence 중심이다 | 민감정보 없는 aggregate evaluation과 manifest를 추적 파일로 승격하기 전에는 과거 alias를 release 또는 production evidence로 사용하지 않음 |
 
 ## Resolved Decisions
 
