@@ -11,7 +11,6 @@ import {
 } from "@/lib/control-plane/read-cache";
 import {
   createProject,
-  listControlPlaneProjectsFresh,
   updateProject
 } from "@/lib/control-plane/projects-client";
 import type {
