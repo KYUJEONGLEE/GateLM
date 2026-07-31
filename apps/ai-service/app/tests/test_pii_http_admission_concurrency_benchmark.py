@@ -23,6 +23,7 @@ from app.services.pii_http_admission_concurrency_benchmark_runner import (
     build_report,
     run_http_admission_waves,
     select_model_candidate_cases,
+    select_verified_hybrid_workload,
     write_safe_report,
 )
 
@@ -64,6 +65,7 @@ class PiiHttpAdmissionConcurrencyBenchmarkTests(
             waves=3,
             corpus_case_count=50,
             selected_workload_case_count=20,
+            verified_workload_case_count=10,
             corpus_sha256="a" * 64,
             model_binding=canonical_model_binding(),
             primary_model_binding=primary_model_binding(),
@@ -143,6 +145,7 @@ class PiiHttpAdmissionConcurrencyBenchmarkTests(
             waves=2,
             corpus_case_count=50,
             selected_workload_case_count=20,
+            verified_workload_case_count=10,
             corpus_sha256="c" * 64,
             model_binding=canonical_model_binding(),
             primary_model_binding=primary_model_binding(),
@@ -222,6 +225,25 @@ class PiiHttpAdmissionConcurrencyBenchmarkTests(
 
         self.assertEqual(selected, (phone_case,))
 
+    def test_preflight_keeps_only_hybrid_koelectra_workload(
+        self,
+    ) -> None:
+        workload = (
+            RenderedWorkload(prompt_text="keep-hybrid", locale="ko-KR"),
+            RenderedWorkload(prompt_text="drop-rules-only", locale="ko-KR"),
+            RenderedWorkload(prompt_text="drop-other-model", locale="ko-KR"),
+        )
+
+        verified = select_verified_hybrid_workload(
+            PreflightSelectionService(),
+            workload,
+        )
+
+        self.assertEqual(
+            tuple(item.prompt_text for item in verified),
+            ("keep-hybrid",),
+        )
+
     def test_security_scan_is_mandatory_and_has_no_disable_option(self) -> None:
         option_destinations = {
             action.dest for action in build_parser()._actions
@@ -239,6 +261,64 @@ class PiiHttpAdmissionConcurrencyBenchmarkTests(
                     report,
                     Path(temp_dir) / "unsafe.json",
                 )
+
+
+class PreflightSelectionService:
+    def detect(
+        self,
+        request: AiSafetyDetectRequest,
+    ) -> AiSafetyDetectResponse:
+        prompt = request.input.prompt_text
+        execution_mode = (
+            "rules_only" if prompt == "drop-rules-only" else "hybrid"
+        )
+        source = (
+            "openai_privacy_filter"
+            if prompt == "drop-other-model"
+            else GATELM_KOELECTRA_PII_NER_SOURCE
+        )
+        detections = (
+            []
+            if execution_mode == "rules_only"
+            else [
+                {
+                    "detectorType": "phone_number",
+                    "source": source,
+                    "confidence": 0.99,
+                    "action": "redact",
+                    "mode": "shadow",
+                }
+            ]
+        )
+        return AiSafetyDetectResponse.model_validate(
+            {
+                "contractVersion": "ai-safety-detector.v1",
+                "model": {
+                    "modelId": "gatelm/synthetic-test-model",
+                    "runtime": "cpu_only",
+                },
+                "outcome": "redacted" if detections else "passed",
+                "mode": "shadow",
+                "redactedPrompt": "[SYNTHETIC_REDACTED]",
+                "logSafePrompt": "[SYNTHETIC_REDACTED]",
+                "redactedPromptPreview": None,
+                "detectorSummary": {
+                    "detectedCount": len(detections),
+                    "detectorCategories": ["phone_number"]
+                    if detections
+                    else [],
+                },
+                "detections": detections,
+                "executionSummary": {
+                    "executionMode": execution_mode,
+                    "modelInvocationCount": (
+                        0 if execution_mode == "rules_only" else 1
+                    ),
+                    "acceptedModelDetectionCount": len(detections),
+                },
+                "latencyMs": 1,
+            }
+        )
 
 
 class DelayedHybridService:

@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from time import perf_counter
-from typing import Any
+from typing import Any, Protocol
 
 import httpx
 from fastapi import FastAPI
@@ -33,6 +33,7 @@ from app.domain.ai_safety_benchmark.types import BenchmarkCase, BenchmarkError
 from app.main import create_app
 from app.schemas.safety import (
     AI_SAFETY_DETECTOR_CONTRACT_VERSION,
+    AiSafetyDetectRequest,
     AiSafetyDetectResponse,
 )
 from app.services.pii_direct_inference_concurrency_benchmark_runner import (
@@ -85,12 +86,22 @@ KOELECTRA_MODEL_CANDIDATE_PLACEHOLDER_TYPES = frozenset(
 MODEL_CANDIDATE_SELECTION_RULE = (
     "case_has_koelectra_supported_placeholder_type_that_enters_ml_candidate_pipeline"
 )
+HYBRID_PREFLIGHT_SELECTION_RULE = (
+    "in_memory_preflight_confirms_hybrid_execution_and_accepted_koelectra_source"
+)
 
 
 @dataclass(frozen=True)
 class RenderedWorkload:
     prompt_text: str
     locale: str | None
+
+
+class DetectorService(Protocol):
+    def detect(
+        self,
+        request: AiSafetyDetectRequest,
+    ) -> AiSafetyDetectResponse: ...
 
 
 @dataclass(frozen=True)
@@ -215,10 +226,14 @@ def run(
             ai_safety_max_concurrent=args.capacity,
         )
         app = create_app(settings)
+        verified_workload = select_verified_hybrid_workload(
+            app.state.ai_safety_detector_service,
+            workload,
+        )
         wave_summaries = asyncio.run(
             run_http_admission_waves(
                 app=app,
-                workload=workload,
+                workload=verified_workload,
                 capacity=args.capacity,
                 parallel_requests=args.parallel_requests,
                 waves=args.waves,
@@ -232,6 +247,7 @@ def run(
             waves=args.waves,
             corpus_case_count=len(cases),
             selected_workload_case_count=len(selected_cases),
+            verified_workload_case_count=len(verified_workload),
             corpus_sha256=sha256_file(args.corpus),
             model_binding=model_binding,
             primary_model_binding=primary_model_binding,
@@ -401,6 +417,30 @@ def select_model_candidate_cases(
     return selected
 
 
+def select_verified_hybrid_workload(
+    service: DetectorService,
+    workload: Sequence[RenderedWorkload],
+) -> tuple[RenderedWorkload, ...]:
+    verified: list[RenderedWorkload] = []
+    for item in workload:
+        response = service.detect(
+            AiSafetyDetectRequest.model_validate(request_payload(item))
+        )
+        if (
+            response.execution_summary.execution_mode == "hybrid"
+            and any(
+                detection.source in KOELECTRA_SOURCES
+                for detection in response.detections
+            )
+        ):
+            verified.append(item)
+    if not verified:
+        raise BenchmarkError(
+            "no synthetic workload retained hybrid KoELECTRA contribution"
+        )
+    return tuple(verified)
+
+
 async def run_http_admission_waves(
     *,
     app: FastAPI,
@@ -462,18 +502,7 @@ async def send_admission_request(
     workload: RenderedWorkload,
     release: asyncio.Event,
 ) -> AdmissionSample:
-    payload = {
-        "contractVersion": AI_SAFETY_DETECTOR_CONTRACT_VERSION,
-        "mode": "shadow",
-        "input": {
-            "promptText": workload.prompt_text,
-            "locale": workload.locale,
-        },
-        "detectorConfig": {
-            "detectorSet": "privacy-filter-default",
-            "returnConfidence": False,
-        },
-    }
+    payload = request_payload(workload)
     await release.wait()
     started = perf_counter()
     try:
@@ -494,6 +523,21 @@ async def send_admission_request(
         status=response.status_code,
         latency_ms=latency_ms,
     )
+
+
+def request_payload(workload: RenderedWorkload) -> dict[str, Any]:
+    return {
+        "contractVersion": AI_SAFETY_DETECTOR_CONTRACT_VERSION,
+        "mode": "shadow",
+        "input": {
+            "promptText": workload.prompt_text,
+            "locale": workload.locale,
+        },
+        "detectorConfig": {
+            "detectorSet": "privacy-filter-default",
+            "returnConfidence": False,
+        },
+    }
 
 
 def inspect_success_response(
@@ -628,6 +672,7 @@ def build_report(
     waves: int,
     corpus_case_count: int,
     selected_workload_case_count: int,
+    verified_workload_case_count: int,
     corpus_sha256: str,
     model_binding: Mapping[str, Any],
     primary_model_binding: Mapping[str, Any],
@@ -638,6 +683,8 @@ def build_report(
         raise BenchmarkError("completed wave count does not match configuration")
     if not 0 < selected_workload_case_count <= corpus_case_count:
         raise BenchmarkError("selected workload case count is invalid")
+    if not 0 < verified_workload_case_count <= selected_workload_case_count:
+        raise BenchmarkError("verified workload case count is invalid")
     generated = generated_at or datetime.now(timezone.utc)
     success_count = sum(
         int(summary["httpStatusCounts"]["200"])
@@ -699,6 +746,9 @@ def build_report(
             success_count > 0 and hybrid_success_count == success_count
         ),
         "koelectraAcceptedContributionObserved": accepted_koelectra_count > 0,
+        "allSuccessesHaveKoelectraContribution": (
+            success_count > 0 and accepted_koelectra_count >= success_count
+        ),
         "slotRecoveryVerified": slot_recovery_verified,
     }
     return {
@@ -721,7 +771,9 @@ def build_report(
         "workload": {
             "fullCorpusCaseCount": corpus_case_count,
             "selectedWorkloadCaseCount": selected_workload_case_count,
+            "verifiedHybridWorkloadCaseCount": verified_workload_case_count,
             "selectionRule": MODEL_CANDIDATE_SELECTION_RULE,
+            "verificationRule": HYBRID_PREFLIGHT_SELECTION_RULE,
             "corpusSha256": corpus_sha256,
             "rendering": "synthetic_placeholders_rendered_in_memory_only",
             "storedContent": "aggregate_only",

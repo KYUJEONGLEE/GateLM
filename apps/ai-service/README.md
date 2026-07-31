@@ -252,7 +252,7 @@ python -m app.services.pii_http_admission_concurrency_benchmark_runner \
   --waves 20
 ```
 
-This runner passes requests through the actual FastAPI route with an in-process ASGI transport. It is gate evidence, not a concurrency recommendation, and does not cover Uvicorn sockets, multiple worker processes, or Gateway fallback under network load. The written report contains aggregate counts and latency distributions only.
+This runner first keeps only synthetic cases whose in-memory preflight confirms both hybrid execution and an accepted KoELECTRA contribution, then passes those requests through the actual FastAPI route with an in-process ASGI transport. It stores only aggregate selection counts, never case IDs, prompts, or detections. It is gate evidence, not a concurrency recommendation, and does not cover Uvicorn sockets, multiple worker processes, or Gateway fallback under network load.
 
 ## Safety Eval Runner
 
