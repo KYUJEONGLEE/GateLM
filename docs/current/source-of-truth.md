@@ -4,7 +4,7 @@
 |---|---|
 | Status | Active |
 | Authority | 문서 상태, 읽기 순서, 계약 변경 절차 |
-| Last verified | 2026-07-14 |
+| Last verified | 2026-07-27 |
 
 ## 1. Authority Model
 
@@ -12,21 +12,39 @@ GateLM은 current 계약을 versioned 계약과 별도로 복제하지 않는다
 
 | Priority | Document class | Authority |
 |---:|---|---|
-| 1 | `docs/current/` | 현재 문서 상태와 범위 라우팅 |
-| 2 | current가 지정한 active contract | 해당 범위의 계약 의미 |
-| 3 | 해당 범위의 versioned contract/schema/fixture | versioned 범위의 계약과 검증 데이터 |
-| 4 | inherited baseline compatibility | 아직 대체되지 않은 과거 행동 계약 |
+| 1 | `docs/current/README.md`, `source-of-truth.md`, `contract-map.md` | 문서 상태, lifecycle과 범위 라우팅만 결정 |
+| 2 | contract map이 지정한 active scoped contract | 해당 범위의 현재 계약 의미 |
+| 3 | 해당 active 또는 pre-v1 scoped 범위의 contract/schema/fixture | machine-readable 계약과 검증 데이터 |
+| 4 | inherited baseline compatibility | 아직 current 계약으로 대체되지 않은 과거 행동 의미 |
 | 5 | architecture/policy | 설계와 운영 원칙의 보조 근거 |
-| 6 | testing/evidence | 특정 commit과 환경에서 관찰한 결과 |
-| 7 | reference/archive | 후보 설계와 과거 이력 |
+| 6 | implementation/testing/evidence | 특정 commit과 환경의 관찰 결과; 계약 아님 |
+| 7 | proposal/reference/archive | 후보, 구현 동반 기록과 과거 이력; 비권위 |
 
 `docs/current/implementation-status.md`와 현재 코드/테스트는 as-built evidence다. 코드가 문서와 다르다는 이유만으로 코드가 자동으로 계약이 되지는 않는다.
+
+[`proposals/README.md`](proposals/README.md)는 current proposal의 lifecycle registry다. 그 안의 target v1.0.0 리팩토링 baseline을 포함한 모든 proposal은 [`contract-map.md`](contract-map.md)에서 Active로 승격되기 전까지 계약이 아니다.
+
+### 1.1 Contract Lifecycle
+
+| Lifecycle | 의미 | 계약 권위 |
+|---|---|---|
+| Proposed | 검토 중인 계약 후보 | 없음 |
+| Accepted | owner가 방향을 승인했지만 current 승격 gate가 남음 | 명시된 검토 범위에만 제한 |
+| Active | contract map이 현재 권위 진입점으로 연결 | 있음 |
+| Superseded | 다른 active 계약이 대체 | 신규 작업 권위 없음 |
+| Archived | 과거 결정과 evidence 보존 | 없음 |
+
+`Implementation companion`, `planning baseline`, `reference`, `evidence`는 lifecycle이 아니라 문서 역할이다. 구현 존재나 feature branch 병합만으로 Proposed 또는 Accepted 문서가 Active가 되지 않는다.
+
+### 1.2 Release Version Policy
+
+현재 제품 상태는 `Unreleased`이며 리팩토링과 전체 release gate 완료 후 목표 버전은 `v1.0.0`이다. 기존 release-like 문서 폴더는 [`../pre-v1/README.md`](../pre-v1/README.md)의 workstream 분류를 따르며, 제품 SemVer나 GA 근거로 사용하지 않는다.
 
 ## 2. Active Scope Map
 
 ### Documentation governance
 
-이 문서와 [`README.md`](README.md)가 active 기준이다.
+이 문서, [`README.md`](README.md)와 [`contract-map.md`](contract-map.md)가 문서 거버넌스의 active 기준이다.
 
 ### Tenant Chat Product
 
@@ -40,6 +58,10 @@ GateLM은 current 계약을 versioned 계약과 별도로 복제하지 않는다
 - [`../tenant-chat/handoffs/employee-usage-integration.md`](../tenant-chat/handoffs/employee-usage-integration.md): Control Plane/Employee Usage 통합 경계
 
 이 scope는 제품 release SemVer를 선언하지 않는다. 기존 Project/Application Chat과 public `/v1` 경로는 inherited compatibility로 보존한다. Tenant Chat 구현은 `origin/dev`에 존재하며, 현재 as-built 범위와 아직 연결되지 않은 end-to-end 경계는 [`implementation-status.md`](implementation-status.md)에서 구분한다. 구현 존재만으로 contract acceptance, release 완료 또는 GA를 선언하지 않는다.
+
+Tenant Chat RAG의 API/DB/Event/Metrics/Security 의미도 이 active scope에
+포함된다. `docs/rag/**`는 구현 계획과 검증 자료이며 이 범위의 Tenant Chat
+계약, OpenAPI 또는 schema를 덮어쓰지 않는다.
 
 ### General Gateway routing
 
@@ -56,7 +78,7 @@ GateLM은 current 계약을 versioned 계약과 별도로 복제하지 않는다
 
 ### Self-host delivery
 
-다음 v2.1.0 문서는 역할을 구분해서 사용한다.
+다음 former v2.1.0 pre-v1 문서는 역할을 구분해서 사용한다.
 
 - [`../v2.1.0/contracts.md`](../v2.1.0/contracts.md): versioned self-host contract
 - [`../v2.1.0/production-images.md`](../v2.1.0/production-images.md): versioned image target reference
@@ -68,7 +90,7 @@ plan/task/acceptance는 current backlog나 완료 evidence가 아니다. 실제 
 
 ### Advanced Routing offline evidence
 
-다음 v2.1.0 문서를 해당 offline 평가 범위에서 사용한다.
+다음 former v2.1.0 pre-v1 문서를 해당 offline 평가 범위에서 사용한다.
 
 - [`../v2.1.0/category-evaluation-dataset-contract.md`](../v2.1.0/category-evaluation-dataset-contract.md)
 - [`../v2.1.0/schemas/category-evaluation-record.schema.json`](../v2.1.0/schemas/category-evaluation-record.schema.json)
@@ -91,14 +113,14 @@ plan/task/acceptance는 current backlog나 완료 evidence가 아니다. 실제 
 
 Gateway, RuntimeSnapshot, Provider, Request Log, Dashboard, API, DB, Event, Metrics, Security-sensitive field에서 current 대체 계약이 없는 부분은 [`../v2.0.0/README.md`](../v2.0.0/README.md)의 baseline compatibility 분류를 확인한다.
 
-v2.0.0 implementation plan, tasks, PR packets는 historical plan/record다. 새 작업의 순서나 branch 이름을 지시하지 않는다.
+former v2.0.0 implementation plan, tasks, PR packets는 pre-v1 historical plan/record다. 새 작업의 순서나 branch 이름을 지시하지 않는다.
 
 ## 3. Conflict Handling
 
 문서끼리 또는 문서와 코드가 충돌하면 다음 절차를 따른다.
 
 1. 각 문서의 Status, Authority, Applies to, Last verified를 확인한다.
-2. current scope map에 명시된 문서인지 확인한다.
+2. [`contract-map.md`](contract-map.md)가 해당 범위를 Active로 연결하는지 확인한다.
 3. 현재 `origin/dev` 코드와 테스트에서 실제 동작을 확인한다.
 4. 차이를 [`documentation-gaps.md`](documentation-gaps.md)에 기록한다.
 5. 계약 의미가 바뀌면 구현 PR과 분리된 문서/계약 변경 후보를 만든다.
@@ -124,6 +146,7 @@ contract-sensitive 변경은 다음 근거 중 하나가 필요하다.
 - inherited baseline을 대체하는 명시적 contract proposal
 
 기능 PR 안에서 문서 의미를 암묵적으로 바꾸지 않는다.
+proposal을 Active로 승격하거나 active 계약을 대체·폐기할 때는 같은 contract PR에서 `contract-map.md`, 이 문서와 compatibility 경계를 함께 갱신한다.
 
 ## 5. Development Branch Evidence
 

@@ -3,6 +3,8 @@
 | Field | Value |
 |---|---|
 | Status | Reference only, not an active contract |
+| Contract lifecycle | N/A |
+| Document role | Legacy compatibility reference |
 | Applies to | Existing Project/Application-based Application Chat compatibility |
 | Does not apply to | Proposed Tenant Chat product |
 | Last reviewed | 2026-07-12 |

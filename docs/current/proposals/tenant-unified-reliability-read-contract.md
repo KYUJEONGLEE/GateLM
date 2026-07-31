@@ -3,6 +3,8 @@
 | Field | Value |
 |---|---|
 | Status | Proposed; not active until owner approval, implementation, and acceptance |
+| Contract lifecycle | Proposed |
+| Document role | Contract proposal |
 | Applies to | Web Analytics `reliability` tab and Gateway observability reliability reader |
 | Does not apply to | Billing or quota enforcement, SLA declaration, latency percentile merging, Request Detail mutation, or metrics labels |
 | Source surfaces | `project_application`, `tenant_chat` |
@@ -293,7 +295,7 @@ Unified reader는 `surface`를 query parameter로 받도록 기존 Project/Appli
 
 Canonical terminal counts는 `dimension_type=terminal_status` row를 이 계약의 mapping table로 정규화해 계산한다. `dashboard_rollup_totals`의 status count와 parity가 맞지 않으면 해당 범위를 정상 rollup으로 사용하지 않는다. bounded raw fallback이 가능하면 raw로 재조회하고, 불가능하면 `partial` 또는 `unavailable`로 응답한다.
 
-현재 Tenant Chat rollup writer는 `policy_ack_required`를 `blocked_request_count`에 포함하지 않는다. 구현 전 writer를 교정하고 영향 bucket을 dirty 처리해 replacement rebuild해야 한다. 기존 rollup 값을 blind increment하거나 reader에서 total 차이를 임의로 `failed`에 더하지 않는다.
+현재 baseline의 Tenant Chat rollup writer는 `policy_ack_required`를 `blocked_request_count`, canonical total과 `policy_outcome` dimension에 포함한다. 이 mapping은 regression test로 고정한다. 과거 잘못 집계된 영향 bucket이 존재하는지는 별도 evidence로 확인하고, 필요하면 dirty 처리 후 replacement rebuild한다. 기존 rollup 값을 blind increment하거나 reader에서 total 차이를 임의로 `failed`에 더하지 않는다.
 
 Latency percentile, TTFT, active user, employee identity는 이 안정성 read model에서 합치지 않는다.
 
@@ -364,8 +366,8 @@ Top-level 규칙:
 ## 13. Rollout Gate
 
 1. 이 proposal을 owner-approved current contract로 승격한다.
-2. Tenant Chat `policy_ack_required -> blocked` writer mapping을 수정한다.
-3. 영향 Tenant Chat hour/day/month bucket을 dirty 처리하고 replacement rebuild한다.
+2. Tenant Chat `policy_ack_required -> blocked` writer mapping을 regression test로 고정하고, 과거 영향 bucket의 rebuild 필요 여부를 evidence로 판정한다.
+3. 과거 영향 bucket이 확인된 경우에만 해당 Tenant Chat hour/day/month bucket을 dirty 처리하고 replacement rebuild한다.
 4. unified raw reader와 raw parity fixture를 먼저 구현한다.
 5. surface별 rollup coverage/parity 검증 후 rollup과 hybrid reader를 활성화한다.
 6. Web reliability tab을 새 endpoint로 전환하고 capped request-log reconstruction을 제거한다.

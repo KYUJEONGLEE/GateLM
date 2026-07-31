@@ -2,7 +2,9 @@
 
 | Field | Value |
 |---|---|
-| Status | Proposal |
+| Status | Proposed; not active |
+| Contract lifecycle | Proposed |
+| Document role | Contract proposal |
 | Applies to | `p0_llm_invocation_logs` physical storage and deployment migration |
 | Development baseline | `origin/dev` |
 | Partition key | UTC `created_at` |

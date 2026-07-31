@@ -7,12 +7,12 @@
 | Category | Existing rule classifier remains authoritative |
 | Failure mode | Per-request or startup rule-difficulty fallback |
 | Active contract | [`../routing/contracts.md`](../routing/contracts.md) |
-| Model report | [`../../reports/routing-difficulty-model/20260716-model-path-5000/REPORT.md`](../../reports/routing-difficulty-model/20260716-model-path-5000/REPORT.md) |
+| Evidence status | 원본 aggregate report는 source control에 없음; [`DOC-032`](../current/documentation-gaps.md) |
 | Last reviewed | 2026-07-16 |
 
 ## 1. Promoted Artifact
 
-The promoted model is frozen Candidate B: `42D rule + 64D PCA`, Logistic Regression L2/liblinear `C=10`, Platt scaling and global threshold `0.096`. It was trained with 3,000 records, calibrated and selected with 1,000 records, then evaluated once on a separate 1,000-record test. Test joint routing accuracy was `62.6%` with 95% CI `59.1–65.9%`; difficulty accuracy was `97.8%`.
+The promoted model is frozen Candidate B: `42D rule + 64D PCA`, Logistic Regression L2/liblinear `C=10`, Platt scaling and global threshold `0.096`. It was trained with 3,000 records, calibrated and selected with 1,000 records, then evaluated once on a separate 1,000-record test. The original aggregate report is not tracked, so this runbook does not restate performance scores; see [`DOC-032`](../current/documentation-gaps.md).
 
 - Artifact version: `difficulty-offline.model-path-5000.2026-07-16.42d-rule-vector-v1-plus-projection.shadow.v1`
 - Bundle hash: `sha256:1a755c3bca16f76a43f86696e9b2028e805eb7536161245a8683adf78b118ebd`

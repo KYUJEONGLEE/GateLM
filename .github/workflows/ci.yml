@@ -62,7 +62,7 @@ jobs:
           git diff --check "$diff_base" "$head_sha"
 
       - name: Verify current documentation
-        run: pnpm verify:v2-docs
+        run: pnpm verify:docs
 
       - name: Validate GitHub Actions workflows
         run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
@@ -215,7 +215,6 @@ jobs:
           - operator-web
           - tenant-chat-api
           - tenant-chat-web
-          - legacy-application
 
     steps:
       - name: Checkout repository
@@ -263,11 +262,6 @@ jobs:
               pnpm --filter @gatelm/chat-web test
               pnpm --filter @gatelm/chat-web typecheck
               pnpm --filter @gatelm/chat-web build
-              ;;
-            legacy-application)
-              pnpm --filter @gatelm/application lint
-              pnpm --filter @gatelm/application typecheck
-              pnpm --filter @gatelm/application build
               ;;
             *)
               echo "Unknown application verification target: ${{ matrix.target }}" >&2

@@ -2,7 +2,9 @@
 
 | Field | Value |
 |---|---|
-| Status | Implementation companion proposal |
+| Status | Proposal with implementation; not active |
+| Contract lifecycle | Proposed |
+| Document role | Contract proposal; implementation companion |
 | Applies to | Control Plane employee security reader and Web Analytics |
 | Does not apply to | Safety enforcement, prompt inspection, incident investigation |
 | Baseline | `feat/employee_dash` |

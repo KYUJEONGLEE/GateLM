@@ -2,16 +2,11 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://gatelm.local/schemas/ai-safety-lab/detector-sidecar-batch-response.schema.json",
   "title": "GateLM AI Safety Detector Batch Response",
-  "description": "Ordered sanitized response for POST /internal/ai-safety/v1/detect/batch.",
+  "description": "Ordered sanitized success response or sanitized error response for POST /internal/ai-safety/v1/detect/batch.",
   "type": "object",
   "additionalProperties": false,
   "required": [
-    "contractVersion",
-    "model",
-    "mode",
-    "results",
-    "executionSummary",
-    "latencyMs"
+    "contractVersion"
   ],
   "properties": {
     "contractVersion": {
@@ -40,8 +35,61 @@
     "latencyMs": {
       "type": "integer",
       "minimum": 0
+    },
+    "error": {
+      "$ref": "detector-sidecar-response.schema.json#/$defs/error"
     }
   },
+  "oneOf": [
+    {
+      "required": [
+        "model",
+        "mode",
+        "results",
+        "executionSummary",
+        "latencyMs"
+      ],
+      "not": {
+        "required": [
+          "error"
+        ]
+      }
+    },
+    {
+      "required": [
+        "error"
+      ],
+      "not": {
+        "anyOf": [
+          {
+            "required": [
+              "model"
+            ]
+          },
+          {
+            "required": [
+              "mode"
+            ]
+          },
+          {
+            "required": [
+              "results"
+            ]
+          },
+          {
+            "required": [
+              "executionSummary"
+            ]
+          },
+          {
+            "required": [
+              "latencyMs"
+            ]
+          }
+        ]
+      }
+    }
+  ],
   "$defs": {
     "result": {
       "type": "object",

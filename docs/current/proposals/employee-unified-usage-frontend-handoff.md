@@ -3,6 +3,8 @@
 | Field | Value |
 |---|---|
 | Status | Implemented integration note; not an API/DB contract |
+| Contract lifecycle | N/A |
+| Document role | Frontend integration handoff |
 | Frontend branch | `feat/employee-unified-usage` |
 | Applies to | 직원 사용량 랭킹과 직원 관리 상세 UI |
 | Last verified | 2026-07-14 |
@@ -44,7 +46,7 @@
 
 따라서 정상 응답 시 랭킹은 Project/Application과 Tenant Chat을 합친 직원별 오늘 토큰 기준이며, 기존 프로젝트 배정·정책 제어 UI는 그대로 유지한다.
 
-## 통합 API 소비 계약
+## 통합 API 소비 요구사항
 
 프론트는 기간별 직원 사용량 API에서 다음 정보를 소비한다.
 
@@ -78,7 +80,7 @@ raw prompt, raw response, credential, Authorization header, provider raw error�
 
 ## 후속 범위
 
-1. Tenant 직원 일일·주간 비용 정책과 집행은 [`tenant-employee-cost-policy-contract.md`](tenant-employee-cost-policy-contract.md)를 따른다.
+1. Tenant Chat 직원 제한의 current 의미는 [`docs/tenant-chat/contracts.md`](../../tenant-chat/contracts.md)의 weekly token quota를 따른다. 기존 Project/Application 비용 guard의 과거 설계는 [`tenant-employee-cost-policy-contract.md`](tenant-employee-cost-policy-contract.md)의 historical reference로만 확인한다.
 2. 사용자가 기간을 직접 선택하는 UI가 필요하면 현재 기간 생성기와 API query를 확장한다.
 3. 출처별 breakdown이나 미귀속 사용량은 별도 표시 요구가 확정된 뒤 UI에 노출한다.
 4. 운영 안정성이 확인되면 Project/Application-only compatibility fallback 제거 시점을 결정한다.

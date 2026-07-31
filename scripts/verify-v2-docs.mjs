@@ -25,11 +25,29 @@ const requiredTopLevelSchemaFields = [
 const activeEntryDocs = [
   "docs/current/README.md",
   "docs/current/source-of-truth.md",
+  "docs/current/contract-map.md",
 ];
 
 const currentSnapshotDocs = [
   "docs/current/implementation-status.md",
   "docs/current/documentation-gaps.md",
+];
+
+const currentPlanningDocs = [
+  "docs/current/proposals/v1-release-candidate-refactoring-baseline.md",
+];
+
+const currentGovernanceDocs = [
+  "docs/current/contract-map.md",
+  "docs/current/proposals/README.md",
+];
+
+const activeRoutingIntegrityDocs = [
+  "docs/routing/README.md",
+  "docs/routing/contracts.md",
+  "docs/routing/classification-pipeline.md",
+  "docs/routing/difficulty-e5-encoder.md",
+  "docs/testing/difficulty-live-shadow-runbook.md",
 ];
 
 const tenantChatDocs = [
@@ -54,7 +72,12 @@ const tenantChatDocs = [
   "docs/tenant-chat/handoffs/employee-usage-integration.md",
 ];
 
+const preV1RegistryDocs = [
+  "docs/pre-v1/README.md",
+];
+
 const versionStatusDocs = [
+  "docs/v1.0.0/README.md",
   "docs/v2.0.0/README.md",
   "docs/v2.1.0/README.md",
 ];
@@ -190,8 +213,16 @@ function assertRuntimeBaseline() {
     fail('package.json: expected engines.node ">=22 <23"');
   }
 
-  if (packageJson.scripts?.["verify:v2-docs"] !== "node scripts/verify-v2-docs.mjs") {
-    fail('package.json: expected script "verify:v2-docs"');
+  if (packageJson.scripts?.["verify:docs"] !== "node scripts/verify-v2-docs.mjs") {
+    fail('package.json: expected canonical script "verify:docs"');
+  }
+
+  if (packageJson.scripts?.["verify:v2-docs"] !== "pnpm verify:docs") {
+    fail('package.json: expected compatibility alias "verify:v2-docs"');
+  }
+
+  if (packageJson.scripts?.["verify:v2-final"] !== "node scripts/verify-v2-final.mjs") {
+    fail('package.json: expected legacy regression script "verify:v2-final"');
   }
 }
 
@@ -206,6 +237,17 @@ function assertDocumentationRouting() {
   for (const currentDoc of currentSnapshotDocs) {
     assertIncludes("docs/current/README.md", path.basename(currentDoc));
   }
+  for (const planningDoc of currentPlanningDocs) {
+    assertIncludes("docs/current/README.md", path.basename(planningDoc));
+  }
+  for (const governanceDoc of currentGovernanceDocs) {
+    assertExists(governanceDoc);
+  }
+  assertIncludes("docs/current/README.md", "contract-map.md");
+  assertIncludes("docs/current/README.md", "proposals/README.md");
+  assertIncludes("docs/current/README.md", "../pre-v1/README.md");
+  assertIncludes("docs/current/source-of-truth.md", "contract-map.md");
+  assertIncludes("docs/current/contract-map.md", "proposals/README.md");
 
   assertIncludes("docs/current/README.md", "../tenant-chat/README.md");
   assertIncludes("docs/current/source-of-truth.md", "../tenant-chat/contracts.md");
@@ -217,6 +259,7 @@ function assertDocumentationRouting() {
     const versionDir = path.basename(path.dirname(versionStatusDoc));
     assertIncludes("docs/current/README.md", `${versionDir}/README.md`);
     assertIncludes(versionStatusDoc, "../current/README.md");
+    assertIncludes(versionStatusDoc, "../pre-v1/README.md");
   }
 
   assertIncludes("docs/tenant-chat/README.md", "openapi/admin-rag.openapi.json");
@@ -224,8 +267,12 @@ function assertDocumentationRouting() {
   assertIncludes("docs/tenant-chat/README.md", "openapi/chat-usage.openapi.json");
   assertIncludes("docs/tenant-chat/contracts.md", "openapi/chat-usage.openapi.json");
 
+  for (const expectedText of ["Pre-v1 historical contract freeze", "contracts.md", "fixtures/"]) {
+    assertIncludes("docs/v1.0.0/README.md", expectedText);
+  }
+
   for (const expectedText of [
-    "Historical baseline",
+    "Pre-v1 historical compatibility workstream",
     "contracts.md",
     "schemas/*.schema.json",
     "fixtures/*.fixture.json",
@@ -239,7 +286,7 @@ function assertDocumentationRouting() {
   }
 
   for (const expectedText of [
-    "Latest versioned scope reference",
+    "Pre-v1 scoped contract and evidence workstream",
     "contracts.md",
     "implementation-plan.md",
     "implementation-tasks.md",
@@ -257,6 +304,344 @@ function assertDocumentationRouting() {
   }
 }
 
+function assertCurrentDocumentationIntegrity() {
+  const baselineDocs = [
+    "docs/current/README.md",
+    ...currentGovernanceDocs,
+    ...currentSnapshotDocs,
+    ...currentPlanningDocs,
+  ];
+  const baselines = new Map();
+  const baselinePattern = /\|\s*(?:Baseline|Development baseline|Implementation baseline|Verified snapshot)\s*\|\s*`origin\/dev @ ([0-9a-f]{40})`\s*\|/;
+
+  for (const doc of baselineDocs) {
+    const text = readText(doc);
+    const match = text.match(baselinePattern);
+    if (!match) {
+      fail(`${doc}: missing full origin/dev baseline commit`);
+      continue;
+    }
+    baselines.set(doc, match[1]);
+  }
+
+  if (new Set(baselines.values()).size > 1) {
+    fail(
+      `current snapshot baseline mismatch: ${[...baselines.entries()]
+        .map(([doc, baseline]) => `${doc}=${baseline}`)
+        .join(", ")}`,
+    );
+  }
+
+  const mainCrossCheckDocs = [...currentSnapshotDocs, ...currentPlanningDocs];
+  const mainCrossChecks = new Map();
+  const mainCrossCheckPattern = /\|\s*Main cross-check\s*\|\s*`origin\/main @ ([0-9a-f]{40})`\s*\|/;
+
+  for (const doc of mainCrossCheckDocs) {
+    const text = readText(doc);
+    const match = text.match(mainCrossCheckPattern);
+    if (!match) {
+      fail(`${doc}: missing full origin/main cross-check commit`);
+      continue;
+    }
+    mainCrossChecks.set(doc, match[1]);
+  }
+
+  if (new Set(mainCrossChecks.values()).size > 1) {
+    fail(
+      `current snapshot main cross-check mismatch: ${[...mainCrossChecks.entries()]
+        .map(([doc, baseline]) => `${doc}=${baseline}`)
+        .join(", ")}`,
+    );
+  }
+
+  const verificationDateDocs = [
+    ...activeEntryDocs,
+    ...currentGovernanceDocs,
+    ...currentSnapshotDocs,
+    ...currentPlanningDocs,
+  ];
+  const verificationDates = new Map();
+  const verificationDatePattern = /\|\s*(?:Last verified|Verified at)\s*\|\s*(\d{4}-\d{2}-\d{2})\s*\|/;
+
+  for (const doc of verificationDateDocs) {
+    const text = readText(doc);
+    const match = text.match(verificationDatePattern);
+    if (!match) {
+      fail(`${doc}: missing verification date`);
+      continue;
+    }
+    verificationDates.set(doc, match[1]);
+  }
+
+  if (new Set(verificationDates.values()).size > 1) {
+    fail(
+      `current documentation verification date mismatch: ${[...verificationDates.entries()]
+        .map(([doc, date]) => `${doc}=${date}`)
+        .join(", ")}`,
+    );
+  }
+  const gapsPath = "docs/current/documentation-gaps.md";
+  const gaps = readText(gapsPath);
+  const ids = [...gaps.matchAll(/^\|\s*(DOC-\d{3})\s*\|/gm)].map((match) => match[1]);
+  const duplicateIds = [...new Set(ids.filter((id, index) => ids.indexOf(id) !== index))].sort();
+  if (duplicateIds.length > 0) {
+    fail(`${gapsPath}: duplicate gap IDs ${duplicateIds.join(", ")}`);
+  }
+
+  const managedCurrentDocs = [
+    ...activeEntryDocs,
+    ...currentGovernanceDocs,
+    ...currentSnapshotDocs,
+    ...currentPlanningDocs,
+  ];
+  const mojibakeMarkers = ["\uFFFD", "??", "筌", "揶", "癰", "野", "醫", "湲곗", "媛"];
+  for (const doc of managedCurrentDocs) {
+    const text = readText(doc);
+    if (/\b[A-Za-z]:[\\/]/i.test(text)) {
+      fail(`${doc}: local absolute path must not be committed`);
+    }
+    for (const marker of mojibakeMarkers) {
+      if (text.includes(marker)) {
+        fail(`${doc}: possible mojibake marker ${JSON.stringify(marker)}`);
+      }
+    }
+  }
+
+  const planningPath = currentPlanningDocs[0];
+  const planning = readText(planningPath);
+  for (const expectedText of [
+    "not an active contract",
+    "공식 `v1.0.0` 선언이 아님",
+    "API/DB/Event/Metrics/Security 의미 변경 없음",
+  ]) {
+    if (!planning.includes(expectedText)) {
+      fail(`${planningPath}: missing planning boundary ${JSON.stringify(expectedText)}`);
+    }
+  }
+}
+
+function assertReleaseVersionPolicy() {
+  const policyDocs = [
+    "AGENTS.md",
+    "README.md",
+    "docs/README.md",
+    "docs/current/README.md",
+    "docs/current/source-of-truth.md",
+    "docs/current/contract-map.md",
+    "docs/current/implementation-status.md",
+    "docs/current/proposals/v1-release-candidate-refactoring-baseline.md",
+    "docs/pre-v1/README.md",
+  ];
+
+  for (const doc of policyDocs) {
+    const text = readText(doc);
+    if (!text.includes("Unreleased")) {
+      fail(`${doc}: release policy must declare Unreleased`);
+    }
+    if (!text.includes("v1.0.0")) {
+      fail(`${doc}: release policy must declare target v1.0.0`);
+    }
+  }
+
+  for (const [doc, forbiddenText] of [
+    ["AGENTS.md", "하나의 확정된 SemVer로 선언되어 있지 않다"],
+    ["README.md", "다음 제품 SemVer는 아직 확정되지 않았습니다"],
+    ["docs/README.md", "다음 개발 SemVer는 아직 문서로 확정하지 않는다"],
+    ["docs/current/README.md", "다음 개발 SemVer 미확정"],
+    ["docs/v2.1.0/README.md", "Latest versioned scope reference"],
+  ]) {
+    if (readText(doc).includes(forbiddenText)) {
+      fail(`${doc}: stale release wording ${JSON.stringify(forbiddenText)}`);
+    }
+  }
+
+  assertIncludes("docs/current/implementation-status.md", "remote tags: `v0.0.1`, `v0.0.1-rc.1`");
+  assertIncludes("docs/current/implementation-status.md", "local-only historical tag");
+  assertIncludes("docs/current/documentation-gaps.md", "DOC-033");
+  assertIncludes("docs/current/documentation-gaps.md", "DOC-034");
+  assertIncludes("docs/current/documentation-gaps.md", "목표 제품 버전은 `v1.0.0`");
+  assertIncludes("docs/pre-v1/README.md", "제품 SemVer와 독립적");
+}
+
+function assertProposalRegistry() {
+  const relativeDir = "docs/current/proposals";
+  const registryPath = `${relativeDir}/README.md`;
+  const registry = readText(registryPath);
+  const lifecycleValues = ["Proposed", "Accepted", "Active", "Superseded", "Archived"];
+  const proposalFiles = readdirSync(toAbsolute(relativeDir))
+    .filter((fileName) => fileName.endsWith(".md") && fileName !== "README.md")
+    .sort();
+  const registrations = new Map();
+
+  function readRegistrySection(heading, stopPattern) {
+    const escapedHeading = heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const headingMatch = registry.match(new RegExp(`^${escapedHeading}\\r?$`, "m"));
+    if (!headingMatch || headingMatch.index === undefined) {
+      fail(`${registryPath}: missing lifecycle section ${heading}`);
+      return "";
+    }
+
+    const contentStart = registry.indexOf("\n", headingMatch.index);
+    if (contentStart < 0) {
+      fail(`${registryPath}: lifecycle section has no content ${heading}`);
+      return "";
+    }
+    const remaining = registry.slice(contentStart + 1);
+    const nextHeading = remaining.match(stopPattern);
+    return remaining.slice(0, nextHeading?.index ?? remaining.length);
+  }
+
+  function localProposalLinks(section) {
+    return section
+      .split(/\r?\n/)
+      .map((line) => line.match(/^\|\s*\[[^\]]*\]\(([^)]+)\)\s*\|/)?.[1])
+      .filter(Boolean)
+      .map((target) => target.split(/[?#]/, 1)[0].replace(/^\.\//, ""))
+      .filter((target) => target.endsWith(".md") && !target.includes("/") && target !== "README.md");
+  }
+
+  function register(fileName, lifecycle) {
+    const existing = registrations.get(fileName) ?? [];
+    existing.push(lifecycle);
+    registrations.set(fileName, existing);
+  }
+
+  for (const lifecycle of lifecycleValues) {
+    const section = readRegistrySection(`### ${lifecycle}`, /^#{2,3} /m);
+    for (const fileName of localProposalLinks(section)) {
+      register(fileName, lifecycle);
+    }
+  }
+
+  const nonContractSection = readRegistrySection("## Non-contract Documents", /^## /m);
+  for (const fileName of localProposalLinks(nonContractSection)) {
+    register(fileName, "N/A");
+  }
+
+  for (const fileName of proposalFiles) {
+    const fileRegistrations = registrations.get(fileName) ?? [];
+    if (fileRegistrations.length === 0) {
+      fail(`${registryPath}: missing proposal registration ${fileName}`);
+    } else if (fileRegistrations.length > 1) {
+      fail(
+        `${registryPath}: proposal must be registered exactly once ${fileName} (${fileRegistrations.join(", ")})`,
+      );
+    }
+
+    const proposal = readText(`${relativeDir}/${fileName}`);
+    const header = proposal.split(/\r?\n/).slice(0, 24).join("\n");
+    const statusMatch = header.match(/^\|\s*Status\s*\|\s*([^|]+?)\s*\|\s*$/m);
+    const lifecycleMatch = header.match(
+      /^\|\s*Contract lifecycle\s*\|\s*(Proposed|Accepted|Active|Superseded|Archived|N\/A)\s*\|\s*$/m,
+    );
+    const roleMatch = header.match(/^\|\s*Document role\s*\|\s*([^|]+?)\s*\|\s*$/m);
+    const appliesToMatch = header.match(/^\|\s*Applies to\s*\|\s*([^|]+?)\s*\|\s*$/m);
+
+    if (!statusMatch) {
+      fail(`${relativeDir}/${fileName}: missing top-level Status metadata`);
+    }
+    if (!lifecycleMatch) {
+      fail(`${relativeDir}/${fileName}: missing or invalid Contract lifecycle metadata`);
+    }
+    if (!roleMatch) {
+      fail(`${relativeDir}/${fileName}: missing top-level Document role metadata`);
+    }
+    if (!appliesToMatch) {
+      fail(`${relativeDir}/${fileName}: missing top-level Applies to metadata`);
+    }
+
+    const expectedLifecycle = fileRegistrations[0];
+    const declaredLifecycle = lifecycleMatch?.[1];
+    if (declaredLifecycle && expectedLifecycle && declaredLifecycle !== expectedLifecycle) {
+      fail(
+        `${relativeDir}/${fileName}: registry lifecycle ${expectedLifecycle} does not match metadata ${declaredLifecycle}`,
+      );
+    }
+
+    const statusLifecycleToken = statusMatch?.[1]
+      .trim()
+      .match(/^(Proposed|Proposal|Accepted|Active|Superseded|Archived)\b/)?.[1];
+    const statusLifecycle = statusLifecycleToken === "Proposal" ? "Proposed" : statusLifecycleToken;
+    if (statusLifecycle && statusLifecycle !== declaredLifecycle) {
+      fail(
+        `${relativeDir}/${fileName}: Status begins with ${statusLifecycle} but Contract lifecycle is ${declaredLifecycle}`,
+      );
+    }
+  }
+
+  for (const fileName of registrations.keys()) {
+    if (!proposalFiles.includes(fileName)) {
+      fail(`${registryPath}: registered proposal file is missing ${fileName}`);
+    }
+  }
+
+  for (const heading of [
+    "## Contract Lifecycle",
+    "### Proposed",
+    "### Accepted",
+    "### Active",
+    "### Superseded",
+    "### Archived",
+    "## Non-contract Documents",
+    "### Planning Baseline",
+    "### Reference And Handoff",
+  ]) {
+    if (!registry.includes(heading)) {
+      fail(`${registryPath}: missing lifecycle section ${heading}`);
+    }
+  }
+
+  const currentReadme = readText("docs/current/README.md");
+  if (currentReadme.includes("tenant-employee-cost-policy-contract.md")) {
+    fail("docs/current/README.md: superseded proposal must not appear as a current candidate");
+  }
+
+  assertIncludes(
+    "docs/current/proposals/tenant-employee-cost-policy-contract.md",
+    "../../tenant-chat/contracts.md",
+  );
+  assertIncludes("docs/current/proposals/employee-unified-usage-frontend-handoff.md", "../../tenant-chat/contracts.md");
+}
+
+function assertRelativeMarkdownLinks(relativePaths) {
+  const markdownLinkPattern = /!?\[[^\]]*\]\(([^)]+)\)/g;
+  for (const relativePath of relativePaths) {
+    const text = readText(relativePath);
+    for (const match of text.matchAll(markdownLinkPattern)) {
+      let target = match[1].trim();
+      if (target.startsWith("<") && target.endsWith(">")) {
+        target = target.slice(1, -1);
+      }
+      target = target.split(/\s+/)[0];
+      if (!target || target.startsWith("#") || /^[a-z][a-z0-9+.-]*:/i.test(target)) {
+        continue;
+      }
+      const fileTarget = target.split("#", 1)[0].split("?", 1)[0];
+      if (!fileTarget || fileTarget.includes("*")) {
+        continue;
+      }
+      let decodedTarget;
+      try {
+        decodedTarget = decodeURIComponent(fileTarget);
+      } catch {
+        fail(`${relativePath}: invalid encoded Markdown target ${target}`);
+        continue;
+      }
+      const absoluteTarget = path.resolve(
+        path.dirname(toAbsolute(relativePath)),
+        decodedTarget,
+      );
+      const withinRoot =
+        absoluteTarget === rootDir || absoluteTarget.startsWith(`${rootDir}${path.sep}`);
+      if (!withinRoot) {
+        fail(`${relativePath}: Markdown target escapes repository ${target}`);
+      } else if (!existsSync(absoluteTarget)) {
+        fail(`${relativePath}: broken relative Markdown target ${target}`);
+      }
+    }
+  }
+}
+
 function assertCiGate() {
   const workflowPath = ".github/workflows/ci.yml";
   assertExists(workflowPath);
@@ -266,7 +651,7 @@ function assertCiGate() {
     "branches: [main, dev]",
     "node-version-file: .node-version",
     "corepack prepare pnpm@9.15.0 --activate",
-    "pnpm verify:v2-docs",
+    "pnpm verify:docs",
   ]) {
     if (!workflow.includes(expectedText)) {
       fail(`${workflowPath}: missing CI gate "${expectedText}"`);
@@ -1639,8 +2024,12 @@ function assertTenantChatExecutableContract() {
 function main() {
   for (const doc of [
     ...activeEntryDocs,
+    ...currentGovernanceDocs,
     ...currentSnapshotDocs,
+    ...currentPlanningDocs,
+    ...activeRoutingIntegrityDocs,
     ...tenantChatDocs,
+    ...preV1RegistryDocs,
     ...versionStatusDocs,
     ...baselineContractDocs,
     ...historicalV2Docs,
@@ -1653,6 +2042,19 @@ function main() {
 
   assertRuntimeBaseline();
   assertDocumentationRouting();
+  assertCurrentDocumentationIntegrity();
+  assertReleaseVersionPolicy();
+  assertProposalRegistry();
+  assertRelativeMarkdownLinks([
+    ...entryDocs,
+    ...activeEntryDocs,
+    ...currentGovernanceDocs,
+    ...currentSnapshotDocs,
+    ...currentPlanningDocs,
+    ...activeRoutingIntegrityDocs,
+    ...preV1RegistryDocs,
+    ...versionStatusDocs,
+  ]);
   assertCiGate();
   assertSchemaFixturePairs();
   assertTenantChatSchemaFixturePairs();
