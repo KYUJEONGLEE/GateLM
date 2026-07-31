@@ -15,12 +15,12 @@
 
 | Model version | Legacy label | Artifact binding | Model gate | Deployment lifecycle |
 |---|---|---|---|---|
-| `v0.1.0` | `v3.6` | ONNX SHA-256 `dfd9b29ea35974d91d866817d70905844ffd4c65ecda98d8ac2085869ba9f410` | final offline quality와 model-active local Gateway E2E 최초 동시 통과 | 과거 cutover 이력은 있으나 정식 production promotion evidence는 없음 |
-| `v0.1.1` | `v3.14` | ONNX SHA-256 `8a5cb146e84d413910a423d304e662a6aba9f69e83db129f5061d007a6de9381` | offline, product-adapter와 private regression gate 통과 | `deployment-package-ready`; production activation과 remote Gateway E2E 미완료 |
+| `v0.1.0` | `v3.6` | ONNX SHA-256 `dfd9b29ea35974d91d866817d70905844ffd4c65ecda98d8ac2085869ba9f410` | final offline quality와 model-active local Gateway E2E 최초 동시 통과 | 최초 운영 Gateway 연결(`8db6cf30`), 이후 `v0.1.1`로 교체 |
+| `v0.1.1` | `v3.14` | ONNX SHA-256 `8a5cb146e84d413910a423d304e662a6aba9f69e83db129f5061d007a6de9381` | offline, product-adapter와 private regression gate 통과 | [production 배포 run `29846604941`](https://github.com/KYUJEONGLEE/GateLM/actions/runs/29846604941) 성공; PII role health·Tenant Chat smoke 통과, model-active Gateway PII E2E는 미추적 |
 
 `v3.6`은 아무 gate나 처음 통과한 모델이라는 뜻이 아니다. `v3.2`는 semantic development·regression 단계의 첫 후보였고 `v3.3`은 frozen internal engineering gate를 통과했지만, final offline quality와 model-active local Gateway E2E를 모두 처음 통과한 모델은 `v3.6`이었다.
 
-`v0.1.1`은 현재 선택된 모델 버전이지만 production-ready 선언은 아니다. [`documentation-gaps.md`](documentation-gaps.md)의 `DOC-025`가 owner 승인, remote readiness, realistic concurrency, timeout/fallback와 Gateway E2E 잔여 범위를 관리한다.
+`v0.1.1`은 현재 선택된 모델이며 main SHA `fbe6b766737df142d9115e6ef06f5d6aa19ac673`의 production 배포에서 설치·검증과 PII role health까지 통과했다. 같은 run의 public auth와 Tenant Chat smoke도 성공했지만, 이 smoke가 v0.1.1의 model-active 마스킹 결과를 검증한 것은 아니다. 현재 서버 online 여부와 실제 Gateway PII E2E·Shadow/Canary evidence도 별도이므로, 이 배포 사실만으로 production-grade DLP 검증 완료를 선언하지 않는다. [`documentation-gaps.md`](documentation-gaps.md)의 `DOC-025`가 잔여 evidence를 관리한다.
 
 ### v0.1.0 evidence binding
 
@@ -43,7 +43,10 @@
 - Immutable release ID: `tenant-chat-pii-models-v314-20260721`
 - Initial package Git SHA: `7394aa261b87da2d17cc39f02d9d8966d87affbb`
 - Current package/evaluation Git SHA: `3d7d77c426dc8a14bdc0d14f97b4b61b63c25065`
-- Runtime manifest introduction Git SHA: `7dff23898c8b09282ef9a5df2033cddefc0280ec`
+- Runtime manifest introduction and production target promotion Git SHA: `7dff23898c8b09282ef9a5df2033cddefc0280ec`
+- Promotion merge evidence: PR #510 (`953e9f48`), main promotion PR #513 (`01d047a5`)
+- Production deployment evidence: [Actions run `29846604941`](https://github.com/KYUJEONGLEE/GateLM/actions/runs/29846604941), main SHA `fbe6b766737df142d9115e6ef06f5d6aa19ac673`, completed `success` (2026-07-22 KST)
+- Run evidence: v0.1.1(legacy v3.14) pin, private S3 download, artifact install/verify, PII role health와 authenticated Tenant Chat smoke 성공
 - Local concurrency evidence: [`../testing/pii-inference-concurrency-v0.1.1-20260731.md`](../testing/pii-inference-concurrency-v0.1.1-20260731.md)
 - Concurrency evidence Git SHAs: direct `970c0c08e315c45e535b9470bc5907a7cbf8c195`, HTTP `a8a82e0138a9d2b17c083a01e26d02666d29aba4`
 
@@ -92,7 +95,7 @@
 | `v3.12` | `v0.1.1-dev.8+onnx.qint8.be23f65fe2b6` | `be23f65fe2b60cf4c3a95da3a434c59cfca27f22997d41814da3d8cbe705b80a` | frozen 통과 후 legacy address regression 실패 |
 | `v3.13` QInt8 | `v0.1.1-dev.9.1+onnx.qint8.af727ec59c95` | `af727ec59c9520fcb76b144d7ea9228bc838d570588143bcc3ea3c613d122f65` | private regression·phone recall 미달 |
 | `v3.13` FP32 | `v0.1.1-dev.9.2+onnx.fp32.1e4a11a060e6` | `1e4a11a060e68339cd421e72e3a73e534235f2413e723d91413c6b59333165f7` | diagnostic export; 별도 gate 미실행·미채택 |
-| `v3.14` QInt8 | `v0.1.1-dev.10+onnx.qint8.8a5cb146e84d` → `v0.1.1` | `8a5cb146e84d413910a423d304e662a6aba9f69e83db129f5061d007a6de9381` | offline gate 통과 후 동일 SHA를 현재 selected model로 승격; production 미승인 |
+| `v3.14` QInt8 | `v0.1.1-dev.10+onnx.qint8.8a5cb146e84d` → `v0.1.1` | `8a5cb146e84d413910a423d304e662a6aba9f69e83db129f5061d007a6de9381` | offline gate 통과 후 동일 SHA를 production에 배포하고 PII role health 확인; model-active Gateway PII E2E evidence 미추적 |
 
 ONNX가 만들어지지 않은 run은 모델 SemVer를 부여하지 않고 training run ID와 checkpoint/report SHA로 보존한다.
 

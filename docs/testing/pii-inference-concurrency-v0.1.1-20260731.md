@@ -25,7 +25,7 @@
 - [Direct inference report](pii-inference-concurrency-v0.1.1-20260731.json)
 - [HTTP admission report](pii-http-admission-v0.1.1-20260731.json)
 
-두 report에는 입력 문장, 탐지값, 탐지 위치, 응답 원문, 인증정보와 로컬 파일 경로를 저장하지 않았다.
+두 report에는 입력 문장, 탐지값, 탐지 위치, 응답 원문, 인증정보와 로컬 파일 경로를 저장하지 않았다. JSON의 `production-unapproved` lifecycle 값은 benchmark SHA 당시 registry 문구이며, 이후 배포 이력 재감사에서 production 배포·PII role health 완료와 model-active Gateway PII E2E 미추적 상태로 세분화했다. 성능 측정값과 artifact SHA에는 영향이 없다.
 
 ## 3. Direct inference 측정
 

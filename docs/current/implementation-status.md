@@ -58,7 +58,7 @@
 |---|---|---|
 | Tenant Chat | auth, encrypted conversation/SSE/composer, private execution, exact cache, quota, masking과 RAG code path가 `dev`에 병합됨 | employee notice acknowledgement, Admin Content Diagnostic, fresh-host acceptance, 전체 browser E2E, GA |
 | Tenant Chat RAG | admin/API/worker/retrieval/citation과 cost/cache integration code가 존재 | 실제 staging S3/KMS/embedding 검증, hard-delete/orphan 복구, production acceptance |
-| AI Safety/PII | [`v0.1.1`](pii-model-versions.md) QInt8 local package와 synthetic/private offline evaluation, fail-closed/horizontal runtime code가 존재 | 운영 활성화, remote readiness와 Gateway E2E, production-grade DLP 선언 |
+| AI Safety/PII | 최초 합격 `v0.1.0` 이후 고도화한 [`v0.1.1`](pii-model-versions.md)이 production에 배포돼 PII role health와 Tenant Chat smoke를 통과했고, fail-closed/horizontal runtime code가 존재 | 현재 서버 online 상태, model-active Gateway PII E2E·Shadow/Canary, production-grade DLP 검증 완료 |
 | Advanced Routing | active 106D model-path contract, private inference와 rule fallback code가 존재 | 모든 traffic/locale의 운영 정확도와 SLA |
 | ClickHouse Analytics | mirror, backfill, reader, rollup과 live traffic code가 존재 | 모든 기간 parity, 장애 복구, 보존·비용 SLA 완료 |
 | Provider adapters | adapter code와 test가 존재 | 모든 vendor의 production credential live 검증 완료 |
@@ -87,6 +87,7 @@ active Tenant Chat 계약은 step-up, allowlisted purpose, 60초 one-time decryp
 - PR #433: Tenant Chat 주간 직원 token quota
 - PR #442: Tenant Chat RAG Exact Cache
 - PR #457, #487: PII runtime 고도화와 v0.1.1 배포 준비
+- PR #510, #513, #516: v0.1.1 production target 승격·main 반영·설치 권한 수정; deploy run `29846604941` 성공
 - PR #497, #503, #524: PostgreSQL 월 partition, ClickHouse mirror와 log reader
 - PR #536: PII horizontal scale
 - PR #540: account recovery

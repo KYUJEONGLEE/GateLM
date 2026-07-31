@@ -36,6 +36,14 @@ class PiiModelCanonicalRegistryTests(unittest.TestCase):
         self.assertEqual(entries["v0.1.0"]["legacyRevision"], "v3.6")
         self.assertEqual(entries["v0.1.1"]["legacyRevision"], "v3.14")
         self.assertEqual(
+            entries["v0.1.0"]["lifecycle"],
+            "historical-first-quality-pass-and-production-gateway-cutover",
+        )
+        self.assertEqual(
+            entries["v0.1.1"]["lifecycle"],
+            "production-deployed-and-role-healthy-model-active-e2e-unverified",
+        )
+        self.assertEqual(
             model_file(entries["v0.1.0"])["sha256"],
             "dfd9b29ea35974d91d866817d70905844ffd4c65ecda98d8ac2085869ba9f410",
         )

@@ -6,7 +6,7 @@
       "canonicalVersion": "v0.1.0",
       "legacyRevision": "v3.6",
       "runtime": "onnx-cpu-dynamic-qint8",
-      "lifecycle": "historical-first-quality-and-local-e2e-pass",
+      "lifecycle": "historical-first-quality-pass-and-production-gateway-cutover",
       "sourceManifests": [
         {
           "path": "deploy/aws-triage/pii-v36-model-manifest.sha256",
@@ -55,7 +55,7 @@
       "canonicalVersion": "v0.1.1",
       "legacyRevision": "v3.14",
       "runtime": "onnx-cpu-dynamic-qint8",
-      "lifecycle": "selected-offline-and-product-adapter-pass-production-unapproved",
+      "lifecycle": "production-deployed-and-role-healthy-model-active-e2e-unverified",
       "sourceManifests": [
         {
           "path": "deploy/aws-triage/pii-v314-model-manifest.sha256",
