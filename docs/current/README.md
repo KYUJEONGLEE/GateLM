@@ -53,6 +53,7 @@ active 계약이 되지 않는다.
 | Gateway/API/DB/Event/Metrics 호환성 | [`../v2.0.0/README.md`](../v2.0.0/README.md)에서 해당 baseline 선택 | Pre-v1 baseline compatibility |
 | 계약 후보와 구현 동반 문서 | [`proposals/README.md`](proposals/README.md) | Non-authoritative registry |
 | 보안/PII/비용 정책 | `../policies/`의 관련 문서와 current 계약 | Supporting policy |
+| PII 모델 버전과 artifact 결속 | [`pii-model-versions.md`](pii-model-versions.md) | Active operational metadata; 제품·계약 버전과 독립 |
 | 아키텍처 배경 | `../architecture/`의 관련 문서 | Supporting reference |
 | 실험 및 성능 결과 | `../testing/`, `../ai-safety-lab/` | Evidence, 날짜 확인 필요 |
 | pre-v1 workstream 분류와 이관 | [`../pre-v1/README.md`](../pre-v1/README.md) | Active migration index |

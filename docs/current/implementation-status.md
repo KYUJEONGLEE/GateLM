@@ -58,7 +58,7 @@
 |---|---|---|
 | Tenant Chat | auth, encrypted conversation/SSE/composer, private execution, exact cache, quota, masking과 RAG code path가 `dev`에 병합됨 | employee notice acknowledgement, Admin Content Diagnostic, fresh-host acceptance, 전체 browser E2E, GA |
 | Tenant Chat RAG | admin/API/worker/retrieval/citation과 cost/cache integration code가 존재 | 실제 staging S3/KMS/embedding 검증, hard-delete/orphan 복구, production acceptance |
-| AI Safety/PII | v3.14 QInt8 local package와 synthetic/private offline evaluation, fail-closed/horizontal runtime code가 존재 | 운영 활성화, remote readiness와 Gateway E2E, production-grade DLP 선언 |
+| AI Safety/PII | [`v0.1.1`](pii-model-versions.md) QInt8 local package와 synthetic/private offline evaluation, fail-closed/horizontal runtime code가 존재 | 운영 활성화, remote readiness와 Gateway E2E, production-grade DLP 선언 |
 | Advanced Routing | active 106D model-path contract, private inference와 rule fallback code가 존재 | 모든 traffic/locale의 운영 정확도와 SLA |
 | ClickHouse Analytics | mirror, backfill, reader, rollup과 live traffic code가 존재 | 모든 기간 parity, 장애 복구, 보존·비용 SLA 완료 |
 | Provider adapters | adapter code와 test가 존재 | 모든 vendor의 production credential live 검증 완료 |
@@ -86,7 +86,7 @@ active Tenant Chat 계약은 step-up, allowlisted purpose, 60초 one-time decryp
 - PR #392: Tenant Chat RAG 기반 구현
 - PR #433: Tenant Chat 주간 직원 token quota
 - PR #442: Tenant Chat RAG Exact Cache
-- PR #457, #487: PII runtime 고도화와 v3.14 배포 준비
+- PR #457, #487: PII runtime 고도화와 v0.1.1 배포 준비
 - PR #497, #503, #524: PostgreSQL 월 partition, ClickHouse mirror와 log reader
 - PR #536: PII horizontal scale
 - PR #540: account recovery
@@ -118,5 +118,6 @@ DOC-01에서 전체 app build, 모든 unit/integration/browser E2E, fresh migrat
 - 일부 app package: `0.1.0`
 - pre-v1 workstream paths: `docs/v1.0.0`, `docs/v2.0.0`, `docs/v2.1.0`
 - self-host image examples: `2.1.0`
+- current PII model: [`v0.1.1`](pii-model-versions.md); 제품 SemVer와 독립
 
 따라서 이 문서는 현재 dev를 `v1.0.0` 또는 GA로 선언하지 않는다. 리팩토링 완료 후 exact release SHA를 선택하고 tag/package/image/docs와 전체 evidence를 정렬해야 한다.
