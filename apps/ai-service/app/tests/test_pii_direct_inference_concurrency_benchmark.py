@@ -232,6 +232,19 @@ class PiiDirectInferenceConcurrencyBenchmarkTests(unittest.TestCase):
             {"voluntary": 5, "involuntary": 7, "total": 12},
         )
 
+    def test_cpu_affinity_limit_is_applied_and_verified_before_inference(self) -> None:
+        fake_process = FakeProcess(affinity=list(range(8)))
+
+        confirmed = runner.apply_cpu_affinity_limit(
+            4,
+            process=fake_process,
+        )
+
+        self.assertEqual(confirmed, 4)
+        self.assertEqual(fake_process.cpu_affinity(), [0, 1, 2, 3])
+        with self.assertRaisesRegex(ValueError, "exceeds"):
+            runner.apply_cpu_affinity_limit(5, process=fake_process)
+
     def test_registry_binding_rejects_version_or_sha_mismatch(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -431,9 +444,10 @@ class FixedResourceSampler:
 
 
 class FakeProcess:
-    def __init__(self) -> None:
+    def __init__(self, affinity: list[int] | None = None) -> None:
         self._cpu_calls = 0
         self._context_calls = 0
+        self._affinity = list(affinity or [0, 1, 2, 3])
 
     def cpu_times(self) -> SimpleNamespace:
         self._cpu_calls += 1
@@ -453,8 +467,10 @@ class FakeProcess:
     def num_threads(self) -> int:
         return 9
 
-    def cpu_affinity(self) -> list[int]:
-        return [0, 1, 2, 3]
+    def cpu_affinity(self, affinity: list[int] | None = None) -> list[int]:
+        if affinity is not None:
+            self._affinity = list(affinity)
+        return list(self._affinity)
 
 
 def fixed_resources(

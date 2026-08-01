@@ -1,0 +1,744 @@
+{
+  "acceptedKoelectraSourceDetectionCount": 109,
+  "artifactBinding": {
+    "koelectra": {
+      "artifactBytes": 15678950,
+      "artifactFileCount": 7,
+      "artifactManifestSha256": "c7eb7c6cafc6cf4a038f30988538825e482d81959e9b42fa71f338edf814fb78",
+      "legacyRevision": "v3.14",
+      "lifecycle": "production-deployed-and-role-healthy-model-active-e2e-unverified",
+      "modelId": "gatelm/koelectra-small-v3-pii-ner",
+      "modelOnnxBytes": 14595587,
+      "modelOnnxSha256": "8a5cb146e84d413910a423d304e662a6aba9f69e83db129f5061d007a6de9381",
+      "registrySha256": "2a1773d8d3938f6a6e0c3312445765348c70fbdc0610fb1233bc73bd288ed812",
+      "registryVersion": "gatelm.pii-model-canonical-registry.v1",
+      "runtime": "onnx-cpu-dynamic-qint8",
+      "sourceManifestSha256": [
+        "320a4afd888071052975158eee1a22973f66e8782300d18d3007dac25336f74b",
+        "a3168b3a3d9bea915a6c524bb31c7d2999dc0596f540406931d0795b07f706eb"
+      ],
+      "version": "v0.1.1"
+    },
+    "primary": {
+      "artifactRole": "primary_local_privacy_filter_package",
+      "bytes": 1646075750,
+      "runtime": "onnx",
+      "sha256": "bcd2734bd75c600b4aa020ae0071ae20ea8088c7536a4af3f1a0dbcdf6b03448"
+    }
+  },
+  "busyErrorEnvelopeMismatchCount": 0,
+  "configuration": {
+    "activeCapacity": 2,
+    "endpointContractVersion": "ai-safety-detector.v1",
+    "parallelRequestsPerWave": 8,
+    "pendingCapacity": 4,
+    "totalRequests": 160,
+    "transport": "httpx_asgi_transport",
+    "waitTimeoutMs": 50,
+    "waves": 20
+  },
+  "eligibility": {
+    "checks": {
+      "allSuccessesHaveKoelectraContribution": true,
+      "allSuccessesHybrid": true,
+      "envelopeMismatchesZero": true,
+      "koelectraAcceptedContributionObserved": true,
+      "otherErrorsZero": true,
+      "slotRecoveryVerified": true,
+      "successAndBusyObserved": true
+    },
+    "eligible": true,
+    "meaning": "HTTP admission and hybrid-retention evidence only; not a concurrency recommendation."
+  },
+  "envelopeMismatchCount": 0,
+  "httpStatusCounts": {
+    "200": 109,
+    "503": 51,
+    "other": 0
+  },
+  "hybridSuccessCount": 109,
+  "latencyDistributions": {
+    "busy503": {
+      "count": 51,
+      "p50Ms": 20.854,
+      "p95Ms": 61.608,
+      "p99Ms": 73.533,
+      "population": "http_status_503"
+    },
+    "success200": {
+      "count": 109,
+      "p50Ms": 34.233,
+      "p95Ms": 212.54,
+      "p99Ms": 278.034,
+      "population": "http_status_200"
+    }
+  },
+  "metadata": {
+    "concurrencyRecommendation": false,
+    "evidenceScope": "single_process_shared_app_state_gate",
+    "generatedAt": "2026-07-31T14:57:04.362750Z",
+    "gitSha": "63c3f6f1a83694386d915b3ca6519bd9942ce04b",
+    "purpose": "http_admission_gate_end_to_end_evidence",
+    "reportVersion": "gatelm.pii-http-admission-concurrency-benchmark.v2"
+  },
+  "modelInvocationCount": 126,
+  "otherErrorCount": 0,
+  "runtime": {
+    "cpuModel": "Intel64 Family 6 Model 189 Stepping 1, GenuineIntel",
+    "logicalCpuCount": 8,
+    "machine": "AMD64",
+    "onnxAllowSpinning": false,
+    "onnxAvailableProviders": [
+      "AzureExecutionProvider",
+      "CPUExecutionProvider"
+    ],
+    "onnxInterOpThreads": 1,
+    "onnxIntraOpThreads": 2,
+    "os": "Windows-11-10.0.26200-SP0",
+    "packageVersions": {
+      "numpy": "2.5.0",
+      "onnxruntime": "1.27.0",
+      "psutil": "7.0.0",
+      "tokenizers": "0.22.2",
+      "transformers": "4.57.6"
+    },
+    "physicalCpuCount": 8,
+    "processAffinityCpuCount": 4,
+    "pythonVersion": "3.12.13"
+  },
+  "slotRecoveryVerified": true,
+  "successEnvelopeMismatchCount": 0,
+  "transportErrorCount": 0,
+  "waveSummaries": [
+    {
+      "acceptedKoelectraSourceDetectionCount": 6,
+      "busyErrorEnvelopeMismatchCount": 0,
+      "httpStatusCounts": {
+        "200": 6,
+        "503": 2,
+        "other": 0
+      },
+      "hybridSuccessCount": 6,
+      "latencyDistributions": {
+        "busy503": {
+          "count": 2,
+          "p50Ms": 6.894,
+          "p95Ms": 7.011,
+          "p99Ms": 7.011,
+          "population": "http_status_503"
+        },
+        "success200": {
+          "count": 6,
+          "p50Ms": 27.484,
+          "p95Ms": 212.54,
+          "p99Ms": 212.54,
+          "population": "http_status_200"
+        }
+      },
+      "modelInvocationCount": 7,
+      "requestCount": 8,
+      "successEnvelopeMismatchCount": 0,
+      "transportErrorCount": 0,
+      "wave": 1
+    },
+    {
+      "acceptedKoelectraSourceDetectionCount": 6,
+      "busyErrorEnvelopeMismatchCount": 0,
+      "httpStatusCounts": {
+        "200": 6,
+        "503": 2,
+        "other": 0
+      },
+      "hybridSuccessCount": 6,
+      "latencyDistributions": {
+        "busy503": {
+          "count": 2,
+          "p50Ms": 3.517,
+          "p95Ms": 5.218,
+          "p99Ms": 5.218,
+          "population": "http_status_503"
+        },
+        "success200": {
+          "count": 6,
+          "p50Ms": 20.599,
+          "p95Ms": 207.568,
+          "p99Ms": 207.568,
+          "population": "http_status_200"
+        }
+      },
+      "modelInvocationCount": 7,
+      "requestCount": 8,
+      "successEnvelopeMismatchCount": 0,
+      "transportErrorCount": 0,
+      "wave": 2
+    },
+    {
+      "acceptedKoelectraSourceDetectionCount": 6,
+      "busyErrorEnvelopeMismatchCount": 0,
+      "httpStatusCounts": {
+        "200": 6,
+        "503": 2,
+        "other": 0
+      },
+      "hybridSuccessCount": 6,
+      "latencyDistributions": {
+        "busy503": {
+          "count": 2,
+          "p50Ms": 9.212,
+          "p95Ms": 10.838,
+          "p99Ms": 10.838,
+          "population": "http_status_503"
+        },
+        "success200": {
+          "count": 6,
+          "p50Ms": 29.196,
+          "p95Ms": 160.003,
+          "p99Ms": 160.003,
+          "population": "http_status_200"
+        }
+      },
+      "modelInvocationCount": 7,
+      "requestCount": 8,
+      "successEnvelopeMismatchCount": 0,
+      "transportErrorCount": 0,
+      "wave": 3
+    },
+    {
+      "acceptedKoelectraSourceDetectionCount": 6,
+      "busyErrorEnvelopeMismatchCount": 0,
+      "httpStatusCounts": {
+        "200": 6,
+        "503": 2,
+        "other": 0
+      },
+      "hybridSuccessCount": 6,
+      "latencyDistributions": {
+        "busy503": {
+          "count": 2,
+          "p50Ms": 5.249,
+          "p95Ms": 7.104,
+          "p99Ms": 7.104,
+          "population": "http_status_503"
+        },
+        "success200": {
+          "count": 6,
+          "p50Ms": 23.591,
+          "p95Ms": 142.809,
+          "p99Ms": 142.809,
+          "population": "http_status_200"
+        }
+      },
+      "modelInvocationCount": 7,
+      "requestCount": 8,
+      "successEnvelopeMismatchCount": 0,
+      "transportErrorCount": 0,
+      "wave": 4
+    },
+    {
+      "acceptedKoelectraSourceDetectionCount": 6,
+      "busyErrorEnvelopeMismatchCount": 0,
+      "httpStatusCounts": {
+        "200": 6,
+        "503": 2,
+        "other": 0
+      },
+      "hybridSuccessCount": 6,
+      "latencyDistributions": {
+        "busy503": {
+          "count": 2,
+          "p50Ms": 3.851,
+          "p95Ms": 4.861,
+          "p99Ms": 4.861,
+          "population": "http_status_503"
+        },
+        "success200": {
+          "count": 6,
+          "p50Ms": 16.677,
+          "p95Ms": 288.797,
+          "p99Ms": 288.797,
+          "population": "http_status_200"
+        }
+      },
+      "modelInvocationCount": 8,
+      "requestCount": 8,
+      "successEnvelopeMismatchCount": 0,
+      "transportErrorCount": 0,
+      "wave": 5
+    },
+    {
+      "acceptedKoelectraSourceDetectionCount": 6,
+      "busyErrorEnvelopeMismatchCount": 0,
+      "httpStatusCounts": {
+        "200": 6,
+        "503": 2,
+        "other": 0
+      },
+      "hybridSuccessCount": 6,
+      "latencyDistributions": {
+        "busy503": {
+          "count": 2,
+          "p50Ms": 4.579,
+          "p95Ms": 6.121,
+          "p99Ms": 6.121,
+          "population": "http_status_503"
+        },
+        "success200": {
+          "count": 6,
+          "p50Ms": 37.705,
+          "p95Ms": 43.791,
+          "p99Ms": 43.791,
+          "population": "http_status_200"
+        }
+      },
+      "modelInvocationCount": 6,
+      "requestCount": 8,
+      "successEnvelopeMismatchCount": 0,
+      "transportErrorCount": 0,
+      "wave": 6
+    },
+    {
+      "acceptedKoelectraSourceDetectionCount": 3,
+      "busyErrorEnvelopeMismatchCount": 0,
+      "httpStatusCounts": {
+        "200": 3,
+        "503": 5,
+        "other": 0
+      },
+      "hybridSuccessCount": 3,
+      "latencyDistributions": {
+        "busy503": {
+          "count": 5,
+          "p50Ms": 47.214,
+          "p95Ms": 49.685,
+          "p99Ms": 49.685,
+          "population": "http_status_503"
+        },
+        "success200": {
+          "count": 3,
+          "p50Ms": 55.561,
+          "p95Ms": 165.524,
+          "p99Ms": 165.524,
+          "population": "http_status_200"
+        }
+      },
+      "modelInvocationCount": 4,
+      "requestCount": 8,
+      "successEnvelopeMismatchCount": 0,
+      "transportErrorCount": 0,
+      "wave": 7
+    },
+    {
+      "acceptedKoelectraSourceDetectionCount": 4,
+      "busyErrorEnvelopeMismatchCount": 0,
+      "httpStatusCounts": {
+        "200": 4,
+        "503": 4,
+        "other": 0
+      },
+      "hybridSuccessCount": 4,
+      "latencyDistributions": {
+        "busy503": {
+          "count": 4,
+          "p50Ms": 6.004,
+          "p95Ms": 51.1,
+          "p99Ms": 51.1,
+          "population": "http_status_503"
+        },
+        "success200": {
+          "count": 4,
+          "p50Ms": 44.839,
+          "p95Ms": 54.961,
+          "p99Ms": 54.961,
+          "population": "http_status_200"
+        }
+      },
+      "modelInvocationCount": 4,
+      "requestCount": 8,
+      "successEnvelopeMismatchCount": 0,
+      "transportErrorCount": 0,
+      "wave": 8
+    },
+    {
+      "acceptedKoelectraSourceDetectionCount": 4,
+      "busyErrorEnvelopeMismatchCount": 0,
+      "httpStatusCounts": {
+        "200": 4,
+        "503": 4,
+        "other": 0
+      },
+      "hybridSuccessCount": 4,
+      "latencyDistributions": {
+        "busy503": {
+          "count": 4,
+          "p50Ms": 56.993,
+          "p95Ms": 73.533,
+          "p99Ms": 73.533,
+          "population": "http_status_503"
+        },
+        "success200": {
+          "count": 4,
+          "p50Ms": 67.935,
+          "p95Ms": 192.76,
+          "p99Ms": 192.76,
+          "population": "http_status_200"
+        }
+      },
+      "modelInvocationCount": 5,
+      "requestCount": 8,
+      "successEnvelopeMismatchCount": 0,
+      "transportErrorCount": 0,
+      "wave": 9
+    },
+    {
+      "acceptedKoelectraSourceDetectionCount": 6,
+      "busyErrorEnvelopeMismatchCount": 0,
+      "httpStatusCounts": {
+        "200": 6,
+        "503": 2,
+        "other": 0
+      },
+      "hybridSuccessCount": 6,
+      "latencyDistributions": {
+        "busy503": {
+          "count": 2,
+          "p50Ms": 3.582,
+          "p95Ms": 3.807,
+          "p99Ms": 3.807,
+          "population": "http_status_503"
+        },
+        "success200": {
+          "count": 6,
+          "p50Ms": 19.543,
+          "p95Ms": 153.406,
+          "p99Ms": 153.406,
+          "population": "http_status_200"
+        }
+      },
+      "modelInvocationCount": 7,
+      "requestCount": 8,
+      "successEnvelopeMismatchCount": 0,
+      "transportErrorCount": 0,
+      "wave": 10
+    },
+    {
+      "acceptedKoelectraSourceDetectionCount": 6,
+      "busyErrorEnvelopeMismatchCount": 0,
+      "httpStatusCounts": {
+        "200": 6,
+        "503": 2,
+        "other": 0
+      },
+      "hybridSuccessCount": 6,
+      "latencyDistributions": {
+        "busy503": {
+          "count": 2,
+          "p50Ms": 3.401,
+          "p95Ms": 5.672,
+          "p99Ms": 5.672,
+          "population": "http_status_503"
+        },
+        "success200": {
+          "count": 6,
+          "p50Ms": 32.718,
+          "p95Ms": 162.022,
+          "p99Ms": 162.022,
+          "population": "http_status_200"
+        }
+      },
+      "modelInvocationCount": 7,
+      "requestCount": 8,
+      "successEnvelopeMismatchCount": 0,
+      "transportErrorCount": 0,
+      "wave": 11
+    },
+    {
+      "acceptedKoelectraSourceDetectionCount": 4,
+      "busyErrorEnvelopeMismatchCount": 0,
+      "httpStatusCounts": {
+        "200": 4,
+        "503": 4,
+        "other": 0
+      },
+      "hybridSuccessCount": 4,
+      "latencyDistributions": {
+        "busy503": {
+          "count": 4,
+          "p50Ms": 4.032,
+          "p95Ms": 54.418,
+          "p99Ms": 54.418,
+          "population": "http_status_503"
+        },
+        "success200": {
+          "count": 4,
+          "p50Ms": 17.788,
+          "p95Ms": 238.731,
+          "p99Ms": 238.731,
+          "population": "http_status_200"
+        }
+      },
+      "modelInvocationCount": 6,
+      "requestCount": 8,
+      "successEnvelopeMismatchCount": 0,
+      "transportErrorCount": 0,
+      "wave": 12
+    },
+    {
+      "acceptedKoelectraSourceDetectionCount": 6,
+      "busyErrorEnvelopeMismatchCount": 0,
+      "httpStatusCounts": {
+        "200": 6,
+        "503": 2,
+        "other": 0
+      },
+      "hybridSuccessCount": 6,
+      "latencyDistributions": {
+        "busy503": {
+          "count": 2,
+          "p50Ms": 7.441,
+          "p95Ms": 8.366,
+          "p99Ms": 8.366,
+          "population": "http_status_503"
+        },
+        "success200": {
+          "count": 6,
+          "p50Ms": 23.15,
+          "p95Ms": 161.043,
+          "p99Ms": 161.043,
+          "population": "http_status_200"
+        }
+      },
+      "modelInvocationCount": 7,
+      "requestCount": 8,
+      "successEnvelopeMismatchCount": 0,
+      "transportErrorCount": 0,
+      "wave": 13
+    },
+    {
+      "acceptedKoelectraSourceDetectionCount": 6,
+      "busyErrorEnvelopeMismatchCount": 0,
+      "httpStatusCounts": {
+        "200": 6,
+        "503": 2,
+        "other": 0
+      },
+      "hybridSuccessCount": 6,
+      "latencyDistributions": {
+        "busy503": {
+          "count": 2,
+          "p50Ms": 21.372,
+          "p95Ms": 23.099,
+          "p99Ms": 23.099,
+          "population": "http_status_503"
+        },
+        "success200": {
+          "count": 6,
+          "p50Ms": 34.233,
+          "p95Ms": 185.423,
+          "p99Ms": 185.423,
+          "population": "http_status_200"
+        }
+      },
+      "modelInvocationCount": 7,
+      "requestCount": 8,
+      "successEnvelopeMismatchCount": 0,
+      "transportErrorCount": 0,
+      "wave": 14
+    },
+    {
+      "acceptedKoelectraSourceDetectionCount": 6,
+      "busyErrorEnvelopeMismatchCount": 0,
+      "httpStatusCounts": {
+        "200": 6,
+        "503": 2,
+        "other": 0
+      },
+      "hybridSuccessCount": 6,
+      "latencyDistributions": {
+        "busy503": {
+          "count": 2,
+          "p50Ms": 20.106,
+          "p95Ms": 20.854,
+          "p99Ms": 20.854,
+          "population": "http_status_503"
+        },
+        "success200": {
+          "count": 6,
+          "p50Ms": 33.056,
+          "p95Ms": 42.687,
+          "p99Ms": 42.687,
+          "population": "http_status_200"
+        }
+      },
+      "modelInvocationCount": 6,
+      "requestCount": 8,
+      "successEnvelopeMismatchCount": 0,
+      "transportErrorCount": 0,
+      "wave": 15
+    },
+    {
+      "acceptedKoelectraSourceDetectionCount": 6,
+      "busyErrorEnvelopeMismatchCount": 0,
+      "httpStatusCounts": {
+        "200": 6,
+        "503": 2,
+        "other": 0
+      },
+      "hybridSuccessCount": 6,
+      "latencyDistributions": {
+        "busy503": {
+          "count": 2,
+          "p50Ms": 25.037,
+          "p95Ms": 26.09,
+          "p99Ms": 26.09,
+          "population": "http_status_503"
+        },
+        "success200": {
+          "count": 6,
+          "p50Ms": 38.865,
+          "p95Ms": 228.541,
+          "p99Ms": 228.541,
+          "population": "http_status_200"
+        }
+      },
+      "modelInvocationCount": 7,
+      "requestCount": 8,
+      "successEnvelopeMismatchCount": 0,
+      "transportErrorCount": 0,
+      "wave": 16
+    },
+    {
+      "acceptedKoelectraSourceDetectionCount": 6,
+      "busyErrorEnvelopeMismatchCount": 0,
+      "httpStatusCounts": {
+        "200": 6,
+        "503": 2,
+        "other": 0
+      },
+      "hybridSuccessCount": 6,
+      "latencyDistributions": {
+        "busy503": {
+          "count": 2,
+          "p50Ms": 37.709,
+          "p95Ms": 48.288,
+          "p99Ms": 48.288,
+          "population": "http_status_503"
+        },
+        "success200": {
+          "count": 6,
+          "p50Ms": 56.838,
+          "p95Ms": 67.301,
+          "p99Ms": 67.301,
+          "population": "http_status_200"
+        }
+      },
+      "modelInvocationCount": 6,
+      "requestCount": 8,
+      "successEnvelopeMismatchCount": 0,
+      "transportErrorCount": 0,
+      "wave": 17
+    },
+    {
+      "acceptedKoelectraSourceDetectionCount": 5,
+      "busyErrorEnvelopeMismatchCount": 0,
+      "httpStatusCounts": {
+        "200": 5,
+        "503": 3,
+        "other": 0
+      },
+      "hybridSuccessCount": 5,
+      "latencyDistributions": {
+        "busy503": {
+          "count": 3,
+          "p50Ms": 61.608,
+          "p95Ms": 63.284,
+          "p99Ms": 63.284,
+          "population": "http_status_503"
+        },
+        "success200": {
+          "count": 5,
+          "p50Ms": 33.394,
+          "p95Ms": 207.699,
+          "p99Ms": 207.699,
+          "population": "http_status_200"
+        }
+      },
+      "modelInvocationCount": 6,
+      "requestCount": 8,
+      "successEnvelopeMismatchCount": 0,
+      "transportErrorCount": 0,
+      "wave": 18
+    },
+    {
+      "acceptedKoelectraSourceDetectionCount": 5,
+      "busyErrorEnvelopeMismatchCount": 0,
+      "httpStatusCounts": {
+        "200": 5,
+        "503": 3,
+        "other": 0
+      },
+      "hybridSuccessCount": 5,
+      "latencyDistributions": {
+        "busy503": {
+          "count": 3,
+          "p50Ms": 51.984,
+          "p95Ms": 53.392,
+          "p99Ms": 53.392,
+          "population": "http_status_503"
+        },
+        "success200": {
+          "count": 5,
+          "p50Ms": 33.796,
+          "p95Ms": 189.759,
+          "p99Ms": 189.759,
+          "population": "http_status_200"
+        }
+      },
+      "modelInvocationCount": 6,
+      "requestCount": 8,
+      "successEnvelopeMismatchCount": 0,
+      "transportErrorCount": 0,
+      "wave": 19
+    },
+    {
+      "acceptedKoelectraSourceDetectionCount": 6,
+      "busyErrorEnvelopeMismatchCount": 0,
+      "httpStatusCounts": {
+        "200": 6,
+        "503": 2,
+        "other": 0
+      },
+      "hybridSuccessCount": 6,
+      "latencyDistributions": {
+        "busy503": {
+          "count": 2,
+          "p50Ms": 3.846,
+          "p95Ms": 7.118,
+          "p99Ms": 7.118,
+          "population": "http_status_503"
+        },
+        "success200": {
+          "count": 6,
+          "p50Ms": 26.796,
+          "p95Ms": 33.437,
+          "p99Ms": 33.437,
+          "population": "http_status_200"
+        }
+      },
+      "modelInvocationCount": 6,
+      "requestCount": 8,
+      "successEnvelopeMismatchCount": 0,
+      "transportErrorCount": 0,
+      "wave": 20
+    }
+  ],
+  "workload": {
+    "corpusSha256": "b5e678d09af9e99a1c1a807def7caee4b0e081b18368fbee82e8168778467090",
+    "fullCorpusCaseCount": 50,
+    "rendering": "synthetic_placeholders_rendered_in_memory_only",
+    "selectedWorkloadCaseCount": 21,
+    "selectionRule": "case_has_koelectra_supported_placeholder_type_that_enters_ml_candidate_pipeline",
+    "storedContent": "aggregate_only",
+    "verificationRule": "in_memory_preflight_confirms_hybrid_execution_and_accepted_koelectra_source",
+    "verifiedHybridWorkloadCaseCount": 7
+  }
+}

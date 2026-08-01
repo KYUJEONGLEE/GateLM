@@ -37,7 +37,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     app.state.settings = resolved_settings
     app.state.ai_safety_concurrency_gate = AiSafetyConcurrencyGate(
-        resolved_settings.ai_safety_max_concurrent
+        resolved_settings.ai_safety_max_concurrent,
+        waiting_capacity=resolved_settings.ai_safety_max_pending,
+        wait_timeout_ms=resolved_settings.ai_safety_wait_timeout_ms,
     )
     detector_service = create_ai_safety_detector_service(resolved_settings)
     if resolved_settings.ai_safety_preload_enabled:

@@ -168,6 +168,8 @@ class AiServiceLauncherConfigTests(unittest.TestCase):
                 "ai_safety_detector_runtime",
                 "ai_safety_preload_enabled",
                 "ai_safety_max_concurrent",
+                "ai_safety_max_pending",
+                "ai_safety_wait_timeout_ms",
                 "deployment_mode",
                 "rag_enabled",
                 "rag_service_token",
@@ -213,16 +215,24 @@ class AiServiceLauncherConfigTests(unittest.TestCase):
             settings = load_settings()
 
         self.assertEqual(settings.ai_safety_max_concurrent, 1)
+        self.assertEqual(settings.ai_safety_max_pending, 4)
+        self.assertEqual(settings.ai_safety_wait_timeout_ms, 50)
 
     def test_settings_loads_ai_safety_max_concurrent(self) -> None:
         with patch.dict(
             os.environ,
-            {"AI_SERVICE_AI_SAFETY_MAX_CONCURRENT": "2"},
+            {
+                "AI_SERVICE_AI_SAFETY_MAX_CONCURRENT": "2",
+                "AI_SERVICE_AI_SAFETY_MAX_PENDING": "3",
+                "AI_SERVICE_AI_SAFETY_WAIT_TIMEOUT_MS": "75",
+            },
             clear=True,
         ):
             settings = load_settings()
 
         self.assertEqual(settings.ai_safety_max_concurrent, 2)
+        self.assertEqual(settings.ai_safety_max_pending, 3)
+        self.assertEqual(settings.ai_safety_wait_timeout_ms, 75)
 
     def test_settings_rejects_out_of_range_ai_safety_max_concurrent(self) -> None:
         for configured_value in ("0", "-1", "33"):
@@ -236,6 +246,38 @@ class AiServiceLauncherConfigTests(unittest.TestCase):
                     "AI_SERVICE_AI_SAFETY_MAX_CONCURRENT",
                 ):
                     load_settings()
+
+    def test_settings_allows_immediate_ai_safety_admission_mode(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "AI_SERVICE_AI_SAFETY_MAX_PENDING": "0",
+                "AI_SERVICE_AI_SAFETY_WAIT_TIMEOUT_MS": "0",
+            },
+            clear=True,
+        ):
+            settings = load_settings()
+
+        self.assertEqual(settings.ai_safety_max_pending, 0)
+        self.assertEqual(settings.ai_safety_wait_timeout_ms, 0)
+
+    def test_settings_rejects_out_of_range_ai_safety_queue_limits(self) -> None:
+        cases = {
+            "AI_SERVICE_AI_SAFETY_MAX_PENDING": ("-1", "33"),
+            "AI_SERVICE_AI_SAFETY_WAIT_TIMEOUT_MS": ("-1", "1001"),
+        }
+        for key, configured_values in cases.items():
+            for configured_value in configured_values:
+                with self.subTest(
+                    key=key,
+                    configured_value=configured_value,
+                ), patch.dict(
+                    os.environ,
+                    {key: configured_value},
+                    clear=True,
+                ):
+                    with self.assertRaisesRegex(ValueError, key):
+                        load_settings()
 
     def test_settings_loads_person_name_model_only_flag(self) -> None:
         with patch.dict(

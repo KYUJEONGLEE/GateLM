@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import threading
+from collections import deque
 from pathlib import Path
 
 from fastapi import Request
@@ -19,22 +20,99 @@ _AI_SAFETY_GATE_INIT_LOCK = threading.Lock()
 
 
 class AiSafetyConcurrencyGate:
-    def __init__(self, maximum_concurrency: int) -> None:
+    def __init__(
+        self,
+        maximum_concurrency: int,
+        *,
+        waiting_capacity: int = 4,
+        wait_timeout_ms: int = 50,
+    ) -> None:
+        if maximum_concurrency <= 0:
+            raise ValueError("maximum_concurrency must be positive")
+        if waiting_capacity < 0:
+            raise ValueError("waiting_capacity must be non-negative")
+        if wait_timeout_ms < 0:
+            raise ValueError("wait_timeout_ms must be non-negative")
         self._maximum_concurrency = maximum_concurrency
+        self._waiting_capacity = waiting_capacity
+        self._wait_timeout_seconds = wait_timeout_ms / 1000
         self._active = 0
         self._lock = asyncio.Lock()
+        self._waiters: deque[asyncio.Future[None]] = deque()
+        self._cleanup_tasks: set[asyncio.Task[None]] = set()
 
     async def try_acquire(self) -> bool:
         async with self._lock:
-            if self._active >= self._maximum_concurrency:
+            if self._active < self._maximum_concurrency and not self._waiters:
+                self._active += 1
+                return True
+            if self._waiting_capacity == 0 or self._wait_timeout_seconds == 0:
                 return False
-            self._active += 1
+            if len(self._waiters) >= self._waiting_capacity:
+                return False
+            waiter = asyncio.get_running_loop().create_future()
+            self._waiters.append(waiter)
+
+        try:
+            async with asyncio.timeout(self._wait_timeout_seconds):
+                await asyncio.shield(waiter)
             return True
+        except TimeoutError:
+            cleanup_task = self._track_cleanup_task(
+                asyncio.create_task(self._repair_waiter_after_abort(waiter))
+            )
+            await asyncio.shield(cleanup_task)
+            return False
+        except asyncio.CancelledError:
+            cleanup_task = self._track_cleanup_task(
+                asyncio.create_task(self._repair_waiter_after_abort(waiter))
+            )
+            try:
+                await asyncio.shield(cleanup_task)
+            except asyncio.CancelledError:
+                pass
+            raise
+
+    def _track_cleanup_task(
+        self,
+        task: asyncio.Task[None],
+    ) -> asyncio.Task[None]:
+        self._cleanup_tasks.add(task)
+        task.add_done_callback(self._cleanup_task_finished)
+        return task
+
+    def _cleanup_task_finished(self, task: asyncio.Task[None]) -> None:
+        self._cleanup_tasks.discard(task)
+        if not task.cancelled():
+            task.exception()
+
+    async def _repair_waiter_after_abort(
+        self,
+        waiter: asyncio.Future[None],
+    ) -> None:
+        async with self._lock:
+            try:
+                self._waiters.remove(waiter)
+            except ValueError:
+                if waiter.done() and not waiter.cancelled():
+                    self._release_locked()
+                return
+            waiter.cancel()
+
+    def _release_locked(self) -> None:
+        if self._active == 0:
+            return
+        while self._waiters:
+            waiter = self._waiters.popleft()
+            if waiter.done():
+                continue
+            waiter.set_result(None)
+            return
+        self._active -= 1
 
     async def release(self) -> None:
         async with self._lock:
-            if self._active > 0:
-                self._active -= 1
+            self._release_locked()
 
 
 class RagExtractionConcurrencyGate:
@@ -105,8 +183,11 @@ def get_ai_safety_concurrency_gate(
         gate = getattr(request.app.state, "ai_safety_concurrency_gate", None)
         if isinstance(gate, AiSafetyConcurrencyGate):
             return gate
+        settings = get_settings(request)
         gate = AiSafetyConcurrencyGate(
-            get_settings(request).ai_safety_max_concurrent
+            settings.ai_safety_max_concurrent,
+            waiting_capacity=settings.ai_safety_max_pending,
+            wait_timeout_ms=settings.ai_safety_wait_timeout_ms,
         )
         request.app.state.ai_safety_concurrency_gate = gate
         return gate

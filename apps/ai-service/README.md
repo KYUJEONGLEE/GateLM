@@ -71,6 +71,8 @@ AI_SERVICE_AI_SAFETY_DETECTOR_RUNTIME=onnx
 AI_SERVICE_AI_SAFETY_PRELOAD_ENABLED=true
 AI_SERVICE_AI_SAFETY_MICRO_BATCH_SIZE=4
 AI_SERVICE_AI_SAFETY_MAX_CONCURRENT=1
+AI_SERVICE_AI_SAFETY_MAX_PENDING=4
+AI_SERVICE_AI_SAFETY_WAIT_TIMEOUT_MS=50
 AI_SERVICE_ONNX_INTRA_OP_THREADS=4
 AI_SERVICE_ONNX_INTER_OP_THREADS=1
 AI_SERVICE_ONNX_ALLOW_SPINNING=false
@@ -82,13 +84,30 @@ AI_SERVICE_AI_SAFETY_ADDITIONAL_DETECTOR_MODEL_IDS=
 
 The primary model is loaded through the local ONNX Runtime pipeline and its detections are merged through the same sanitized GateLM policy path. Do not send raw prompts to hosted Hugging Face inference APIs for this path.
 
-`AI_SERVICE_AI_SAFETY_MAX_CONCURRENT` is a process-local admission limit from `1` to `32`; the conservative default is `1`. Single and batch requests each consume one slot, and a full process returns the sanitized retryable `503 sidecar_unavailable` response instead of building an unbounded queue. With multiple workers or replicas, the total possible concurrency is `worker-or-replica count × this value`. Raise it only after benchmarking the same vCPU and ONNX thread settings used in deployment.
+`AI_SERVICE_AI_SAFETY_MAX_CONCURRENT` is the process-local active inference limit from `1` to `32`; the conservative default is `1`. Single and batch requests share it. `AI_SERVICE_AI_SAFETY_MAX_PENDING` bounds waiting requests from `0` to `32` (default `4`), and `AI_SERVICE_AI_SAFETY_WAIT_TIMEOUT_MS` bounds each wait from `0` to `1000ms` (default `50ms`). A request continues only when a slot opens before its deadline; a full pending queue or expired wait returns the sanitized retryable `503 sidecar_unavailable` response. Setting either waiting value to `0` preserves immediate rejection. Active and pending limits are process-local, so worker or replica counts multiply the deployment-wide bounds. Raise them only after benchmarking the same vCPU and ONNX thread settings used in deployment.
+
+The fixed 4-vCPU AWS PII profile pins active inference to `2` and ONNX
+intra-op threads to `2`. Generic local and Self-host defaults remain
+conservative because those profiles do not guarantee the same CPU budget.
 
 The pinned 2026-07-15 delivery bundle still contains the KoELECTRA artifact and the importer verifies all manifest-listed files, but a blank additional-model setting prevents that adapter from loading or warming up. If the allowlisted KoELECTRA path is explicitly enabled for an isolated evaluation, its accepted labels remain email, phone number, and resident registration number only. Person-name and organization-name detections remain rule backstops, and the supplied evaluation does not justify production-grade accuracy claims.
 
 `AI_SERVICE_AI_SAFETY_PERSON_NAME_MODEL_ONLY` defaults to `false`. For an isolated evaluation with a separately supplied model that supports `person_name`, set the ML allowlist to include `person_name` and enable this flag. Existing name-rule matches then seed model windows but do not become final masking signals; only accepted model `person_name` detections are masked. All non-name deterministic rules stay enabled. Startup fails when the flag is enabled without `person_name` model support. This flag does not install, activate, or deploy a model by itself.
 
 For the Gateway path, also set `GATEWAY_AI_SAFETY_PERSON_NAME_MODEL_ONLY=true`. This removes only the Gateway's local `person_name` rules so the original name reaches the AI Service; all other local PII rules remain active. Gateway startup fails unless the sidecar is enabled in `enforce` mode with a non-empty URL and matching model ID. Keep both flags `false` outside the isolated evaluation profile.
+
+`GATEWAY_AI_SAFETY_OVERLOAD_POLICY` defaults to `local_fallback` for compatibility.
+`fail_closed` is valid only in `enforce` mode: a validated retryable sidecar overload `503`
+stops before Provider execution instead of switching the request to full local rules. The
+root `.env.example` and root Compose defaults use `local_fallback` with a `750ms` Gateway
+timeout. The KoELECTRA development helper is a candidate-rehearsal exception and prints
+`fail_closed` with a temporary `300ms` timeout. The Self-host example and Compose default
+use `fail_closed` with `750ms`, while allowing the operator to select either policy
+explicitly. The AWS candidate env and production-distributed profile hardcode `fail_closed`
+with a temporary `300ms` Gateway timeout and mark the sidecar as a required readiness
+dependency. The `300ms` value used by candidate rehearsal and AWS production-distributed
+covers the configured `50ms` wait plus the previously observed HTTP inference tail; it is
+not a production SLA and must be revalidated on the target Linux/Uvicorn/network profile.
 
 Import only manifest-listed model artifacts from the delivery archive and verify every file hash:
 
@@ -159,6 +178,8 @@ AI_SERVICE_AI_SAFETY_DETECTOR_RUNTIME=onnx \
 AI_SERVICE_AI_SAFETY_PRELOAD_ENABLED=true \
 AI_SERVICE_AI_SAFETY_MICRO_BATCH_SIZE=4 \
 AI_SERVICE_AI_SAFETY_MAX_CONCURRENT=1 \
+AI_SERVICE_AI_SAFETY_MAX_PENDING=4 \
+AI_SERVICE_AI_SAFETY_WAIT_TIMEOUT_MS=50 \
 AI_SERVICE_ONNX_INTRA_OP_THREADS=4 \
 AI_SERVICE_ONNX_INTER_OP_THREADS=1 \
 AI_SERVICE_ONNX_ALLOW_SPINNING=false \
@@ -234,6 +255,32 @@ Each concurrency level is measured three times in crossed order. Only levels wit
 
 For a 4-vCPU deployment, evaluate concurrency 1, 2, and 4 first. Higher levels are oversubscription evidence, not automatic defaults. Repeat the benchmark on the same vCPU quota and ONNX thread profile used in deployment before changing the conservative process-local default of 1.
 
+To compare how the same four logical CPUs are divided between request-level
+concurrency and ONNX intra-op work, run the fixed-budget matrix:
+
+```bash
+cd apps/ai-service
+python -m app.services.pii_thread_budget_matrix_benchmark_runner \
+  --model-dir <canonical-koelectra-model-directory> \
+  --model-version v0.1.1 \
+  --cpu-budget 4 \
+  --configurations 1x4,2x2,4x1 \
+  --rounds 3 \
+  --warmup-requests 32 \
+  --measured-requests 1000 \
+  --deadline-ms 100 \
+  --sample-interval-ms 100
+```
+
+Every configuration runs in a fresh process with four-CPU affinity,
+`inter-op=1`, and spinning disabled. The runner crosses execution order and
+stores only aggregate RPS, p50/p95/p99, deadline counts, output-parity counts,
+CPU utilization, and context-switch statistics. Its highest-throughput
+configuration with output parity and a worst-round p99 within the deadline is
+only a target-environment revalidation candidate. It does not change the
+production default without a repeated 4-vCPU Linux, Uvicorn/network, and
+Gateway E2E run.
+
 ## PII HTTP Admission Gate Benchmark
 
 The direct runner selects a safe concurrency candidate but bypasses FastAPI admission. Use the HTTP runner separately to prove that one process returns bounded HTTP 200 and sanitized HTTP 503 sidecar-unavailable responses while retaining real hybrid KoELECTRA execution:
@@ -248,11 +295,19 @@ python -m app.services.pii_http_admission_concurrency_benchmark_runner \
   --koelectra-model-dir <canonical-koelectra-model-directory> \
   --model-version v0.1.1 \
   --capacity 1 \
+  --pending-capacity 4 \
+  --wait-timeout-ms 50 \
+  --cpu-affinity-count 4 \
   --parallel-requests 8 \
   --waves 20
 ```
 
 This runner first keeps only synthetic cases whose in-memory preflight confirms both hybrid execution and an accepted KoELECTRA contribution, then passes those requests through the actual FastAPI route with an in-process ASGI transport. It stores only aggregate selection counts, never case IDs, prompts, or detections. It is gate evidence, not a concurrency recommendation, and does not cover Uvicorn sockets, multiple worker processes, or Gateway fallback under network load.
+
+The v2 report records active and pending capacity, wait timeout, process CPU
+affinity, and ONNX thread settings. Set `AI_SERVICE_ONNX_INTRA_OP_THREADS` to
+the matrix candidate before launching this runner; the report makes a mismatch
+visible but does not promote the candidate to a production default.
 
 ## Safety Eval Runner
 

@@ -11,10 +11,12 @@ Parameters:
     Default: /aws/service/canonical/ubuntu/server/24.04/stable/current/amd64/hvm/ebs-gp3/ami-id
   EdgeInstanceType:
     Type: String
-    Default: c7i.large
+    Default: t3a.medium
+    Description: Two-vCPU burstable x86 host for the public Web and Tenant Chat edge role.
   GatewayInstanceType:
     Type: String
-    Default: c7i.xlarge
+    Default: t3a.large
+    Description: Two-vCPU burstable x86 host for Gateway request processing with remote AI inference.
   DataInstanceType:
     Type: String
     Default: m7i.large

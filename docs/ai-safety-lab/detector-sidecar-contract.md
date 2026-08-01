@@ -78,8 +78,9 @@ The optional `placeholderCounters` object carries only the greatest already allo
 ```
 
 `mode=shadow`는 sanitized observation과 log-safe redaction만 제공하며 Provider에 전달할 prompt와 최종 action을 변경하지 않는다. `mode=enforce`에서만 Gateway가 sidecar의 redaction/block을 실행 결과에 반영한다. `detectorPolicies`가 있으면 같은 detector type의 sidecar 기본 action보다 우선하며 Tenant Chat RuntimeSnapshot의 `allow|redact|block`을 보존한다.
+`GATEWAY_AI_SAFETY_OVERLOAD_POLICY=fail_closed`는 검증된 retryable `503 sidecar_unavailable`의 최종 동작을 바꾸므로 `mode=enforce`에서만 허용한다. `shadow + fail_closed` 조합은 시작 시 거부한다.
 
-Long prompts are split into candidate-centered model windows of at most 480 characters; overlapping windows merge only when the merged value remains within that bound. A request is rejected with the sanitized unavailable response before any model call when uncovered model work exceeds 128 candidates or 64 windows across all items/adapters. Gateway treats that non-success response as one batch failure and uses the complete local P0 result set.
+Long prompts are split into candidate-centered model windows of at most 480 characters; overlapping windows merge only when the merged value remains within that bound. When uncovered model work exceeds 128 candidates or 64 windows across all items/adapters, the sidecar returns the same route-specific retryable `503 sidecar_unavailable` envelope before any model call. Gateway applies the operator policy to the whole request: `local_fallback` uses the complete local P0 result set, while `fail_closed` stops before Provider execution.
 
 ## 4. Response Semantics
 
@@ -162,7 +163,13 @@ Error responses are sanitized.
 }
 ```
 
-Each route returns its own contract version in the same envelope: `ai-safety-detector.v1` for single detection and `ai-safety-detector-batch.v1` for batch detection. When the process-local admission limit is full, the sidecar fails immediately with HTTP 503, `code=sidecar_unavailable`, and `retryable=true` instead of building an unbounded inference queue.
+Each route returns its own contract version in the same envelope: `ai-safety-detector.v1` for single detection and `ai-safety-detector-batch.v1` for batch detection. Active inference is process-local and defaults to `1`. At most `4` additional requests wait for at most `50ms`; a newly arrived request is rejected immediately when the pending bound is full, and an expired wait returns the same HTTP 503, `code=sidecar_unavailable`, `retryable=true` envelope. A `0` pending bound or `0ms` wait preserves immediate rejection. Cancellation removes the waiter, and workers or replicas multiply both process-local bounds.
+
+The fixed 4-vCPU AWS PII deployment profile explicitly overrides the generic
+default with active inference `2` and ONNX intra-op threads `2`. The pending
+bound `4`, wait `50ms`, inter-op `1`, and spinning-disabled settings remain
+unchanged. This profile selection does not change the response schema or the
+sanitized overload envelope.
 
 Error responses must not echo prompt text, rejected values, stack traces containing input, raw model output, raw headers, or credential material.
 
@@ -173,9 +180,11 @@ Error responses must not echo prompt text, rejected values, stack traces contain
 | regex detector failure | fail closed |
 | critical detector failure | fail closed |
 | ML NER timeout/failure | shadow unavailable, continue with regex result |
-| full sidecar unavailable | regex-only fallback |
-| process-local admission limit full | immediate sanitized 503; Gateway regex-only fallback |
-| invalid sidecar response | sanitized adapter failure |
+| sidecar timeout, transport failure, or non-503 HTTP failure | complete local P0 fallback |
+| validated route-specific retryable `503 sidecar_unavailable`, including work-limit, active/pending capacity full, or wait expired | Gateway `local_fallback` uses complete local P0, while `fail_closed` stops before Provider execution |
+| invalid sidecar response, including an invalid 503 envelope | sanitized adapter failure; Gateway uses complete local P0 fallback |
+
+A validated route-specific retryable `503 sidecar_unavailable` remains `outcome=http_error`. `fail_closed` does not execute fallback and therefore must not increment `gatelm_ai_safety_sidecar_fallback_total`; no new metric name or label value is introduced.
 
 ## 8. Model Label Mapping
 
