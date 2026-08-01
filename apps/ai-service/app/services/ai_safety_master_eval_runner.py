@@ -423,7 +423,9 @@ def load_screening_subset(
         or any(char not in "0123456789abcdef" for char in expected_digest)
     ):
         raise MasterEvalError("screening subset source corpus sha256 is invalid")
-    actual_digest = hashlib.sha256(corpus_path.read_bytes()).hexdigest()
+    actual_digest = hashlib.sha256(
+        corpus_path.read_text(encoding="utf-8").encode("utf-8")
+    ).hexdigest()
     if actual_digest != expected_digest:
         raise MasterEvalError("screening subset source corpus checksum mismatch")
     if source_corpus["caseCount"] != len(cases):

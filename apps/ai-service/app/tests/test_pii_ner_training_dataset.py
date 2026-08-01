@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import tempfile
 import unittest
@@ -14,6 +15,14 @@ from app.domain.ai_safety_training.koelectra_dataset import (
     build_training_manifest,
     serialize_training_records,
     training_record_from_case,
+)
+from app.domain.ai_safety_training.pii_error_curation import (
+    CURATED_HARD_NEGATIVE_VARIANTS_PER_CASE,
+    CURATION_REPORT_VERSION,
+    MODEL_SHA256,
+    REVIEW_SCHEMA_VERSION,
+    TARGET_THRESHOLDS,
+    sha256_canonical_text_file,
 )
 from app.services.pii_ner_training_dataset_cli import DEFAULT_CORPUS_PATH, run
 
@@ -113,6 +122,91 @@ class PiiNerTrainingDatasetTests(unittest.TestCase):
                 path = out_dir / f"{split}.jsonl"
                 self.assertTrue(path.is_file())
                 self.assertGreater(path.stat().st_size, 0)
+
+    def test_cli_adds_only_dataset_owner_approved_curation_records(self) -> None:
+        case_id = "gen_private_date_external_share_block_07"
+        candidate = {
+            "caseId": case_id,
+            "proposedTrainingDisposition": "hard_negative",
+            "recommendedDecision": "confirmed_model_error",
+            "recommendationReason": "non_target_fixture_detected_as_target",
+        }
+        report = {
+            "reportVersion": CURATION_REPORT_VERSION,
+            "status": "review_required",
+            "syntheticOnly": True,
+            "productionPromotionEvidence": False,
+            "model": {
+                "version": "v0.1.1",
+                "sha256": MODEL_SHA256,
+                "thresholds": TARGET_THRESHOLDS,
+            },
+            "source": {
+                "corpusSha256": sha256_canonical_text_file(DEFAULT_CORPUS_PATH),
+                "subsetManifestSha256": "c" * 64,
+            },
+            "screening": {"mismatchCandidates": [candidate]},
+        }
+        report_text = json.dumps(report, sort_keys=True) + "\n"
+        review = {
+            "schemaVersion": REVIEW_SCHEMA_VERSION,
+            "status": "approved",
+            "trainingEligible": True,
+            "reviewerRole": "dataset_owner",
+            "reviewedAt": "2026-08-02T00:00:00Z",
+            "syntheticOnly": True,
+            "modelVersion": "v0.1.1",
+            "modelSha256": MODEL_SHA256,
+            "curationReportSha256": hashlib.sha256(
+                report_text.encode("utf-8")
+            ).hexdigest(),
+            "sourceCorpusSha256": report["source"]["corpusSha256"],
+            "subsetManifestSha256": "c" * 64,
+            "candidateCount": 1,
+            "decisions": [
+                {
+                    **candidate,
+                    "decision": "confirmed_model_error",
+                }
+            ],
+        }
+        base = build_training_dataset(self.cases)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            report_path = root / "report.json"
+            review_path = root / "review.json"
+            out_dir = root / "dataset"
+            report_path.write_text(report_text, encoding="utf-8")
+            review_path.write_text(
+                json.dumps(review, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+
+            exit_code = run(
+                [
+                    "--out",
+                    str(out_dir),
+                    "--curation-report",
+                    str(report_path),
+                    "--curation-review",
+                    str(review_path),
+                ]
+            )
+            manifest = json.loads(
+                (out_dir / "manifest.json").read_text(encoding="utf-8")
+            )
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(manifest["errorCuration"]["approvedCaseCount"], 1)
+        self.assertEqual(
+            manifest["errorCuration"]["addedRecordCount"],
+            CURATED_HARD_NEGATIVE_VARIANTS_PER_CASE,
+        )
+        self.assertEqual(
+            sum(item["recordCount"] for item in manifest["splits"].values()),
+            sum(len(base[split]) for split in SPLITS)
+            + CURATED_HARD_NEGATIVE_VARIANTS_PER_CASE,
+        )
 
 
 if __name__ == "__main__":

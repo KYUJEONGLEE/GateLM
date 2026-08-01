@@ -1,0 +1,87 @@
+{
+  "schemaVersion": "gatelm.pii-v0.1.1-error-curation-evidence.v1",
+  "executedAt": "2026-08-02",
+  "baseGitSha": "3e18d1eaa36456d667c0c20321bb46b4da4de4bc",
+  "syntheticOnly": true,
+  "productionPromotionEvidence": false,
+  "model": {
+    "version": "v0.1.1",
+    "sha256": "8a5cb146e84d413910a423d304e662a6aba9f69e83db129f5061d007a6de9381",
+    "runtimeFilesExpected": 6,
+    "runtimeFilesVerified": 6,
+    "runtimeFileChecksumFailures": 0
+  },
+  "regressionGuards": {
+    "positiveCases": 7,
+    "negativeCases": 6,
+    "passedCases": 13,
+    "failedCases": 0
+  },
+  "hybridScreening": {
+    "caseCount": 103,
+    "rulesOnlyPassed": 84,
+    "v011Passed": 84,
+    "rulesOnlyFalsePositiveCases": 2,
+    "v011FalsePositiveCases": 2,
+    "rulesOnlyFalseNegativeCases": 19,
+    "v011FalseNegativeCases": 19,
+    "v011ModelInvocations": 0,
+    "v011AcceptedModelDetections": 0,
+    "errors": 0
+  },
+  "directModelScreening": {
+    "caseCount": 103,
+    "correctCases": 15,
+    "confusingButCorrectCases": 49,
+    "modelMismatchCandidates": 39,
+    "hardNegativeCandidates": 10,
+    "positiveCandidates": 29,
+    "confirmedModelErrorRecommendations": 10,
+    "fixtureArtifactRecommendations": 29,
+    "riskFalsePositiveCorrectCases": 22,
+    "riskFalseNegativeCorrectCases": 27
+  },
+  "review": {
+    "required": true,
+    "status": "pending",
+    "trainingEligible": false,
+    "recommendationOnly": true
+  },
+  "artifactAvailability": {
+    "canonicalRuntimeAvailable": true,
+    "trainableV011CheckpointAvailable": false,
+    "frozenProductAdapter5000Available": false,
+    "frozenSixType4270Available": false,
+    "privateRegression1000Available": false
+  },
+  "verification": {
+    "aiServiceTestsRun": 418,
+    "aiServiceTestsPassed": 415,
+    "aiServiceTestsSkipped": 3,
+    "gatewayGoTestsPassed": true,
+    "docsVerificationPassed": true,
+    "diffCheckPassed": true,
+    "sensitiveOrAbsolutePathMatches": 0,
+    "concretePortChangeMatches": 0,
+    "v2FinalPassed": false,
+    "v2FinalFailureScope": [
+      "windows_wsl_optional_component_unavailable",
+      "unrelated_routing_fixture_crlf_hash_mismatch",
+      "routing_test_environment_missing_sklearn"
+    ]
+  },
+  "contentSafety": {
+    "rawTextIncluded": false,
+    "detectedValueIncluded": false,
+    "spanOrOffsetIncluded": false,
+    "absoluteLocalPathIncluded": false,
+    "awsAccountIncluded": false,
+    "bucketNameIncluded": false
+  },
+  "limitations": [
+    "The latest hybrid path did not invoke the model for this subset, so direct adapter screening was kept separate from product-path behavior.",
+    "Mismatch candidates are not training data until dataset-owner review is complete.",
+    "The accessible canonical bundle contains all six expected runtime files with exact checksums, but its archive checksum differs from the historical package digest.",
+    "The trainable v0.1.1 checkpoint and the three historical frozen evaluation datasets are not present in Git, Git LFS, or the accessible PII artifact inventory."
+  ]
+}

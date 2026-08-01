@@ -60,7 +60,7 @@ class PiiModelCanonicalRegistryTests(unittest.TestCase):
                 source_path = REPO_ROOT / source["path"]
                 self.assertTrue(source_path.is_file(), source["path"])
                 self.assertEqual(
-                    sha256_file(source_path),
+                    sha256_canonical_text_file(source_path),
                     source["sha256"],
                     source["path"],
                 )
@@ -140,12 +140,10 @@ def parse_sha_manifest(path: Path) -> dict[str, str]:
     return values
 
 
-def sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as source:
-        for chunk in iter(lambda: source.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
+def sha256_canonical_text_file(path: Path) -> str:
+    return hashlib.sha256(
+        path.read_text(encoding="utf-8").encode("utf-8")
+    ).hexdigest()
 
 
 if __name__ == "__main__":

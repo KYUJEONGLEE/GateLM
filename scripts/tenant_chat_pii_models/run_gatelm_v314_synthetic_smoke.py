@@ -15,29 +15,24 @@ sys.path.insert(0, str(AI_SERVICE_ROOT))
 
 from app.adapters.safety.privacy_filter_adapter import (  # noqa: E402
     GATELM_KOELECTRA_PII_NER_MODEL,
+    GATELM_KOELECTRA_PII_NER_LABEL_MAP,
     PrivacyFilterAdapter,
+)
+from app.domain.ai_safety_training.pii_error_curation import (  # noqa: E402
+    TARGET_THRESHOLDS,
+    TARGET_TYPES,
+    load_regression_guard_fixture,
 )
 
 
 MODEL_SHA256 = "8a5cb146e84d413910a423d304e662a6aba9f69e83db129f5061d007a6de9381"
-TARGET_TYPES = frozenset(
-    {
-        "email",
-        "organization_name",
-        "person_name",
-        "phone_number",
-        "postal_address",
-        "resident_registration_number",
-    }
+REGRESSION_GUARD_FIXTURE = (
+    REPOSITORY_ROOT
+    / "docs"
+    / "ai-safety-lab"
+    / "fixtures"
+    / "pii-v0.1.1-regression-guards-v1.json"
 )
-THRESHOLDS = {
-    "email": 0.99,
-    "organization_name": 0.90,
-    "person_name": 0.90,
-    "phone_number": 0.99,
-    "postal_address": 0.90,
-    "resident_registration_number": 0.99,
-}
 
 
 def sha256(path: Path) -> str:
@@ -60,35 +55,17 @@ def main() -> None:
     adapter = PrivacyFilterAdapter(
         model_name=str(model_dir),
         source="gatelm_koelectra_pii_ner",
-        min_confidence_by_detector_type=THRESHOLDS,
+        label_map=GATELM_KOELECTRA_PII_NER_LABEL_MAP,
+        min_confidence_by_detector_type=TARGET_THRESHOLDS,
         allowed_detector_types=TARGET_TYPES,
     )
-    cases = (
-        ("email", "문의 이메일은 demo.user@example.com입니다.", "email", "demo.user@example.com"),
-        ("organization", "소속 기관은 네오테크솔루션입니다.", "organization_name", "네오테크솔루션"),
-        ("person", "담당자 이름은 김민수입니다.", "person_name", "김민수"),
-        ("phone", "연락처는 010-1234-5678입니다.", "phone_number", "010-1234-5678"),
-        (
-            "postal_address",
-            "배송지는 서울특별시 강남구 테헤란로 123입니다.",
-            "postal_address",
-            "서울특별시 강남구 테헤란로 123",
-        ),
-        (
-            "postal_address_no_space",
-            "배송지는 서울특별시 강남구테헤란로 123입니다.",
-            "postal_address",
-            "서울특별시 강남구테헤란로 123",
-        ),
-        (
-            "resident_registration_number",
-            "확인용 주민등록번호는 900101-1234567입니다.",
-            "resident_registration_number",
-            "900101-1234567",
-        ),
-    )
+    fixture = load_regression_guard_fixture(REGRESSION_GUARD_FIXTURE)
     results: list[dict[str, object]] = []
-    for case_id, text, expected_type, expected_value in cases:
+    for case in fixture["positiveCases"]:
+        case_id = case["caseId"]
+        text = case["text"]
+        expected_type = case["expectedDetectorType"]
+        expected_value = case["expectedValue"]
         detections = adapter.detect(text)
         matched = any(
             item.detector_type == expected_type
@@ -106,22 +83,17 @@ def main() -> None:
             }
         )
 
-    negative_cases = (
-        ("single_syllable_question", "너의이름은?"),
-        ("name_change_compound", "이름변경 기능을 설명해 주세요."),
-        ("name_tag_compound", "이름표를 새로 만들어 주세요."),
-        ("customer_center_compound", "고객센터 연결 방법을 알려 주세요."),
-        ("customer_inquiry_compound", "고객문의 내역을 정리해 주세요."),
-        ("compatibility_jamo_only", "ㅁㄴㅇㄹㅇㄹ"),
-    )
     negative_results = []
-    for case_id, text in negative_cases:
+    for case in fixture["negativeCases"]:
+        case_id = case["caseId"]
+        text = case["text"]
+        forbidden_types = set(case["forbiddenDetectorTypes"])
         detections = adapter.detect(text)
         negative_results.append(
             {
                 "caseId": case_id,
                 "personNameDetected": any(
-                    item.detector_type == "person_name" for item in detections
+                    item.detector_type in forbidden_types for item in detections
                 ),
             }
         )
