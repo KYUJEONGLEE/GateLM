@@ -6,7 +6,15 @@ import unittest
 from datetime import datetime, timezone
 from pathlib import Path
 
-from app.services.pii_shadow_e2e_runner import build_report, write_safe_report
+from app.domain.ai_safety_benchmark.types import BenchmarkError
+from app.services.pii_shadow_e2e_runner import (
+    _inside_night_window,
+    _run_fault_counter_validation,
+    build_parser,
+    build_report,
+    validate_args,
+    write_safe_report,
+)
 
 
 class PiiShadowE2EReportTests(unittest.TestCase):
@@ -25,18 +33,31 @@ class PiiShadowE2EReportTests(unittest.TestCase):
             request_count=100,
             sample_basis_points=500,
             client_result={
-                "schemaVersion": "gatelm.pii-shadow-e2e-client.v1",
+                "schemaVersion": "gatelm.pii-shadow-e2e-client.v2",
                 "requestCount": 100,
                 "sampledRequestCount": 5,
+                "deterministicReplaySampledRequestCount": 5,
                 "successCount": 100,
                 "errorCount": 0,
+                "controlRequestCount": 1,
+                "controlSampledRequestCount": 0,
+                "controlSuccessCount": 1,
+                "controlErrorCount": 0,
+                "requestLatencyMs": latency_summary(100),
+                "sampledRequestLatencyMs": latency_summary(5),
+                "nonSampledRequestLatencyMs": latency_summary(95),
             },
             processed=5,
             shadow_snapshot=shadow_snapshot(mismatches=0),
+            execution_context="aws_test_tenant_host",
+            night_window_bypassed=False,
         )
 
         self.assertTrue(report["eligibility"]["eligible"])
         self.assertEqual(report["workload"]["actualSamplePercent"], 5.0)
+        self.assertFalse(
+            report["scope"]["nightWindowBypassedForExplicitE2E"]
+        )
         rendered = json.dumps(report, sort_keys=True)
         self.assertNotIn('\"promptText\":', rendered)
         self.assertNotIn('\"redactedPrompt\":', rendered)
@@ -58,11 +79,19 @@ class PiiShadowE2EReportTests(unittest.TestCase):
             request_count=100,
             sample_basis_points=500,
             client_result={
-                "schemaVersion": "gatelm.pii-shadow-e2e-client.v1",
+                "schemaVersion": "gatelm.pii-shadow-e2e-client.v2",
                 "requestCount": 100,
                 "sampledRequestCount": 5,
+                "deterministicReplaySampledRequestCount": 5,
                 "successCount": 100,
                 "errorCount": 0,
+                "controlRequestCount": 1,
+                "controlSampledRequestCount": 0,
+                "controlSuccessCount": 1,
+                "controlErrorCount": 0,
+                "requestLatencyMs": latency_summary(100),
+                "sampledRequestLatencyMs": latency_summary(5),
+                "nonSampledRequestLatencyMs": latency_summary(95),
             },
             processed=5,
             shadow_snapshot=shadow_snapshot(mismatches=1),
@@ -73,6 +102,50 @@ class PiiShadowE2EReportTests(unittest.TestCase):
             report["eligibility"]["checks"][
                 "identicalModelAgreementIsExact"
             ]
+        )
+
+    def test_fault_validation_counts_every_expected_failure_mode(self) -> None:
+        validation = _run_fault_counter_validation()
+
+        self.assertTrue(all(validation["checks"].values()))
+        self.assertEqual(
+            validation["counters"],
+            {
+                "expiredItems": 1,
+                "evictedItems": 1,
+                "oversizedItems": 1,
+                "decryptErrors": 1,
+                "inferenceErrors": 1,
+                "restartDecryptErrors": 1,
+            },
+        )
+
+    def test_aws_execution_requires_window_and_clean_source_flags(self) -> None:
+        args = build_parser().parse_args(
+            ["--model-dir", ".", "--execution-context", "aws_test_tenant_host"]
+        )
+
+        with self.assertRaises(BenchmarkError):
+            validate_args(args)
+
+        approved_args = build_parser().parse_args(
+            [
+                "--model-dir",
+                ".",
+                "--execution-context",
+                "aws_test_tenant_host",
+                "--respect-night-window",
+                "--verified-clean-source",
+            ]
+        )
+        validate_args(approved_args)
+
+    def test_night_window_uses_kst_and_excludes_end_hour(self) -> None:
+        self.assertTrue(
+            _inside_night_window(datetime(2026, 8, 1, 17, 0, tzinfo=timezone.utc))
+        )
+        self.assertFalse(
+            _inside_night_window(datetime(2026, 8, 1, 20, 0, tzinfo=timezone.utc))
         )
 
 
@@ -112,6 +185,10 @@ def shadow_snapshot(*, mismatches: int) -> dict[str, object]:
             "candidate": {"count": 5, "p50": 4, "p95": 5, "p99": 5, "max": 5},
         },
     }
+
+
+def latency_summary(count: int) -> dict[str, int | float]:
+    return {"count": count, "p50": 1.0, "p95": 2.0, "p99": 3.0, "max": 4.0}
 
 
 if __name__ == "__main__":

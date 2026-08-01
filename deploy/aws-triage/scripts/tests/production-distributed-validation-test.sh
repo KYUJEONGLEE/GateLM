@@ -19,6 +19,9 @@ SEND_DEPLOY_PATH="${DEPLOY_DIR}/scripts/send-ssm-deploy-distributed.sh"
 BOOTSTRAP_GATEWAY_PATH="${DEPLOY_DIR}/scripts/bootstrap-production-gateway-secondary.sh"
 BOOTSTRAP_PII_PATH="${DEPLOY_DIR}/scripts/bootstrap-production-pii-secondary.sh"
 PREPARE_PII_PATH="${DEPLOY_DIR}/scripts/prepare-production-pii-model.sh"
+PII_SHADOW_E2E_PATH="${DEPLOY_DIR}/scripts/pii-shadow-test-tenant-e2e.sh"
+PII_SHADOW_E2E_TEST_PATH="${DEPLOY_DIR}/scripts/tests/pii-shadow-test-tenant-e2e-test.sh"
+PII_SHADOW_CLIENT_DOCKERFILE_PATH="${ROOT_DIR}/infra/docker/pii-shadow-e2e-client.Dockerfile"
 DB_EXPORT_PATH="${DEPLOY_DIR}/scripts/production-distributed-db-export.sh"
 DB_RESTORE_PATH="${DEPLOY_DIR}/scripts/production-distributed-db-restore.sh"
 TWO_GATEWAY_CD_TEST_PATH="${DEPLOY_DIR}/scripts/tests/production-distributed-two-gateway-cd-test.sh"
@@ -31,7 +34,8 @@ for path in \
   "${COMPOSE_PATH}" "${PII_COMPOSE_PATH}" "${PII_MANIFEST_PATH}" "${ENV_PATH}" "${TEMPLATE_PATH}" "${CD_TEMPLATE_PATH}" "${LIB_PATH}" \
   "${PREFLIGHT_PATH}" "${UP_PATH}" "${SMOKE_PATH}" "${DEPLOY_ROLE_PATH}" "${SEND_DEPLOY_PATH}" \
   "${BOOTSTRAP_GATEWAY_PATH}" "${BOOTSTRAP_PII_PATH}" \
-  "${PREPARE_PII_PATH}" "${DB_EXPORT_PATH}" "${DB_RESTORE_PATH}" \
+  "${PREPARE_PII_PATH}" "${PII_SHADOW_E2E_PATH}" "${PII_SHADOW_E2E_TEST_PATH}" "${PII_SHADOW_CLIENT_DOCKERFILE_PATH}" \
+  "${DB_EXPORT_PATH}" "${DB_RESTORE_PATH}" \
   "${TWO_GATEWAY_CD_TEST_PATH}" "${CLICKHOUSE_BACKFILL_PATH}" "${CLICKHOUSE_BACKFILL_TEST_PATH}" \
   "${CLICKHOUSE_COMPOSE_PATH}" "${CLICKHOUSE_NETWORK_CONFIG_PATH}" \
   "${DEPLOY_DIR}/Caddyfile.production-distributed.rehearsal" \
@@ -236,10 +240,11 @@ grep -Fq 'GATELM_PRODUCTION_DISTRIBUTED_DUMP_SHA256=' "${DB_RESTORE_PATH}"
 bash -n \
   "${LIB_PATH}" "${PREFLIGHT_PATH}" "${UP_PATH}" "${SMOKE_PATH}" \
   "${DEPLOY_ROLE_PATH}" "${SEND_DEPLOY_PATH}" "${BOOTSTRAP_GATEWAY_PATH}" \
-  "${PREPARE_PII_PATH}" "${DB_EXPORT_PATH}" "${DB_RESTORE_PATH}" \
+  "${PREPARE_PII_PATH}" "${PII_SHADOW_E2E_PATH}" "${DB_EXPORT_PATH}" "${DB_RESTORE_PATH}" \
   "${CLICKHOUSE_BACKFILL_PATH}" "${CLICKHOUSE_BACKFILL_TEST_PATH}"
 
 bash "${TWO_GATEWAY_CD_TEST_PATH}"
 bash "${CLICKHOUSE_BACKFILL_TEST_PATH}"
+bash "${PII_SHADOW_E2E_TEST_PATH}"
 
 echo 'Production distributed static validation passed.'
