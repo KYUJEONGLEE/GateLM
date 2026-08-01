@@ -40,8 +40,11 @@ actual_source_sha="$(git -c safe.directory="${source_dir}" -C "${source_dir}" re
 
 current_hour="$(TZ=Asia/Seoul date +%H)"
 case "${current_hour}" in
-  02|03|04) ;;
-  *) fail ;;
+  02|03|04) window_policy_arg="--respect-night-window" ;;
+  *)
+    [[ "${GATELM_PII_SHADOW_APPROVED_WINDOW_OVERRIDE:-}" == "true" ]] || fail
+    window_policy_arg="--approved-window-override"
+    ;;
 esac
 
 model_dir="${GATELM_PRODUCTION_DISTRIBUTED_PII_MODEL_DIR}"
@@ -110,7 +113,7 @@ if ! docker run \
   --git-sha "${expected_source_sha}" \
   --gateway-client-binary /usr/local/bin/pii-shadow-e2e-client \
   --execution-context aws_test_tenant_host \
-  --respect-night-window \
+  "${window_policy_arg}" \
   --verified-clean-source \
   >"${scratch_dir}/validation.log" 2>&1; then
   fail

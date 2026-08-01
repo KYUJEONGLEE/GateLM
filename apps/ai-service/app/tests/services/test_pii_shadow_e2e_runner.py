@@ -58,6 +58,7 @@ class PiiShadowE2EReportTests(unittest.TestCase):
         self.assertFalse(
             report["scope"]["nightWindowBypassedForExplicitE2E"]
         )
+        self.assertFalse(report["scope"]["nightWindowOverrideApproved"])
         rendered = json.dumps(report, sort_keys=True)
         self.assertNotIn('\"promptText\":', rendered)
         self.assertNotIn('\"redactedPrompt\":', rendered)
@@ -139,6 +140,68 @@ class PiiShadowE2EReportTests(unittest.TestCase):
             ]
         )
         validate_args(approved_args)
+
+        override_args = build_parser().parse_args(
+            [
+                "--model-dir",
+                ".",
+                "--execution-context",
+                "aws_test_tenant_host",
+                "--approved-window-override",
+                "--verified-clean-source",
+            ]
+        )
+        validate_args(override_args)
+
+        conflicting_args = build_parser().parse_args(
+            [
+                "--model-dir",
+                ".",
+                "--execution-context",
+                "aws_test_tenant_host",
+                "--respect-night-window",
+                "--approved-window-override",
+                "--verified-clean-source",
+            ]
+        )
+        with self.assertRaises(BenchmarkError):
+            validate_args(conflicting_args)
+
+    def test_approved_window_override_is_reported_and_eligible(self) -> None:
+        report = build_report(
+            generated_at=datetime(2026, 8, 1, tzinfo=timezone.utc),
+            git_sha="a" * 40,
+            worktree_dirty=False,
+            model_binding={"version": "v0.1.1"},
+            corpus_sha256="c" * 64,
+            corpus_case_count=50,
+            request_count=100,
+            sample_basis_points=500,
+            client_result={
+                "schemaVersion": "gatelm.pii-shadow-e2e-client.v2",
+                "requestCount": 100,
+                "sampledRequestCount": 5,
+                "deterministicReplaySampledRequestCount": 5,
+                "successCount": 100,
+                "errorCount": 0,
+                "controlRequestCount": 1,
+                "controlSampledRequestCount": 0,
+                "controlSuccessCount": 1,
+                "controlErrorCount": 0,
+                "requestLatencyMs": latency_summary(100),
+                "sampledRequestLatencyMs": latency_summary(5),
+                "nonSampledRequestLatencyMs": latency_summary(95),
+            },
+            processed=5,
+            shadow_snapshot=shadow_snapshot(mismatches=0),
+            execution_context="aws_test_tenant_host",
+            night_window_bypassed=True,
+            window_override_approved=True,
+        )
+
+        self.assertTrue(report["eligibility"]["eligible"])
+        self.assertTrue(report["scope"]["nightWindowBypassedForExplicitE2E"])
+        self.assertTrue(report["scope"]["nightWindowOverrideApproved"])
 
     def test_night_window_uses_kst_and_excludes_end_hour(self) -> None:
         self.assertTrue(

@@ -124,6 +124,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="Require and enforce the configured 02:00-05:00 KST Shadow window.",
     )
     parser.add_argument(
+        "--approved-window-override",
+        action="store_true",
+        help=(
+            "Record an explicit operator-approved exception to the configured "
+            "02:00-05:00 KST Shadow window."
+        ),
+    )
+    parser.add_argument(
         "--verified-clean-source",
         action="store_true",
         help="Record the caller's immutable clean-source verification.",
@@ -243,6 +251,7 @@ def run(
             fault_validation=fault_validation,
             execution_context=args.execution_context,
             night_window_bypassed=ignore_window,
+            window_override_approved=args.approved_window_override,
         )
         _assert_sensitive_values_absent(
             report,
@@ -299,8 +308,21 @@ def validate_args(args: argparse.Namespace) -> None:
         binary = args.gateway_client_binary.resolve()
         if not binary.is_file():
             raise BenchmarkError("gateway-client-binary must be a regular file")
-    if args.execution_context == "aws_test_tenant_host" and not args.respect_night_window:
-        raise BenchmarkError("AWS test-tenant execution must respect the night window")
+    if args.respect_night_window and args.approved_window_override:
+        raise BenchmarkError("window policy flags are mutually exclusive")
+    if (
+        args.execution_context == "aws_test_tenant_host"
+        and not args.respect_night_window
+        and not args.approved_window_override
+    ):
+        raise BenchmarkError(
+            "AWS test-tenant execution requires the night window or an explicit approval"
+        )
+    if (
+        args.execution_context != "aws_test_tenant_host"
+        and args.approved_window_override
+    ):
+        raise BenchmarkError("window override is only valid for AWS test-tenant execution")
     if args.execution_context == "aws_test_tenant_host" and not args.verified_clean_source:
         raise BenchmarkError("AWS test-tenant execution requires clean-source verification")
 
@@ -323,6 +345,7 @@ def build_report(
     fault_validation: Mapping[str, Any] | None = None,
     execution_context: str = "local",
     night_window_bypassed: bool = True,
+    window_override_approved: bool = False,
 ) -> dict[str, Any]:
     comparison = dict(shadow_snapshot["comparison"])
     buffer_snapshot = dict(shadow_snapshot["buffer"])
@@ -360,8 +383,10 @@ def build_report(
         "faultCountersValidated": all(
             bool(value) for value in fault_snapshot["checks"].values()
         ),
-        "awsExecutionRespectsNightWindow": (
-            execution_context != "aws_test_tenant_host" or not night_window_bypassed
+        "awsExecutionWindowPolicyAuthorized": (
+            execution_context != "aws_test_tenant_host"
+            or not night_window_bypassed
+            or window_override_approved
         ),
         "capturedRequestsProcessed": (
             processed == sampled
@@ -408,6 +433,7 @@ def build_report(
             "productionTraffic": False,
             "productionDeployment": False,
             "nightWindowBypassedForExplicitE2E": night_window_bypassed,
+            "nightWindowOverrideApproved": window_override_approved,
             "executionContext": execution_context,
         },
         "dataSafety": {
