@@ -771,3 +771,74 @@ func TestValidExecutionSummaryRejectsModelDetectionsOnRulesOnlyPath(t *testing.T
 		t.Fatal("rules-only response must not claim accepted model detections")
 	}
 }
+
+func TestMaskingEngineOverloadPolicyRequiresValidatedEnvelope(t *testing.T) {
+	validSingle := `{"contractVersion":"ai-safety-detector.v1","error":{"code":"sidecar_unavailable","retryable":true}}`
+	validBatch := `{"contractVersion":"ai-safety-detector-batch.v1","error":{"code":"sidecar_unavailable","retryable":true}}`
+	tests := []struct {
+		name              string
+		status            int
+		body              string
+		batch             bool
+		policy            string
+		wantFailClosed    bool
+		wantFallbackCalls int
+	}{
+		{name: "default policy keeps single fallback", status: http.StatusServiceUnavailable, body: validSingle, wantFallbackCalls: 1},
+		{name: "strict valid single", status: http.StatusServiceUnavailable, body: validSingle, policy: OverloadPolicyFailClosed, wantFailClosed: true},
+		{name: "strict valid batch", status: http.StatusServiceUnavailable, body: validBatch, batch: true, policy: OverloadPolicyFailClosed, wantFailClosed: true},
+		{name: "single rejects batch contract", status: http.StatusServiceUnavailable, body: validBatch, policy: OverloadPolicyFailClosed, wantFallbackCalls: 1},
+		{name: "batch rejects single contract", status: http.StatusServiceUnavailable, body: validSingle, batch: true, policy: OverloadPolicyFailClosed, wantFallbackCalls: 2},
+		{name: "malformed envelope", status: http.StatusServiceUnavailable, body: `{"contractVersion":`, policy: OverloadPolicyFailClosed, wantFallbackCalls: 1},
+		{name: "malformed batch envelope", status: http.StatusServiceUnavailable, body: `{"contractVersion":"ai-safety-detector-batch.v1","error":`, batch: true, policy: OverloadPolicyFailClosed, wantFallbackCalls: 2},
+		{name: "not retryable", status: http.StatusServiceUnavailable, body: `{"contractVersion":"ai-safety-detector.v1","error":{"code":"sidecar_unavailable","retryable":false}}`, policy: OverloadPolicyFailClosed, wantFallbackCalls: 1},
+		{name: "wrong status", status: http.StatusInternalServerError, body: validSingle, policy: OverloadPolicyFailClosed, wantFallbackCalls: 1},
+		{name: "oversized envelope", status: http.StatusServiceUnavailable, body: validSingle + strings.Repeat(" ", maxErrorResponseBytes), policy: OverloadPolicyFailClosed, wantFallbackCalls: 1},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			fallback := &recordingFallbackMaskingEngine{}
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(test.status)
+				_, _ = w.Write([]byte(test.body))
+			}))
+			defer server.Close()
+			engine := NewMaskingEngine(MaskingEngineConfig{
+				Local:          maskdomain.NewP0EngineWithoutPersonName(),
+				FallbackLocal:  fallback,
+				EndpointURL:    server.URL,
+				HTTPClient:     server.Client(),
+				Timeout:        time.Second,
+				OverloadPolicy: test.policy,
+			})
+
+			var err error
+			if test.batch {
+				_, err = engine.ApplyBatch(context.Background(), []maskdomain.ApplyRequest{
+					{Prompt: "First safe synthetic prompt."},
+					{Prompt: "Second safe synthetic prompt."},
+				})
+			} else {
+				_, err = engine.Apply(context.Background(), maskdomain.ApplyRequest{Prompt: "Safe synthetic prompt."})
+			}
+
+			if test.wantFailClosed {
+				if !errors.Is(err, ErrSidecarUnavailable) {
+					t.Fatalf("validated overload must fail closed with sanitized sentinel, got %v", err)
+				}
+				if fallback.calls != 0 {
+					t.Fatalf("fail-closed overload must skip local fallback, got %d calls", fallback.calls)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unvalidated or compatibility response must fall back: %v", err)
+			}
+			if fallback.calls != test.wantFallbackCalls {
+				t.Fatalf("unexpected fallback calls: got %d want %d", fallback.calls, test.wantFallbackCalls)
+			}
+		})
+	}
+}

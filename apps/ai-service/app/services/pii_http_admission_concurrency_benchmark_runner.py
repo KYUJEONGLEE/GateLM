@@ -40,15 +40,17 @@ from app.services.pii_direct_inference_concurrency_benchmark_runner import (
     CANONICAL_MODEL_REGISTRY_PATH,
     DEFAULT_CORPUS_PATH,
     FULL_GIT_SHA_PATTERN,
+    apply_cpu_affinity_limit,
     bind_model_artifact,
     current_git_sha,
     load_canonical_model_registry,
+    runtime_metadata,
     sha256_file,
     validate_registry_entry,
 )
 
 
-REPORT_VERSION = "gatelm.pii-http-admission-concurrency-benchmark.v1"
+REPORT_VERSION = "gatelm.pii-http-admission-concurrency-benchmark.v2"
 DEFAULT_OUTPUT_PATH = (
     Path(__file__).resolve().parents[4]
     / ".tmp"
@@ -57,6 +59,8 @@ DEFAULT_OUTPUT_PATH = (
 )
 DEFAULT_MODEL_VERSION = "v0.1.1"
 DEFAULT_CAPACITY = 1
+DEFAULT_PENDING_CAPACITY = 4
+DEFAULT_WAIT_TIMEOUT_MS = 50
 DEFAULT_PARALLEL_REQUESTS = 8
 DEFAULT_WAVES = 20
 DEFAULT_WAVE_TIMEOUT_SECONDS = 120.0
@@ -148,6 +152,27 @@ def build_parser() -> argparse.ArgumentParser:
         help="Process-local AI Safety admission capacity from 1 to 32.",
     )
     parser.add_argument(
+        "--pending-capacity",
+        type=int,
+        default=DEFAULT_PENDING_CAPACITY,
+        help="Bounded process-local waiting capacity from 0 to 32.",
+    )
+    parser.add_argument(
+        "--wait-timeout-ms",
+        type=int,
+        default=DEFAULT_WAIT_TIMEOUT_MS,
+        help="Maximum admission wait from 0 to 1000 ms.",
+    )
+    parser.add_argument(
+        "--cpu-affinity-count",
+        type=int,
+        default=None,
+        help=(
+            "Optional benchmark-only logical CPU affinity limit applied before "
+            "ONNX sessions are loaded."
+        ),
+    )
+    parser.add_argument(
         "--parallel-requests",
         type=int,
         default=DEFAULT_PARALLEL_REQUESTS,
@@ -194,6 +219,7 @@ def run(
     args = build_parser().parse_args(argv)
     try:
         validate_args(args)
+        apply_cpu_affinity_limit(args.cpu_affinity_count)
         git_sha = args.git_sha or current_git_sha()
         if not FULL_GIT_SHA_PATTERN.fullmatch(git_sha):
             raise BenchmarkError("an immutable Git SHA is required")
@@ -224,6 +250,8 @@ def run(
             ),
             ai_safety_preload_enabled=True,
             ai_safety_max_concurrent=args.capacity,
+            ai_safety_max_pending=args.pending_capacity,
+            ai_safety_wait_timeout_ms=args.wait_timeout_ms,
         )
         app = create_app(settings)
         verified_workload = select_verified_hybrid_workload(
@@ -243,6 +271,8 @@ def run(
         report = build_report(
             wave_summaries=wave_summaries,
             capacity=args.capacity,
+            pending_capacity=args.pending_capacity,
+            wait_timeout_ms=args.wait_timeout_ms,
             parallel_requests=args.parallel_requests,
             waves=args.waves,
             corpus_case_count=len(cases),
@@ -251,6 +281,7 @@ def run(
             corpus_sha256=sha256_file(args.corpus),
             model_binding=model_binding,
             primary_model_binding=primary_model_binding,
+            runtime=admission_runtime_metadata(),
             git_sha=git_sha,
             generated_at=generated_at,
         )
@@ -274,6 +305,8 @@ def run(
     print(
         "PII HTTP admission gate benchmark completed: "
         f"capacity={args.capacity}, "
+        f"pending_capacity={args.pending_capacity}, "
+        f"wait_timeout_ms={args.wait_timeout_ms}, "
         f"parallel_requests={args.parallel_requests}, "
         f"waves={args.waves}, "
         f"success_200={report['httpStatusCounts']['200']}, "
@@ -286,6 +319,14 @@ def run(
 def validate_args(args: argparse.Namespace) -> None:
     if not 1 <= args.capacity <= 32:
         raise BenchmarkError("capacity must be between 1 and 32")
+    if not 0 <= args.pending_capacity <= 32:
+        raise BenchmarkError("pending-capacity must be between 0 and 32")
+    if not 0 <= args.wait_timeout_ms <= 1000:
+        raise BenchmarkError("wait-timeout-ms must be between 0 and 1000")
+    if args.cpu_affinity_count is not None and not (
+        1 <= args.cpu_affinity_count <= 256
+    ):
+        raise BenchmarkError("cpu-affinity-count must be between 1 and 256")
     if not 2 <= args.parallel_requests <= 256:
         raise BenchmarkError("parallel-requests must be between 2 and 256")
     if args.parallel_requests <= args.capacity:
@@ -668,6 +709,8 @@ def build_report(
     *,
     wave_summaries: Sequence[Mapping[str, Any]],
     capacity: int,
+    pending_capacity: int,
+    wait_timeout_ms: int,
     parallel_requests: int,
     waves: int,
     corpus_case_count: int,
@@ -676,6 +719,7 @@ def build_report(
     corpus_sha256: str,
     model_binding: Mapping[str, Any],
     primary_model_binding: Mapping[str, Any],
+    runtime: Mapping[str, Any],
     git_sha: str,
     generated_at: datetime | None = None,
 ) -> dict[str, Any]:
@@ -761,13 +805,16 @@ def build_report(
             "evidenceScope": "single_process_shared_app_state_gate",
         },
         "configuration": {
-            "capacity": capacity,
+            "activeCapacity": capacity,
+            "pendingCapacity": pending_capacity,
+            "waitTimeoutMs": wait_timeout_ms,
             "parallelRequestsPerWave": parallel_requests,
             "waves": waves,
             "totalRequests": parallel_requests * waves,
             "endpointContractVersion": AI_SAFETY_DETECTOR_CONTRACT_VERSION,
             "transport": "httpx_asgi_transport",
         },
+        "runtime": dict(runtime),
         "workload": {
             "fullCorpusCaseCount": corpus_case_count,
             "selectedWorkloadCaseCount": selected_workload_case_count,
@@ -816,6 +863,25 @@ def build_report(
         },
         "waveSummaries": list(wave_summaries),
     }
+
+
+def admission_runtime_metadata() -> dict[str, Any]:
+    complete = runtime_metadata(100.0)
+    included = (
+        "os",
+        "machine",
+        "cpuModel",
+        "logicalCpuCount",
+        "physicalCpuCount",
+        "processAffinityCpuCount",
+        "pythonVersion",
+        "packageVersions",
+        "onnxAvailableProviders",
+        "onnxIntraOpThreads",
+        "onnxInterOpThreads",
+        "onnxAllowSpinning",
+    )
+    return {name: complete[name] for name in included}
 
 
 def flatten_wave_latency_samples(

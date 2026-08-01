@@ -22,10 +22,12 @@ const (
 	SemanticCacheClassifierTypeStub      = cachekey.CacheabilityClassifierTypeStub
 	SemanticCacheClassifierTypeFastText  = cachekey.CacheabilityClassifierTypeFastText
 
-	RateLimitBackendPostgres      = "postgres"
-	RateLimitBackendRedis         = "redis"
-	RateLimitAlgorithmFixedWindow = "fixed_window"
-	RateLimitAlgorithmTokenBucket = "token_bucket"
+	RateLimitBackendPostgres            = "postgres"
+	RateLimitBackendRedis               = "redis"
+	RateLimitAlgorithmFixedWindow       = "fixed_window"
+	RateLimitAlgorithmTokenBucket       = "token_bucket"
+	AISafetyOverloadPolicyLocalFallback = "local_fallback"
+	AISafetyOverloadPolicyFailClosed    = "fail_closed"
 
 	RAGEmbeddingProviderOpenAI = "openai"
 	RAGEmbeddingModel          = "text-embedding-3-large"
@@ -269,6 +271,7 @@ type AISafetySidecarConfig struct {
 	DetectorSet         string
 	Locale              string
 	Mode                string
+	OverloadPolicy      string
 	PersonNameModelOnly bool
 }
 
@@ -560,6 +563,7 @@ func LoadWithError() (Config, error) {
 			DetectorSet:         envString("GATEWAY_AI_SAFETY_SIDECAR_DETECTOR_SET", "privacy-filter-default"),
 			Locale:              envString("GATEWAY_AI_SAFETY_SIDECAR_LOCALE", ""),
 			Mode:                envString("GATEWAY_AI_SAFETY_SIDECAR_MODE", "enforce"),
+			OverloadPolicy:      envString("GATEWAY_AI_SAFETY_OVERLOAD_POLICY", AISafetyOverloadPolicyLocalFallback),
 			PersonNameModelOnly: envBool("GATEWAY_AI_SAFETY_PERSON_NAME_MODEL_ONLY", false),
 		},
 		ClickHouseAnalytics: ClickHouseAnalyticsConfig{
@@ -921,6 +925,14 @@ func validateProviderTransportConfig(cfg ProviderTransportConfig) error {
 }
 
 func validateAISafetySidecarConfig(cfg AISafetySidecarConfig) error {
+	switch cfg.OverloadPolicy {
+	case AISafetyOverloadPolicyLocalFallback, AISafetyOverloadPolicyFailClosed:
+	default:
+		return errors.New("GATEWAY_AI_SAFETY_OVERLOAD_POLICY must be local_fallback or fail_closed")
+	}
+	if cfg.OverloadPolicy == AISafetyOverloadPolicyFailClosed && !strings.EqualFold(strings.TrimSpace(cfg.Mode), "enforce") {
+		return errors.New("GATEWAY_AI_SAFETY_SIDECAR_MODE=enforce is required when overload policy is fail_closed")
+	}
 	if !cfg.PersonNameModelOnly {
 		return nil
 	}

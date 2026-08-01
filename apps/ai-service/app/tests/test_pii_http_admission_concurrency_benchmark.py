@@ -39,7 +39,12 @@ class PiiHttpAdmissionConcurrencyBenchmarkTests(
         self,
     ) -> None:
         service = DelayedHybridService(delay_seconds=0.04)
-        app = create_app(Settings(ai_safety_max_concurrent=2))
+        app = create_app(
+            Settings(
+                ai_safety_max_concurrent=2,
+                ai_safety_max_pending=0,
+            )
+        )
         app.dependency_overrides[get_ai_safety_detector_service] = (
             lambda: service
         )
@@ -61,6 +66,8 @@ class PiiHttpAdmissionConcurrencyBenchmarkTests(
         report = build_report(
             wave_summaries=wave_summaries,
             capacity=2,
+            pending_capacity=0,
+            wait_timeout_ms=0,
             parallel_requests=6,
             waves=3,
             corpus_case_count=50,
@@ -69,6 +76,7 @@ class PiiHttpAdmissionConcurrencyBenchmarkTests(
             corpus_sha256="a" * 64,
             model_binding=canonical_model_binding(),
             primary_model_binding=primary_model_binding(),
+            runtime=runtime_binding(),
             git_sha="b" * 40,
             generated_at=datetime(2026, 7, 31, tzinfo=timezone.utc),
         )
@@ -115,6 +123,59 @@ class PiiHttpAdmissionConcurrencyBenchmarkTests(
             public_report["metadata"]["concurrencyRecommendation"]
         )
 
+    async def test_bounded_wait_queues_one_request_and_rejects_the_overflow(
+        self,
+    ) -> None:
+        service = DelayedHybridService(delay_seconds=0.04)
+        app = create_app(
+            Settings(
+                ai_safety_max_concurrent=1,
+                ai_safety_max_pending=1,
+                ai_safety_wait_timeout_ms=200,
+            )
+        )
+        app.dependency_overrides[get_ai_safety_detector_service] = (
+            lambda: service
+        )
+
+        wave_summaries = await run_http_admission_waves(
+            app=app,
+            workload=(
+                RenderedWorkload(
+                    prompt_text=INPUT_SENTINEL,
+                    locale="ko-KR",
+                ),
+            ),
+            capacity=1,
+            parallel_requests=3,
+            waves=2,
+            wave_timeout_seconds=2.0,
+        )
+        report = build_report(
+            wave_summaries=wave_summaries,
+            capacity=1,
+            pending_capacity=1,
+            wait_timeout_ms=200,
+            parallel_requests=3,
+            waves=2,
+            corpus_case_count=50,
+            selected_workload_case_count=20,
+            verified_workload_case_count=10,
+            corpus_sha256="9" * 64,
+            model_binding=canonical_model_binding(),
+            primary_model_binding=primary_model_binding(),
+            runtime=runtime_binding(),
+            git_sha="8" * 40,
+        )
+
+        self.assertEqual(service.peak_active, 1)
+        self.assertEqual(report["httpStatusCounts"]["200"], 4)
+        self.assertEqual(report["httpStatusCounts"]["503"], 2)
+        self.assertEqual(report["configuration"]["activeCapacity"], 1)
+        self.assertEqual(report["configuration"]["pendingCapacity"], 1)
+        self.assertEqual(report["configuration"]["waitTimeoutMs"], 200)
+        self.assertTrue(report["eligibility"]["eligible"])
+
     async def test_report_is_ineligible_without_busy_or_koelectra_contribution(
         self,
     ) -> None:
@@ -122,7 +183,12 @@ class PiiHttpAdmissionConcurrencyBenchmarkTests(
             delay_seconds=0.0,
             include_koelectra_detection=False,
         )
-        app = create_app(Settings(ai_safety_max_concurrent=4))
+        app = create_app(
+            Settings(
+                ai_safety_max_concurrent=4,
+                ai_safety_max_pending=0,
+            )
+        )
         app.dependency_overrides[get_ai_safety_detector_service] = (
             lambda: service
         )
@@ -142,6 +208,8 @@ class PiiHttpAdmissionConcurrencyBenchmarkTests(
         report = build_report(
             wave_summaries=summaries,
             capacity=4,
+            pending_capacity=0,
+            wait_timeout_ms=0,
             parallel_requests=5,
             waves=2,
             corpus_case_count=50,
@@ -150,6 +218,7 @@ class PiiHttpAdmissionConcurrencyBenchmarkTests(
             corpus_sha256="c" * 64,
             model_binding=canonical_model_binding(),
             primary_model_binding=primary_model_binding(),
+            runtime=runtime_binding(),
             git_sha="d" * 40,
         )
 
@@ -417,6 +486,23 @@ def primary_model_binding() -> dict[str, object]:
         "runtime": "onnx",
         "sha256": "3" * 64,
         "bytes": 90,
+    }
+
+
+def runtime_binding() -> dict[str, object]:
+    return {
+        "os": "test-os",
+        "machine": "AMD64",
+        "cpuModel": "test-cpu",
+        "logicalCpuCount": 8,
+        "physicalCpuCount": 4,
+        "processAffinityCpuCount": 4,
+        "pythonVersion": "3.12.0",
+        "packageVersions": {},
+        "onnxAvailableProviders": ["CPUExecutionProvider"],
+        "onnxIntraOpThreads": 2,
+        "onnxInterOpThreads": 1,
+        "onnxAllowSpinning": False,
     }
 
 

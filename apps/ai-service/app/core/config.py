@@ -64,6 +64,8 @@ class Settings:
     ai_safety_detector_runtime: str = DEFAULT_AI_SAFETY_DETECTOR_RUNTIME
     ai_safety_preload_enabled: bool = False
     ai_safety_max_concurrent: int = 1
+    ai_safety_max_pending: int = 4
+    ai_safety_wait_timeout_ms: int = 50
     deployment_mode: str = "local"
     rag_enabled: bool = False
     rag_service_token: str = field(default="", repr=False)
@@ -131,6 +133,16 @@ def load_settings() -> Settings:
         ai_safety_max_concurrent=_env_strict_int(
             "AI_SERVICE_AI_SAFETY_MAX_CONCURRENT",
             1,
+        ),
+        ai_safety_max_pending=_env_strict_int(
+            "AI_SERVICE_AI_SAFETY_MAX_PENDING",
+            4,
+            allow_zero=True,
+        ),
+        ai_safety_wait_timeout_ms=_env_strict_int(
+            "AI_SERVICE_AI_SAFETY_WAIT_TIMEOUT_MS",
+            50,
+            allow_zero=True,
         ),
         deployment_mode=_env_string("DEPLOYMENT_MODE", "local").strip().lower(),
         rag_enabled=_env_strict_bool("TENANT_CHAT_RAG_ENABLED", False),
@@ -237,6 +249,14 @@ def _validate_ai_safety_settings(settings: Settings) -> None:
     if not 1 <= settings.ai_safety_max_concurrent <= 32:
         raise ValueError(
             "AI_SERVICE_AI_SAFETY_MAX_CONCURRENT must be between 1 and 32"
+        )
+    if not 0 <= settings.ai_safety_max_pending <= 32:
+        raise ValueError(
+            "AI_SERVICE_AI_SAFETY_MAX_PENDING must be between 0 and 32"
+        )
+    if not 0 <= settings.ai_safety_wait_timeout_ms <= 1000:
+        raise ValueError(
+            "AI_SERVICE_AI_SAFETY_WAIT_TIMEOUT_MS must be between 0 and 1000"
         )
 
 

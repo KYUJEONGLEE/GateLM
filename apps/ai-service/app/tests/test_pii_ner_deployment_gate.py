@@ -62,9 +62,16 @@ class PiiNerDeploymentGateTests(unittest.TestCase):
         )
 
         self.assertIn("GATEWAY_AI_SAFETY_SIDECAR_ENABLED=true", candidate_env)
+        self.assertIn("GATEWAY_AI_SAFETY_OVERLOAD_POLICY=fail_closed", candidate_env)
+        self.assertIn("GATEWAY_AI_SAFETY_SIDECAR_TIMEOUT_MS=300", candidate_env)
         self.assertIn("GATEWAY_AI_SAFETY_PERSON_NAME_MODEL_ONLY=true", candidate_env)
         self.assertIn("AI_SERVICE_AI_SAFETY_MICRO_BATCH_SIZE=1", candidate_env)
-        self.assertIn("AI_SERVICE_AI_SAFETY_MAX_CONCURRENT=1", candidate_env)
+        self.assertIn("AI_SERVICE_AI_SAFETY_MAX_CONCURRENT=2", candidate_env)
+        self.assertIn("AI_SERVICE_AI_SAFETY_MAX_PENDING=4", candidate_env)
+        self.assertIn("AI_SERVICE_AI_SAFETY_WAIT_TIMEOUT_MS=50", candidate_env)
+        self.assertIn("AI_SERVICE_ONNX_INTRA_OP_THREADS=2", candidate_env)
+        self.assertIn("AI_SERVICE_ONNX_INTER_OP_THREADS=1", candidate_env)
+        self.assertIn("AI_SERVICE_ONNX_ALLOW_SPINNING=false", candidate_env)
         self.assertIn(
             "AI_SERVICE_AI_SAFETY_ML_DETECTOR_THRESHOLDS="
             "email=0.99,organization_name=0.90,person_name=0.90,"

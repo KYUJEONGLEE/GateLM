@@ -161,6 +161,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="Peak RSS and thread-count sampling interval. Default: 100 ms.",
     )
     parser.add_argument(
+        "--cpu-affinity-count",
+        type=int,
+        default=None,
+        help=(
+            "Optional benchmark-only logical CPU affinity limit applied before "
+            "the ONNX session is loaded."
+        ),
+    )
+    parser.add_argument(
         "--corpus",
         type=Path,
         default=DEFAULT_CORPUS_PATH,
@@ -192,6 +201,7 @@ def run(
     try:
         levels = parse_concurrency_levels(args.concurrency_levels)
         validate_args(args, levels)
+        apply_cpu_affinity_limit(args.cpu_affinity_count)
         git_sha = args.git_sha or current_git_sha()
         if not FULL_GIT_SHA_PATTERN.fullmatch(git_sha):
             raise BenchmarkError("an immutable Git SHA is required")
@@ -321,6 +331,10 @@ def validate_args(args: argparse.Namespace, levels: tuple[int, ...]) -> None:
         raise BenchmarkError("deadline-ms must be positive")
     if not 10 <= args.sample_interval_ms <= 1000:
         raise BenchmarkError("sample-interval-ms must be between 10 and 1000")
+    if args.cpu_affinity_count is not None and not (
+        1 <= args.cpu_affinity_count <= 256
+    ):
+        raise BenchmarkError("cpu-affinity-count must be between 1 and 256")
     if args.git_sha is not None and not FULL_GIT_SHA_PATTERN.fullmatch(args.git_sha):
         raise BenchmarkError("git-sha must be a full lowercase Git object id")
 
@@ -1075,6 +1089,43 @@ def process_available_cpu_count(process: Any | None = None) -> int:
         except Exception:
             pass
     return max(os.cpu_count() or 1, 1)
+
+
+def apply_cpu_affinity_limit(
+    requested_count: int | None,
+    *,
+    process: Any | None = None,
+) -> int:
+    if requested_count is None:
+        return process_available_cpu_count(process)
+    candidate = process
+    if candidate is None:
+        try:
+            import psutil  # type: ignore[import-not-found]
+
+            candidate = psutil.Process()
+        except Exception as exc:
+            raise BenchmarkError(
+                "psutil with CPU affinity support is required when "
+                "cpu-affinity-count is set"
+            ) from exc
+    try:
+        available = sorted(int(cpu) for cpu in candidate.cpu_affinity())
+    except Exception as exc:
+        raise BenchmarkError("process CPU affinity is unavailable") from exc
+    if requested_count > len(available):
+        raise BenchmarkError(
+            "cpu-affinity-count exceeds the CPUs available to this process"
+        )
+    selected = available[:requested_count]
+    try:
+        candidate.cpu_affinity(selected)
+        confirmed = candidate.cpu_affinity()
+    except Exception as exc:
+        raise BenchmarkError("failed to apply process CPU affinity") from exc
+    if len(confirmed) != requested_count:
+        raise BenchmarkError("process CPU affinity verification failed")
+    return len(confirmed)
 
 
 def physical_cpu_count() -> int | None:

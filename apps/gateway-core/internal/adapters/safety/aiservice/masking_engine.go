@@ -18,17 +18,21 @@ import (
 )
 
 const (
-	ContractVersion       = "ai-safety-detector.v1"
-	BatchContractVersion  = "ai-safety-detector-batch.v1"
-	DefaultModelID        = "openai/privacy-filter"
-	DefaultRuntime        = "cpu_only"
-	DefaultDetectorSet    = "privacy-filter-default"
-	ModeShadow            = "shadow"
-	ModeEnforce           = "enforce"
-	DefaultMode           = ModeEnforce
-	DefaultTimeout        = 750 * time.Millisecond
-	maxBatchItems         = 64
-	maxBatchResponseBytes = 16 * 1024 * 1024
+	ContractVersion             = "ai-safety-detector.v1"
+	BatchContractVersion        = "ai-safety-detector-batch.v1"
+	DefaultModelID              = "openai/privacy-filter"
+	DefaultRuntime              = "cpu_only"
+	DefaultDetectorSet          = "privacy-filter-default"
+	ModeShadow                  = "shadow"
+	ModeEnforce                 = "enforce"
+	DefaultMode                 = ModeEnforce
+	OverloadPolicyLocalFallback = "local_fallback"
+	OverloadPolicyFailClosed    = "fail_closed"
+	DefaultOverloadPolicy       = OverloadPolicyLocalFallback
+	DefaultTimeout              = 750 * time.Millisecond
+	maxBatchItems               = 64
+	maxBatchResponseBytes       = 16 * 1024 * 1024
+	maxErrorResponseBytes       = 4 * 1024
 )
 
 const (
@@ -40,8 +44,9 @@ const (
 )
 
 type sidecarCallError struct {
-	reason string
-	cause  error
+	reason     string
+	cause      error
+	overloaded bool
 }
 
 func (e *sidecarCallError) Error() string { return "ai safety sidecar call failed" }
@@ -51,6 +56,10 @@ func (e *sidecarCallError) Unwrap() error { return e.cause }
 // caller fails closed before any provider invocation.
 var ErrFallbackMaskingUnavailable = errors.New("ai safety fallback masking unavailable")
 
+// ErrSidecarUnavailable is returned without upstream response details when an
+// explicitly configured overload policy requires the caller to fail closed.
+var ErrSidecarUnavailable = errors.New("ai safety sidecar unavailable")
+
 type LocalMaskingEngine interface {
 	Apply(ctx context.Context, req maskdomain.ApplyRequest) (maskdomain.Result, error)
 }
@@ -59,30 +68,32 @@ type MaskingEngineConfig struct {
 	Local LocalMaskingEngine
 	// FallbackLocal receives the original request when the sidecar cannot
 	// produce a valid result. A fallback error is returned to the caller.
-	FallbackLocal LocalMaskingEngine
-	EndpointURL   string
-	HTTPClient    *http.Client
-	Timeout       time.Duration
-	ModelID       string
-	DetectorSet   string
-	Locale        string
-	Mode          string
-	Surface       string
-	Metrics       *metrics.Registry
+	FallbackLocal  LocalMaskingEngine
+	EndpointURL    string
+	HTTPClient     *http.Client
+	Timeout        time.Duration
+	ModelID        string
+	DetectorSet    string
+	Locale         string
+	Mode           string
+	OverloadPolicy string
+	Surface        string
+	Metrics        *metrics.Registry
 }
 
 type MaskingEngine struct {
-	local         LocalMaskingEngine
-	fallbackLocal LocalMaskingEngine
-	endpointURL   string
-	httpClient    *http.Client
-	timeout       time.Duration
-	modelID       string
-	detectorSet   string
-	locale        string
-	mode          string
-	surface       string
-	metrics       *metrics.Registry
+	local          LocalMaskingEngine
+	fallbackLocal  LocalMaskingEngine
+	endpointURL    string
+	httpClient     *http.Client
+	timeout        time.Duration
+	modelID        string
+	detectorSet    string
+	locale         string
+	mode           string
+	overloadPolicy string
+	surface        string
+	metrics        *metrics.Registry
 }
 
 func NewMaskingEngine(config MaskingEngineConfig) MaskingEngine {
@@ -107,17 +118,18 @@ func NewMaskingEngine(config MaskingEngineConfig) MaskingEngine {
 		detectorSet = DefaultDetectorSet
 	}
 	return MaskingEngine{
-		local:         local,
-		fallbackLocal: config.FallbackLocal,
-		endpointURL:   strings.TrimSpace(config.EndpointURL),
-		httpClient:    httpClient,
-		timeout:       timeout,
-		modelID:       modelID,
-		detectorSet:   detectorSet,
-		locale:        strings.TrimSpace(config.Locale),
-		mode:          maskingMode(config.Mode),
-		surface:       config.Surface,
-		metrics:       config.Metrics,
+		local:          local,
+		fallbackLocal:  config.FallbackLocal,
+		endpointURL:    strings.TrimSpace(config.EndpointURL),
+		httpClient:     httpClient,
+		timeout:        timeout,
+		modelID:        modelID,
+		detectorSet:    detectorSet,
+		locale:         strings.TrimSpace(config.Locale),
+		mode:           maskingMode(config.Mode),
+		overloadPolicy: maskingOverloadPolicy(config.OverloadPolicy),
+		surface:        config.Surface,
+		metrics:        config.Metrics,
 	}
 }
 
@@ -144,6 +156,9 @@ func (e MaskingEngine) Apply(ctx context.Context, req maskdomain.ApplyRequest) (
 		e.recordSidecarCall(startedAt, reason, "unknown")
 		if reason == sidecarReasonCancelled {
 			return maskdomain.Result{}, contextError(ctx, err)
+		}
+		if e.failClosedOnOverload(err) {
+			return maskdomain.Result{}, ErrSidecarUnavailable
 		}
 		e.recordSidecarFallback(reason)
 		return e.applyFallback(ctx, req, localResult)
@@ -220,6 +235,9 @@ func (e MaskingEngine) ApplyBatch(
 		e.recordSidecarCall(startedAt, reason, "unknown")
 		if reason == sidecarReasonCancelled {
 			return nil, contextError(ctx, err)
+		}
+		if e.failClosedOnOverload(err) {
+			return nil, ErrSidecarUnavailable
 		}
 		e.recordSidecarFallback(reason)
 		return e.applyFallbackBatch(ctx, requests, localResults)
@@ -339,6 +357,10 @@ func (e MaskingEngine) detect(ctx context.Context, req maskdomain.ApplyRequest) 
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		if resp.StatusCode == http.StatusServiceUnavailable && validSidecarUnavailableResponse(resp.Body, ContractVersion) {
+			return detectResponse{}, newSidecarOverloadError()
+		}
+
 		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
 		return detectResponse{}, newSidecarCallError(sidecarReasonHTTPError, nil)
 	}
@@ -414,6 +436,10 @@ func (e MaskingEngine) detectBatch(
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		if resp.StatusCode == http.StatusServiceUnavailable && validSidecarUnavailableResponse(resp.Body, BatchContractVersion) {
+			return detectBatchResponse{}, newSidecarOverloadError()
+		}
+
 		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
 		return detectBatchResponse{}, newSidecarCallError(sidecarReasonHTTPError, nil)
 	}
@@ -430,6 +456,32 @@ func (e MaskingEngine) detectBatch(
 
 func newSidecarCallError(reason string, cause error) error {
 	return &sidecarCallError{reason: reason, cause: cause}
+}
+
+func newSidecarOverloadError() error {
+	return &sidecarCallError{reason: sidecarReasonHTTPError, overloaded: true}
+}
+
+func (e MaskingEngine) failClosedOnOverload(err error) bool {
+	if e.overloadPolicy != OverloadPolicyFailClosed {
+		return false
+	}
+	var callErr *sidecarCallError
+	return errors.As(err, &callErr) && callErr.overloaded
+}
+
+func validSidecarUnavailableResponse(body io.Reader, expectedContractVersion string) bool {
+	payload, err := io.ReadAll(io.LimitReader(body, maxErrorResponseBytes+1))
+	if err != nil || len(payload) > maxErrorResponseBytes {
+		return false
+	}
+	var decoded sidecarUnavailableResponse
+	if err := json.Unmarshal(payload, &decoded); err != nil {
+		return false
+	}
+	return decoded.ContractVersion == expectedContractVersion &&
+		decoded.Error.Code == "sidecar_unavailable" &&
+		decoded.Error.Retryable
 }
 
 func classifySidecarTransportError(parentCtx context.Context, callCtx context.Context, cause error) error {
@@ -571,6 +623,13 @@ func maskingMode(value string) string {
 	return ModeEnforce
 }
 
+func maskingOverloadPolicy(value string) string {
+	if strings.EqualFold(strings.TrimSpace(value), OverloadPolicyFailClosed) {
+		return OverloadPolicyFailClosed
+	}
+	return DefaultOverloadPolicy
+}
+
 func mergeSidecarShadowResult(local maskdomain.Result, sidecar detectResponse) maskdomain.Result {
 	return mergeSidecarObservation(local, sidecar)
 }
@@ -672,6 +731,15 @@ func mergeDetectorTypes(groups ...[]string) []string {
 	return values
 }
 
+type sidecarUnavailableResponse struct {
+	ContractVersion string                          `json:"contractVersion"`
+	Error           sidecarUnavailableResponseError `json:"error"`
+}
+
+type sidecarUnavailableResponseError struct {
+	Code      string `json:"code"`
+	Retryable bool   `json:"retryable"`
+}
 type detectRequest struct {
 	ContractVersion string       `json:"contractVersion"`
 	Mode            string       `json:"mode"`
