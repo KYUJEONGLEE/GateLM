@@ -7,7 +7,7 @@
 | Applies to | GateLM KoELECTRA PII NER 모델 |
 | Current model version | `v0.1.1` |
 | Current legacy label | `v3.14` |
-| Last audited | 2026-07-31 |
+| Last audited | 2026-08-01 |
 
 이 문서는 제품 버전, API·DB·Event·Metrics 계약 또는 production 승인 상태를 변경하지 않는다. 모델 버전은 artifact의 신원을 나타내고, 품질 gate와 배포 lifecycle은 별도로 기록한다.
 
@@ -16,11 +16,11 @@
 | Model version | Legacy label | Artifact binding | Model gate | Deployment lifecycle |
 |---|---|---|---|---|
 | `v0.1.0` | `v3.6` | ONNX SHA-256 `dfd9b29ea35974d91d866817d70905844ffd4c65ecda98d8ac2085869ba9f410` | final offline quality와 model-active local Gateway E2E 최초 동시 통과 | 최초 운영 Gateway 연결(`8db6cf30`), 이후 `v0.1.1`로 교체 |
-| `v0.1.1` | `v3.14` | ONNX SHA-256 `8a5cb146e84d413910a423d304e662a6aba9f69e83db129f5061d007a6de9381` | offline, product-adapter와 private regression gate 통과 | [production 배포 run `29846604941`](https://github.com/KYUJEONGLEE/GateLM/actions/runs/29846604941) 성공; PII role health·Tenant Chat smoke 통과, model-active Gateway PII E2E는 미추적 |
+| `v0.1.1` | `v3.14` | ONNX SHA-256 `8a5cb146e84d413910a423d304e662a6aba9f69e83db129f5061d007a6de9381` | offline, product-adapter와 private regression gate 통과 | [production 배포 run `29846604941`](https://github.com/KYUJEONGLEE/GateLM/actions/runs/29846604941) 성공; PII role health·Tenant Chat smoke와 local 동일 모델 Shadow E2E 통과, production model-active Gateway PII E2E는 미추적 |
 
 `v3.6`은 아무 gate나 처음 통과한 모델이라는 뜻이 아니다. `v3.2`는 semantic development·regression 단계의 첫 후보였고 `v3.3`은 frozen internal engineering gate를 통과했지만, final offline quality와 model-active local Gateway E2E를 모두 처음 통과한 모델은 `v3.6`이었다.
 
-`v0.1.1`은 현재 선택된 모델이며 main SHA `fbe6b766737df142d9115e6ef06f5d6aa19ac673`의 production 배포에서 설치·검증과 PII role health까지 통과했다. 같은 run의 public auth와 Tenant Chat smoke도 성공했지만, 이 smoke가 v0.1.1의 model-active 마스킹 결과를 검증한 것은 아니다. 현재 서버 online 여부와 실제 Gateway PII E2E·Shadow/Canary evidence도 별도이므로, 이 배포 사실만으로 production-grade DLP 검증 완료를 선언하지 않는다. [`documentation-gaps.md`](documentation-gaps.md)의 `DOC-025`가 잔여 evidence를 관리한다.
+`v0.1.1`은 현재 선택된 모델이며 main SHA `fbe6b766737df142d9115e6ef06f5d6aa19ac673`의 production 배포에서 설치·검증과 PII role health까지 통과했다. 같은 run의 public auth와 Tenant Chat smoke도 성공했다. 2026-08-01 local 동일 모델 Shadow E2E는 실제 Gateway sampler·HTTP adapter와 기준/후보 ONNX 호출을 포함한 배관을 검증했지만 production traffic이나 전체 Chat API 경로는 아니다. 현재 서버 online 여부와 production Gateway PII E2E·장시간 Shadow/Canary는 별도이므로, 이 근거만으로 production-grade DLP 검증 완료를 선언하지 않는다. [`documentation-gaps.md`](documentation-gaps.md)의 `DOC-025`가 잔여 evidence를 관리한다.
 
 ### v0.1.0 evidence binding
 
@@ -48,11 +48,13 @@
 - Production deployment evidence: [Actions run `29846604941`](https://github.com/KYUJEONGLEE/GateLM/actions/runs/29846604941), main SHA `fbe6b766737df142d9115e6ef06f5d6aa19ac673`, completed `success` (2026-07-22 KST)
 - Run evidence: v0.1.1(legacy v3.14) pin, private S3 download, artifact install/verify, PII role health와 authenticated Tenant Chat smoke 성공
 - Local concurrency evidence: [초기 동시성 측정](../testing/pii-inference-concurrency-v0.1.1-20260731.md), [고정 4 CPU 예산과 bounded HTTP 비교](../testing/pii-thread-budget-matrix-v0.1.1-20260731.md)
+- Local same-model Shadow E2E: [설명과 한계](../testing/pii-shadow-v0.1.1-e2e-20260801.md), [aggregate JSON](../testing/pii-shadow-v0.1.1-e2e-20260801.json)
+- Shadow E2E binding: implementation Git SHA `faaa3a5f7a859a5ecba24b381889ef2167126566`, aggregate JSON SHA-256 `b7f3cb68aebcfaa83628b7cf439e9f75b7c27de4eecedae74bdd5beb9cfb8022`
 - Concurrency evidence Git SHAs: 초기 direct `970c0c08e315c45e535b9470bc5907a7cbf8c195`, 초기 HTTP `a8a82e0138a9d2b17c083a01e26d02666d29aba4`, fixed-budget matrix/HTTP `63c3f6f1a83694386d915b3ca6519bd9942ce04b`
 
 위 파일의 `v314`, `v3.14` 표기는 2026-07-21에 생성된 증거와 배포 식별자의 일부이므로 고치거나 이름을 바꾸지 않는다. 현재 문서에서는 동일한 ONNX SHA-256을 `v0.1.1`로 부른다.
 
-동시성 evidence와 2026-08-01 실제 4-vCPU Linux host의 aggregate-only direct 재검증에 따라 PR #564의 고정 AWS PII profile은 active 2/intra-op 2를 선택했다. 이 선택은 `origin/dev` 병합, production 배포 또는 network/Gateway E2E 완료를 뜻하지 않는다.
+동시성 evidence와 2026-08-01 실제 4-vCPU Linux host의 aggregate-only direct 재검증에 따라 PR #564로 고정 AWS PII profile active 2/intra-op 2가 `dev`에 병합됐다. 이 선택과 local Shadow E2E는 production 재배포, authenticated Chat API 전체 경로 또는 운영 SLA 완료를 뜻하지 않는다.
 
 ## 2. First-pass Historical Aliases
 

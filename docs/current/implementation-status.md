@@ -58,7 +58,7 @@
 |---|---|---|
 | Tenant Chat | auth, encrypted conversation/SSE/composer, private execution, exact cache, quota, masking과 RAG code path가 `dev`에 병합됨 | employee notice acknowledgement, Admin Content Diagnostic, fresh-host acceptance, 전체 browser E2E, GA |
 | Tenant Chat RAG | admin/API/worker/retrieval/citation과 cost/cache integration code가 존재 | 실제 staging S3/KMS/embedding 검증, hard-delete/orphan 복구, production acceptance |
-| AI Safety/PII | 최초 합격 `v0.1.0` 이후 고도화한 [`v0.1.1`](pii-model-versions.md)이 production에 배포돼 PII role health와 Tenant Chat smoke를 통과했고, fail-closed/horizontal runtime code가 존재 | 현재 서버 online 상태, model-active Gateway PII E2E·Shadow/Canary, production-grade DLP 검증 완료 |
+| AI Safety/PII | 최초 합격 `v0.1.0` 이후 고도화한 [`v0.1.1`](pii-model-versions.md)이 production에 배포돼 PII role health와 Tenant Chat smoke를 통과했다. fail-closed·고정 4-vCPU 2×2 runtime과 5% allowlist sampling·process-local encrypted Offline Shadow code가 존재하며, 동일 모델 local E2E에서 실제 model-active 비교를 확인했다 | 현재 서버 online 상태, production authenticated Gateway PII E2E, 장시간 야간 window·live interruption·multi-worker Shadow/Canary, 새 후보 품질과 production-grade DLP 검증 완료 |
 | Advanced Routing | active 106D model-path contract, private inference와 rule fallback code가 존재 | 모든 traffic/locale의 운영 정확도와 SLA |
 | ClickHouse Analytics | mirror, backfill, reader, rollup과 live traffic code가 존재 | 모든 기간 parity, 장애 복구, 보존·비용 SLA 완료 |
 | Provider adapters | adapter code와 test가 존재 | 모든 vendor의 production credential live 검증 완료 |

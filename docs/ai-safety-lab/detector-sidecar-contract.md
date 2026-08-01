@@ -243,63 +243,63 @@ Model candidate routing is detector-type aware. A configured adapter is invoked 
 
 ## 11. Offline PII Shadow comparison
 
-Offline PII Shadow´Â À§ request bodyÀÇ `mode=shadow`¿Í ´Ù¸¥ ±â´ÉÀÌ´Ù.
-`mode=shadow`´Â ÇöÀç sidecar °á°ú¸¦ ½Ç½Ã°£ ¿äÃ»¿¡ °­Á¦ÇÏÁö ¾Ê´Â Á¤Ã¥ ¸ğµåÀÌ°í,
-offline PII Shadow´Â ÀÌ¹Ì ¹İÈ¯µÈ ±âÁØ °á°ú¿Í º°µµ ÈÄº¸ ONNX ¼¼¼ÇÀÇ °á°ú¸¦
-³ªÁß¿¡ ºñ±³ÇÏ´Â ¿î¿µ °ËÁõ °æ·Î´Ù. µÎ ±â´ÉÀÇ ÀÌ¸§ÀÌ °°´õ¶óµµ lifecycle°ú
-½ÇÇà ½ÃÁ¡ÀÌ ´Ù¸£¸ç ¼­·Î¸¦ ´ë½ÅÇÏÁö ¾Ê´Â´Ù.
+Offline PII ShadowëŠ” ìœ„ request bodyì˜ `mode=shadow`ì™€ ë‹¤ë¥¸ ê¸°ëŠ¥ì´ë‹¤.
+`mode=shadow`ëŠ” í˜„ì¬ sidecar ê²°ê³¼ë¥¼ ì‹¤ì‹œê°„ ìš”ì²­ì— ê°•ì œí•˜ì§€ ì•ŠëŠ” ì •ì±… ëª¨ë“œì´ê³ ,
+offline PII ShadowëŠ” ì´ë¯¸ ë°˜í™˜ëœ ê¸°ì¤€ ê²°ê³¼ì™€ ë³„ë„ í›„ë³´ ONNX ì„¸ì…˜ì˜ ê²°ê³¼ë¥¼
+ë‚˜ì¤‘ì— ë¹„êµí•˜ëŠ” ìš´ì˜ ê²€ì¦ ê²½ë¡œë‹¤. ë‘ ê¸°ëŠ¥ì˜ ì´ë¦„ì´ ê°™ë”ë¼ë„ lifecycleê³¼
+ì‹¤í–‰ ì‹œì ì´ ë‹¤ë¥´ë©° ì„œë¡œë¥¼ ëŒ€ì‹ í•˜ì§€ ì•ŠëŠ”ë‹¤.
 
-Gateway´Â ¾Æ·¡ Á¶°ÇÀ» ¸ğµÎ ¸¸Á·ÇÒ ¶§¸¸ trusted ³»ºÎ ¿äÃ»¿¡
-`X-GateLM-PII-Shadow-Capture: 1`À» Ãß°¡ÇÑ´Ù.
+GatewayëŠ” ì•„ë˜ ì¡°ê±´ì„ ëª¨ë‘ ë§Œì¡±í•  ë•Œë§Œ trusted ë‚´ë¶€ ìš”ì²­ì—
+`X-GateLM-PII-Shadow-Capture: 1`ì„ ì¶”ê°€í•œë‹¤.
 
 - `GATEWAY_PII_SHADOW_ENABLED=true`
-- ÀÎÁõµÈ ¼­¹ö ÄÁÅØ½ºÆ®ÀÇ tenant°¡ exact allowlist¿¡ Æ÷ÇÔµÊ
-- tenant ID¿Í request ID¸¦ »ç¿ëÇÑ deterministic SHA-256 bucketÀÌ ¼³Á¤ÇÑ
-  `1..10000` basis points ¾È¿¡ Æ÷ÇÔµÊ
+- ì¸ì¦ëœ ì„œë²„ ì»¨í…ìŠ¤íŠ¸ì˜ tenantê°€ exact allowlistì— í¬í•¨ë¨
+- tenant IDì™€ request IDë¥¼ ì‚¬ìš©í•œ deterministic SHA-256 bucketì´ ì„¤ì •í•œ
+  `1..10000` basis points ì•ˆì— í¬í•¨ë¨
 
-±âº» »ùÇÃÀº `500` basis points, Áï 5%ÀÌ¸ç ±â´ÉÀº ±âº»ÀûÀ¸·Î ²¨Á® ÀÖ´Ù.
-Gateway´Â header ÇÑ ºñÆ®¸¸ sidecar¿¡ º¸³»°í tenant, user, request, conversation
-½Äº°ÀÚ¸¦ Ãß°¡·Î Àü´ŞÇÏÁö ¾Ê´Â´Ù. ÀÏ¹İ client°¡ ÀÌ header¸¦ ½Å·Ú °æ°è ¹Û¿¡¼­
-Á÷Á¢ ÁÖÀÔÇÒ ¼ö ÀÖµµ·Ï endpoint¸¦ °ø°³ÇØ¼­´Â ¾È µÈ´Ù.
+ê¸°ë³¸ ìƒ˜í”Œì€ `500` basis points, ì¦‰ 5%ì´ë©° ê¸°ëŠ¥ì€ ê¸°ë³¸ì ìœ¼ë¡œ êº¼ì ¸ ìˆë‹¤.
+GatewayëŠ” header í•œ ë¹„íŠ¸ë§Œ sidecarì— ë³´ë‚´ê³  tenant, user, request, conversation
+ì‹ë³„ìë¥¼ ì¶”ê°€ë¡œ ì „ë‹¬í•˜ì§€ ì•ŠëŠ”ë‹¤. ì¼ë°˜ clientê°€ ì´ headerë¥¼ ì‹ ë¢° ê²½ê³„ ë°–ì—ì„œ
+ì§ì ‘ ì£¼ì…í•  ìˆ˜ ìˆë„ë¡ endpointë¥¼ ê³µê°œí•´ì„œëŠ” ì•ˆ ëœë‹¤.
 
-AI Service´Â `AI_SERVICE_PII_SHADOW_ENABLED=true`ÀÏ ¶§¸¸ header¸¦ Ã³¸®ÇÑ´Ù.
-½Ç½Ã°£ ±âÁØ Ãß·ĞÀÌ ³¡³ª¸é request¿Í sanitized ±âÁØ °á°ú¸¦ °°Àº thread¿¡¼­
-Áï½Ã AES-256-GCMÀ¸·Î ¾ÏÈ£È­ÇØ process-local buffer¿¡ ³Ö´Â´Ù. ÀÌ ´Ü°è¿¡¼­´Â
-ÈÄº¸ Ãß·ĞÀ» ½ÇÇàÇÏ°Å³ª ±â´Ù¸®Áö ¾Ê´Â´Ù. key´Â process memory¿¡¸¸ Á¸ÀçÇÏ°í
-Àç½ÃÀÛ º¹±¸¸¦ À§ÇÑ file, DB, queue, KMS ÀúÀåÀº ÇÏÁö ¾Ê´Â´Ù.
+AI ServiceëŠ” `AI_SERVICE_PII_SHADOW_ENABLED=true`ì¼ ë•Œë§Œ headerë¥¼ ì²˜ë¦¬í•œë‹¤.
+ì‹¤ì‹œê°„ ê¸°ì¤€ ì¶”ë¡ ì´ ëë‚˜ë©´ requestì™€ sanitized ê¸°ì¤€ ê²°ê³¼ë¥¼ ê°™ì€ threadì—ì„œ
+ì¦‰ì‹œ AES-256-GCMìœ¼ë¡œ ì•”í˜¸í™”í•´ process-local bufferì— ë„£ëŠ”ë‹¤. ì´ ë‹¨ê³„ì—ì„œëŠ”
+í›„ë³´ ì¶”ë¡ ì„ ì‹¤í–‰í•˜ê±°ë‚˜ ê¸°ë‹¤ë¦¬ì§€ ì•ŠëŠ”ë‹¤. keyëŠ” process memoryì—ë§Œ ì¡´ì¬í•˜ê³ 
+ì¬ì‹œì‘ ë³µêµ¬ë¥¼ ìœ„í•œ file, DB, queue, KMS ì €ì¥ì€ í•˜ì§€ ì•ŠëŠ”ë‹¤.
 
-buffer hard limitÀº ´ÙÀ½°ú °°´Ù.
+buffer hard limitì€ ë‹¤ìŒê³¼ ê°™ë‹¤.
 
-- ÃÖ´ë 5,000°Ç
-- ¾ÏÈ£¹®°ú nonce ÇÕ°è ÃÖ´ë 10 MiB
-- TTL ÃÖ´ë 12½Ã°£
-- Å©±â ÃÊ°ú Ç×¸ñÀº ¹ö¸®°í, °¡µæ Â÷¸é °¡Àå ¿À·¡µÈ Ç×¸ñºÎÅÍ Á¦°Å
-- process Á¾·á ¶Ç´Â Àç½ÃÀÛ ½Ã ¸ğµç Ç×¸ñ°ú key¸¦ Æó±â
+- ìµœëŒ€ 5,000ê±´
+- ì•”í˜¸ë¬¸ê³¼ nonce í•©ê³„ ìµœëŒ€ 10 MiB
+- TTL ìµœëŒ€ 12ì‹œê°„
+- í¬ê¸° ì´ˆê³¼ í•­ëª©ì€ ë²„ë¦¬ê³ , ê°€ë“ ì°¨ë©´ ê°€ì¥ ì˜¤ë˜ëœ í•­ëª©ë¶€í„° ì œê±°
+- process ì¢…ë£Œ ë˜ëŠ” ì¬ì‹œì‘ ì‹œ ëª¨ë“  í•­ëª©ê³¼ keyë¥¼ íê¸°
 
-worker´Â ±âº» `Asia/Seoul` 02:00 ÀÌ»ó 05:00 ¹Ì¸¸¿¡¸¸ µ¿ÀÛÇÑ´Ù. ±âÁØ PII
-runtimeÀº 4-vCPU profileÀÇ active `2`, intra-op `2`, inter-op `1`À» À¯ÁöÇÏ°í
-ÈÄº¸ ¼¼¼ÇÀº intra-op `1`, inter-op `1`, spinning disabled·Î °íÁ¤ÇÑ´Ù. worker´Â
-live active request¿Í waiter°¡ ¾øÀ½À» È®ÀÎÇÑ µÚ ÇÑ Ç×¸ñ¾¿ ½ÃÀÛÇÑ´Ù. ÀÌ¹Ì ½ÃÀÛÇÑ
-ONNX callÀº ¾ÈÀüÇÏ°Ô preemptÇÒ ¼ö ¾øÀ¸¹Ç·Î µµÁß¿¡ live request°¡ µé¾î¿À¸é ±×
-ÇÑ °ÇÀº ³¡³¯ ¼ö ÀÖÁö¸¸, ´ÙÀ½ ÈÄº¸ Ç×¸ñÀº live gate°¡ ´Ù½Ã idleÀÌ µÉ ¶§±îÁö
-½ÃÀÛÇÏÁö ¾Ê´Â´Ù.
+workerëŠ” ê¸°ë³¸ `Asia/Seoul` 02:00 ì´ìƒ 05:00 ë¯¸ë§Œì—ë§Œ ë™ì‘í•œë‹¤. ê¸°ì¤€ PII
+runtimeì€ 4-vCPU profileì˜ active `2`, intra-op `2`, inter-op `1`ì„ ìœ ì§€í•˜ê³ 
+í›„ë³´ ì„¸ì…˜ì€ intra-op `1`, inter-op `1`, spinning disabledë¡œ ê³ ì •í•œë‹¤. workerëŠ”
+live active requestì™€ waiterê°€ ì—†ìŒì„ í™•ì¸í•œ ë’¤ í•œ í•­ëª©ì”© ì‹œì‘í•œë‹¤. ì´ë¯¸ ì‹œì‘í•œ
+ONNX callì€ ì•ˆì „í•˜ê²Œ preemptí•  ìˆ˜ ì—†ìœ¼ë¯€ë¡œ ë„ì¤‘ì— live requestê°€ ë“¤ì–´ì˜¤ë©´ ê·¸
+í•œ ê±´ì€ ëë‚  ìˆ˜ ìˆì§€ë§Œ, ë‹¤ìŒ í›„ë³´ í•­ëª©ì€ live gateê°€ ë‹¤ì‹œ idleì´ ë  ë•Œê¹Œì§€
+ì‹œì‘í•˜ì§€ ì•ŠëŠ”ë‹¤.
 
-ÈÄº¸ ½Äº°ÀÚ´Â local artifact °æ·Î¸¦ log¿¡ ³ÖÁö ¾Ê´Â´Ù. ¼³Á¤ÇÑ SemVer¿Í
-Á¤±ÔÈ­µÈ public model ID¸¸ aggregate¿¡ ±â·ÏÇÑ´Ù. aggregate¿¡ Çã¿ëµÇ´Â °ªÀº
-´ÙÀ½À¸·Î Á¦ÇÑÇÑ´Ù.
+í›„ë³´ ì‹ë³„ìëŠ” local artifact ê²½ë¡œë¥¼ logì— ë„£ì§€ ì•ŠëŠ”ë‹¤. ì„¤ì •í•œ SemVerì™€
+ì •ê·œí™”ëœ public model IDë§Œ aggregateì— ê¸°ë¡í•œë‹¤. aggregateì— í—ˆìš©ë˜ëŠ” ê°’ì€
+ë‹¤ìŒìœ¼ë¡œ ì œí•œí•œë‹¤.
 
 - capture, pending, expired, evicted, oversized, decrypt error count
-- compared, matched, mismatched, inference error, live-pause count¿Í agreement percent
-- ±âÁØ¡¤ÈÄº¸ model invocation°ú accepted model detectionÀÇ bounded aggregate count
-- ±âÁØ¡¤ÈÄº¸ latencyÀÇ count, p50, p95, p99, max
+- compared, matched, mismatched, inference error, live-pause countì™€ agreement percent
+- ê¸°ì¤€Â·í›„ë³´ model invocationê³¼ accepted model detectionì˜ bounded aggregate count
+- ê¸°ì¤€Â·í›„ë³´ latencyì˜ count, p50, p95, p99, max
 
-raw input, redacted text, preview, detection value, span, offset, °³º° °á°ú, tenant,
-request ID¿Í hash´Â aggregate log¿¡ ³²±âÁö ¾Ê´Â´Ù. ÇöÀç ±¸ÇöÀº sanitized
-structured log¸¸ Ãâ·ÂÇÏ¸ç ClickHouse, PostgreSQL, public/internal read API,
-Event¿Í Metrics contract¸¦ Ãß°¡ÇÏÁö ¾Ê´Â´Ù. durable aggregate ÀúÀå°ú Á¶È¸´Â
-º°µµ °è¾à ½ÂÀÎ ÈÄ ¿¬°áÇÑ´Ù.
+raw input, redacted text, preview, detection value, span, offset, ê°œë³„ ê²°ê³¼, tenant,
+request IDì™€ hashëŠ” aggregate logì— ë‚¨ê¸°ì§€ ì•ŠëŠ”ë‹¤. í˜„ì¬ êµ¬í˜„ì€ sanitized
+structured logë§Œ ì¶œë ¥í•˜ë©° ClickHouse, PostgreSQL, public/internal read API,
+Eventì™€ Metrics contractë¥¼ ì¶”ê°€í•˜ì§€ ì•ŠëŠ”ë‹¤. durable aggregate ì €ì¥ê³¼ ì¡°íšŒëŠ”
+ë³„ë„ ê³„ì•½ ìŠ¹ì¸ í›„ ì—°ê²°í•œë‹¤.
 
-ÃÖÃÊ ¿¬°á °ËÁõÀº ±âÁØ°ú ÈÄº¸ ¸ğµÎ canonical `v0.1.1` artifact¸¦ »ç¿ëÇÑ´Ù.
-°°Àº artifactÀÇ 100% ÀÏÄ¡´Â ¾ÏÈ£È­¡¤queue¡¤ÀçÃß·Ğ¡¤ºñ±³ ¹è°üÀ» È®ÀÎÇÒ »Ó, »õ
-ÈÄº¸ ¸ğµ¨ÀÇ Ç°Áú ½Â°İ, production ÀüÃ¼ È°¼ºÈ­, SLA ¶Ç´Â DLP ¿Ï¼ºÀ» ½ÂÀÎÇÏÁö
-¾Ê´Â´Ù.
+ìµœì´ˆ ì—°ê²° ê²€ì¦ì€ ê¸°ì¤€ê³¼ í›„ë³´ ëª¨ë‘ canonical `v0.1.1` artifactë¥¼ ì‚¬ìš©í•œë‹¤.
+ê°™ì€ artifactì˜ 100% ì¼ì¹˜ëŠ” ì•”í˜¸í™”Â·queueÂ·ì¬ì¶”ë¡ Â·ë¹„êµ ë°°ê´€ì„ í™•ì¸í•  ë¿, ìƒˆ
+í›„ë³´ ëª¨ë¸ì˜ í’ˆì§ˆ ìŠ¹ê²©, production ì „ì²´ í™œì„±í™”, SLA ë˜ëŠ” DLP ì™„ì„±ì„ ìŠ¹ì¸í•˜ì§€
+ì•ŠëŠ”ë‹¤.

@@ -311,18 +311,18 @@ visible but does not promote the candidate to a production default.
 
 ## PII Offline Shadow E2E
 
-PII Offline Shadow´Â ½Ç½Ã°£ ÀÀ´ä¿¡¼­ ÈÄº¸ ¸ğµ¨À» °°ÀÌ ½ÇÇàÇÏÁö ¾Ê´Â´Ù.
-Gateway°¡ Çã¿ëµÈ Å×½ºÆ® tenantÀÇ ¿äÃ» Áß ±âº» 5%¸¸ Ç¥½ÃÇÏ¸é AI Service°¡
-ÀÔ·Â°ú ±âÁØ °á°ú¸¦ Áï½Ã ¾ÏÈ£È­ÇØ bounded process memory¿¡ º¸°üÇÏ°í, ±âº»
-02:00~05:00 KST¿¡ º°µµ 1¡¿1 ONNX ¼¼¼ÇÀ¸·Î ºñ±³ÇÑ´Ù. ½Ç½Ã°£ 2¡¿2 Ãß·ĞÀÌ³ª
-´ë±â ¿äÃ»ÀÌ ÀÖÀ¸¸é »õ Shadow Ç×¸ñÀ» ½ÃÀÛÇÏÁö ¾Ê´Â´Ù.
+PII Offline ShadowëŠ” ì‹¤ì‹œê°„ ì‘ë‹µì—ì„œ í›„ë³´ ëª¨ë¸ì„ ê°™ì´ ì‹¤í–‰í•˜ì§€ ì•ŠëŠ”ë‹¤.
+Gatewayê°€ í—ˆìš©ëœ í…ŒìŠ¤íŠ¸ tenantì˜ ìš”ì²­ ì¤‘ ê¸°ë³¸ 5%ë§Œ í‘œì‹œí•˜ë©´ AI Serviceê°€
+ì…ë ¥ê³¼ ê¸°ì¤€ ê²°ê³¼ë¥¼ ì¦‰ì‹œ ì•”í˜¸í™”í•´ bounded process memoryì— ë³´ê´€í•˜ê³ , ê¸°ë³¸
+02:00~05:00 KSTì— ë³„ë„ 1Ã—1 ONNX ì„¸ì…˜ìœ¼ë¡œ ë¹„êµí•œë‹¤. ì‹¤ì‹œê°„ 2Ã—2 ì¶”ë¡ ì´ë‚˜
+ëŒ€ê¸° ìš”ì²­ì´ ìˆìœ¼ë©´ ìƒˆ Shadow í•­ëª©ì„ ì‹œì‘í•˜ì§€ ì•ŠëŠ”ë‹¤.
 
-`mode=shadow`´Â sidecar °á°ú¸¦ ½Ç½Ã°£ Á¤Ã¥¿¡ °­Á¦ÇÏÁö ¾Ê´Â ±âÁ¸ request
-mode´Ù. `X-GateLM-PII-Shadow-Capture: 1`·Î ½ÃÀÛÇÏ´Â Offline Shadow¿Í
-°°Àº ±â´ÉÀÌ ¾Æ´Ï´Ù.
+`mode=shadow`ëŠ” sidecar ê²°ê³¼ë¥¼ ì‹¤ì‹œê°„ ì •ì±…ì— ê°•ì œí•˜ì§€ ì•ŠëŠ” ê¸°ì¡´ request
+modeë‹¤. `X-GateLM-PII-Shadow-Capture: 1`ë¡œ ì‹œì‘í•˜ëŠ” Offline Shadowì™€
+ê°™ì€ ê¸°ëŠ¥ì´ ì•„ë‹ˆë‹¤.
 
-Gateway¿Í AI Service ¾çÂÊ ±â´ÉÀº ±âº»ÀûÀ¸·Î ²¨Á® ÀÖ´Ù. Ã³À½¿¡´Â Å×½ºÆ®
-tenant ÇÏ³ª¿Í µ¿ÀÏÇÑ v0.1.1 candidate¸¸ ¼³Á¤ÇÑ´Ù.
+Gatewayì™€ AI Service ì–‘ìª½ ê¸°ëŠ¥ì€ ê¸°ë³¸ì ìœ¼ë¡œ êº¼ì ¸ ìˆë‹¤. ì²˜ìŒì—ëŠ” í…ŒìŠ¤íŠ¸
+tenant í•˜ë‚˜ì™€ ë™ì¼í•œ v0.1.1 candidateë§Œ ì„¤ì •í•œë‹¤.
 
 ```text
 GATEWAY_PII_SHADOW_ENABLED=true
@@ -341,9 +341,9 @@ AI_SERVICE_PII_SHADOW_WINDOW_END_HOUR=5
 AI_SERVICE_PII_SHADOW_POLL_INTERVAL_MS=250
 ```
 
-µ¿ÀÏ ¸ğµ¨ ¹è°ü °ËÁõÀº Docker³ª ¿î¿µ ¼­¹ö ¾øÀÌµµ ½ÇÇàÇÒ ¼ö ÀÖ´Ù. ·ÎÄÃ¿¡
-canonical registry¿Í SHA-256ÀÌ ÀÏÄ¡ÇÏ´Â v0.1.1 artifact, Python ONNX
-dependencies¿Í Go toolchainÀÌ ÇÊ¿äÇÏ´Ù.
+ë™ì¼ ëª¨ë¸ ë°°ê´€ ê²€ì¦ì€ Dockerë‚˜ ìš´ì˜ ì„œë²„ ì—†ì´ë„ ì‹¤í–‰í•  ìˆ˜ ìˆë‹¤. ë¡œì»¬ì—
+canonical registryì™€ SHA-256ì´ ì¼ì¹˜í•˜ëŠ” v0.1.1 artifact, Python ONNX
+dependenciesì™€ Go toolchainì´ í•„ìš”í•˜ë‹¤.
 
 ```bash
 cd apps/ai-service
@@ -355,16 +355,16 @@ python -m app.services.pii_shadow_e2e_runner \
   --out ../../docs/testing/pii-shadow-v0.1.1-e2e-aggregate.json
 ```
 
-runner´Â ½ÇÁ¦ Gateway sampler¿Í HTTP adapter, loopback TCPÀÇ ½ÇÁ¦ FastAPI
-route, ±âÁØ 2¡¿2 ONNX, AES-256-GCM buffer¿Í ÈÄº¸ 1¡¿1 ONNX¸¦ ¼ø¼­´ë·Î
-Åë°úÇÑ´Ù. 50°Ç synthetic corpus¸¦ ¸Ş¸ğ¸®¿¡¼­ ¹İº¹ÇÏ¸ç report¿¡´Â ÃÑ ¿äÃ»¡¤
-»ùÇÃ¡¤ÀÏÄ¡¡¤¿À·ù ¼ö¿Í latency percentile¸¸ ³²±ä´Ù. input, detection, span,
-°³º° °á°ú¿Í ·ÎÄÃ artifact °æ·Î´Â ÀúÀåÇÏÁö ¾Ê´Â´Ù.
+runnerëŠ” ì‹¤ì œ Gateway samplerì™€ HTTP adapter, loopback TCPì˜ ì‹¤ì œ FastAPI
+route, ê¸°ì¤€ 2Ã—2 ONNX, AES-256-GCM bufferì™€ í›„ë³´ 1Ã—1 ONNXë¥¼ ìˆœì„œëŒ€ë¡œ
+í†µê³¼í•œë‹¤. 50ê±´ synthetic corpusë¥¼ ë©”ëª¨ë¦¬ì—ì„œ ë°˜ë³µí•˜ë©° reportì—ëŠ” ì´ ìš”ì²­Â·
+ìƒ˜í”ŒÂ·ì¼ì¹˜Â·ì˜¤ë¥˜ ìˆ˜ì™€ latency percentileë§Œ ë‚¨ê¸´ë‹¤. input, detection, span,
+ê°œë³„ ê²°ê³¼ì™€ ë¡œì»¬ artifact ê²½ë¡œëŠ” ì €ì¥í•˜ì§€ ì•ŠëŠ”ë‹¤.
 
-E2E runner´Â °ËÁõÀ» À§ÇØ ¾ß°£ window¸¸ ¸í½ÃÀûÀ¸·Î ¿ìÈ¸ÇÑ´Ù. °°Àº ¸ğµ¨ÀÇ
-100% agreement´Â ¹è°ü Á¤»ó ¿©ºÎ¸¸ Áõ¸íÇÏ¸ç production traffic, Àü¿ª È°¼ºÈ­,
-»õ ÈÄº¸ ½Â°İ ¶Ç´Â SLA ±Ù°Å°¡ ¾Æ´Ï´Ù. ¿î¿µ buffer´Â process Àç½ÃÀÛ ½Ã º¹±¸ÇÏÁö
-¾Ê°í Æó±âÇÏ¸ç, ÇöÀç durable DB³ª Á¶È¸ API¸¦ Á¦°øÇÏÁö ¾Ê´Â´Ù.
+E2E runnerëŠ” ê²€ì¦ì„ ìœ„í•´ ì•¼ê°„ windowë§Œ ëª…ì‹œì ìœ¼ë¡œ ìš°íšŒí•œë‹¤. ê°™ì€ ëª¨ë¸ì˜
+100% agreementëŠ” ë°°ê´€ ì •ìƒ ì—¬ë¶€ë§Œ ì¦ëª…í•˜ë©° production traffic, ì „ì—­ í™œì„±í™”,
+ìƒˆ í›„ë³´ ìŠ¹ê²© ë˜ëŠ” SLA ê·¼ê±°ê°€ ì•„ë‹ˆë‹¤. ìš´ì˜ bufferëŠ” process ì¬ì‹œì‘ ì‹œ ë³µêµ¬í•˜ì§€
+ì•Šê³  íê¸°í•˜ë©°, í˜„ì¬ durable DBë‚˜ ì¡°íšŒ APIë¥¼ ì œê³µí•˜ì§€ ì•ŠëŠ”ë‹¤.
 
 ## Safety Eval Runner
 
