@@ -138,6 +138,63 @@ class PrivacyFilterAdapterTests(unittest.TestCase):
         self.assertEqual(adapter.detect(prompt), [])
         self.assertEqual(adapter.detect_many([prompt]).detections, [[]])
 
+    def test_gatelm_koelectra_rejects_compatibility_jamo_person_fragment(self) -> None:
+        prompt = "ㅁㄴㅇㄹㅇㄹ"
+        adapter = PrivacyFilterAdapter(
+            classifier=lambda _text: [
+                {
+                    "entity_group": "PER",
+                    "score": 0.99,
+                    "start": 0,
+                    "end": len(prompt),
+                }
+            ],
+            model_name=GATELM_KOELECTRA_PII_NER_MODEL,
+            allowed_detector_types=frozenset({"person_name"}),
+        )
+
+        self.assertEqual(adapter.detect(prompt), [])
+        self.assertEqual(adapter.detect_many([prompt]).detections, [[]])
+
+    def test_gatelm_koelectra_rejects_label_compound_person_fragments(self) -> None:
+        for prompt in ("이름변경", "이름표", "고객센터", "고객문의", "문의"):
+            with self.subTest(case=prompt):
+                adapter = PrivacyFilterAdapter(
+                    classifier=lambda text: [
+                        {
+                            "entity_group": "PER",
+                            "score": 0.99,
+                            "start": 0,
+                            "end": len(text),
+                        }
+                    ],
+                    model_name=GATELM_KOELECTRA_PII_NER_MODEL,
+                    allowed_detector_types=frozenset({"person_name"}),
+                )
+
+                self.assertEqual(adapter.detect(prompt), [])
+                self.assertEqual(adapter.detect_many([prompt]).detections, [[]])
+
+    def test_gatelm_koelectra_rejects_suffix_inside_label_compound(self) -> None:
+        for prompt, label_prefix in (("이름변경", "이름"), ("고객센터", "고객")):
+            with self.subTest(case=prompt):
+                suffix_start = len(label_prefix)
+                adapter = PrivacyFilterAdapter(
+                    classifier=lambda text, start=suffix_start: [
+                        {
+                            "entity_group": "PER",
+                            "score": 0.99,
+                            "start": start,
+                            "end": len(text),
+                        }
+                    ],
+                    model_name=GATELM_KOELECTRA_PII_NER_MODEL,
+                    allowed_detector_types=frozenset({"person_name"}),
+                )
+
+                self.assertEqual(adapter.detect(prompt), [])
+                self.assertEqual(adapter.detect_many([prompt]).detections, [[]])
+
     def test_gatelm_koelectra_keeps_complete_korean_person_name(self) -> None:
         person_name = "\uae40\ubbfc\uc218"
         prompt = f"\uace0\uac1d {person_name}\uc5d0\uac8c \uc548\ub0b4\ud574 \uc8fc\uc138\uc694."

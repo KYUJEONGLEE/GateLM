@@ -54,7 +54,7 @@ func TestResolveRouterFallbackMaskingEngineOnlyEnablesFullRulesForPersonNameMode
 		t.Fatal("person-name model-only mode must configure a full-rule fallback engine")
 	}
 	result, err := fallback.Apply(context.Background(), maskdomain.ApplyRequest{
-		Prompt: "\uace0\uac1d \ubb38\uc758\ub97c \ud655\uc778\ud574 \uc8fc\uc138\uc694.",
+		Prompt: "\uace0\uac1d \uae40\ubbfc\uc218\uc5d0\uac8c \uc548\ub0b4\ud574 \uc8fc\uc138\uc694.",
 	})
 	if err != nil {
 		t.Fatalf("apply full-rule fallback: %v", err)

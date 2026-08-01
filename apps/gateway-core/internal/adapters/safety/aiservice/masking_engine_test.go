@@ -249,7 +249,7 @@ func TestMaskingEngineSidecarFailureUsesFullRuleFallback(t *testing.T) {
 		HTTPClient:    server.Client(),
 		Timeout:       time.Second,
 	})
-	prompt := "\uace0\uac1d \ubb38\uc758\ub97c \ud655\uc778\ud574 \uc8fc\uc138\uc694."
+	prompt := "\uace0\uac1d \uae40\ubbfc\uc218\uc5d0\uac8c \uc548\ub0b4\ud574 \uc8fc\uc138\uc694."
 
 	result, err := engine.Apply(context.Background(), maskdomain.ApplyRequest{Prompt: prompt})
 
@@ -675,7 +675,7 @@ func TestMaskingEngineApplyBatchSidecarFailureUsesFullRuleFallback(t *testing.T)
 		Timeout:       time.Second,
 	})
 	prompts := []string{
-		"\uace0\uac1d \ubb38\uc758\ub97c \ud655\uc778\ud574 \uc8fc\uc138\uc694.",
+		"\uace0\uac1d \uae40\ubbfc\uc218\uc5d0\uac8c \uc548\ub0b4\ud574 \uc8fc\uc138\uc694.",
 		"Write a safe synthetic response.",
 	}
 
