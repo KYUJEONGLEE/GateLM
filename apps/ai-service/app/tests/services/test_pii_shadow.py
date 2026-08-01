@@ -106,6 +106,9 @@ class PiiShadowEvaluatorTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(snapshot["comparison"]["mismatchedItems"], 0)
         self.assertEqual(snapshot["comparison"]["pausedForLiveRequests"], 1)
         self.assertEqual(snapshot["comparison"]["agreementPercent"], 100.0)
+        self.assertEqual(snapshot["comparison"]["modelActiveComparedItems"], 1)
+        self.assertEqual(snapshot["comparison"]["baselineModelInvocations"], 1)
+        self.assertEqual(snapshot["comparison"]["candidateModelInvocations"], 1)
 
     async def test_latency_samples_remain_bounded_while_totals_continue(self) -> None:
         service = detector_service()

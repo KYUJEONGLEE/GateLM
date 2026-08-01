@@ -100,6 +100,11 @@ def shadow_snapshot(*, mismatches: int) -> dict[str, object]:
             "inferenceErrors": 0,
             "captureErrors": 0,
             "pausedForLiveRequests": 0,
+            "modelActiveComparedItems": 3,
+            "baselineModelInvocations": 3,
+            "candidateModelInvocations": 3,
+            "baselineAcceptedModelDetections": 2,
+            "candidateAcceptedModelDetections": 2,
             "agreementPercent": matches * 20.0,
         },
         "latencyMs": {

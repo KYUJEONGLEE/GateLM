@@ -290,6 +290,7 @@ ONNX call은 안전하게 preempt할 수 없으므로 도중에 live request가 들어오면 그
 
 - capture, pending, expired, evicted, oversized, decrypt error count
 - compared, matched, mismatched, inference error, live-pause count와 agreement percent
+- 기준·후보 model invocation과 accepted model detection의 bounded aggregate count
 - 기준·후보 latency의 count, p50, p95, p99, max
 
 raw input, redacted text, preview, detection value, span, offset, 개별 결과, tenant,

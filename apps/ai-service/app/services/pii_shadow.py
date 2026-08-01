@@ -187,6 +187,11 @@ class PiiShadowEvaluator:
         self._inference_errors = 0
         self._capture_errors = 0
         self._paused_for_live = 0
+        self._model_active_compared = 0
+        self._baseline_model_invocations = 0
+        self._candidate_model_invocations = 0
+        self._baseline_accepted_model_detections = 0
+        self._candidate_accepted_model_detections = 0
         self._baseline_latencies: deque[int] = deque(maxlen=maximum_latency_samples)
         self._candidate_latencies: deque[int] = deque(maxlen=maximum_latency_samples)
         self._lock = threading.Lock()
@@ -243,11 +248,32 @@ class PiiShadowEvaluator:
 
             baseline_latency = _safe_latency(envelope.get("baselineLatencyMs"))
             candidate_latency = _safe_latency(response.latency_ms)
+            baseline_execution = _execution_summary(envelope.get("baseline"))
+            candidate_execution = response.execution_summary
+            baseline_invocations = _safe_count(
+                baseline_execution.get("modelInvocationCount")
+            )
+            candidate_invocations = _safe_count(
+                candidate_execution.model_invocation_count
+            )
+            baseline_accepted = _safe_count(
+                baseline_execution.get("acceptedModelDetectionCount")
+            )
+            candidate_accepted = _safe_count(
+                candidate_execution.accepted_model_detection_count
+            )
             matched = comparison == envelope.get("baseline")
             with self._lock:
                 self._compared += 1
                 self._matches += int(matched)
                 self._mismatches += int(not matched)
+                self._model_active_compared += int(
+                    baseline_invocations > 0 and candidate_invocations > 0
+                )
+                self._baseline_model_invocations += baseline_invocations
+                self._candidate_model_invocations += candidate_invocations
+                self._baseline_accepted_model_detections += baseline_accepted
+                self._candidate_accepted_model_detections += candidate_accepted
                 self._baseline_latencies.append(baseline_latency)
                 self._candidate_latencies.append(candidate_latency)
         except Exception:
@@ -273,6 +299,15 @@ class PiiShadowEvaluator:
                 "inferenceErrors": self._inference_errors,
                 "captureErrors": self._capture_errors,
                 "pausedForLiveRequests": self._paused_for_live,
+                "modelActiveComparedItems": self._model_active_compared,
+                "baselineModelInvocations": self._baseline_model_invocations,
+                "candidateModelInvocations": self._candidate_model_invocations,
+                "baselineAcceptedModelDetections": (
+                    self._baseline_accepted_model_detections
+                ),
+                "candidateAcceptedModelDetections": (
+                    self._candidate_accepted_model_detections
+                ),
                 "agreementPercent": (
                     round(matches * 100 / compared, 3) if compared else None
                 ),
@@ -453,6 +488,22 @@ def _safe_latency(value: object) -> int:
         return max(0, int(value))
     except (TypeError, ValueError):
         return 0
+
+
+def _safe_count(value: object) -> int:
+    if isinstance(value, bool):
+        return 0
+    try:
+        return max(0, int(value))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _execution_summary(value: object) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        return {}
+    summary = value.get("executionSummary")
+    return summary if isinstance(summary, dict) else {}
 
 
 def _latency_summary(values: list[int]) -> dict[str, int | None]:

@@ -251,6 +251,13 @@ def build_report(
             and comparison["mismatchedItems"] == 0
             and comparison["agreementPercent"] == 100.0
         ),
+        "realModelInferenceCompared": (
+            comparison["modelActiveComparedItems"] > 0
+            and comparison["baselineModelInvocations"] > 0
+            and comparison["candidateModelInvocations"] > 0
+            and comparison["baselineModelInvocations"]
+            == comparison["candidateModelInvocations"]
+        ),
         "shadowPathHasNoErrors": (
             comparison["captureErrors"] == 0
             and comparison["inferenceErrors"] == 0
