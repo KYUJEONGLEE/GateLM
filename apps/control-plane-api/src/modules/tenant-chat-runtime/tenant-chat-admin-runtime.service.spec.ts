@@ -682,7 +682,18 @@ describe('TenantChatRuntimeService administrator activation', () => {
     const degraded = await service.getAdminRuntimeSetup(TENANT_ID);
 
     expect(degraded.readiness).toBe('degraded');
-    expect(degraded.activeSnapshot).toBeNull();
+    expect(degraded.activeSnapshot).toEqual(
+      expect.objectContaining({
+        manualModelRef: miniRef,
+        pricingStatus: 'unavailable',
+        quota: expect.objectContaining({
+          defaultMonthlyTokenLimit: 1_000_000,
+        }),
+      }),
+    );
+    expect(
+      degraded.activeSnapshot?.routes.general.simple.modelRefs,
+    ).toEqual([nanoRef]);
   });
 
   it('rejects inactive, project-scoped, or cross-tenant Provider identifiers', async () => {
