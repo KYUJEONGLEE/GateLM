@@ -7,6 +7,28 @@ import (
 	"testing"
 )
 
+func TestP0RegistryWithAdditionalIncludesCodeLevelDetector(t *testing.T) {
+	input := "safe-extension-marker"
+	registry := NewP0RegistryWithAdditional(staticDetector{
+		detections: []Detection{{
+			Type:        "validated_extension_test",
+			Start:       0,
+			End:         len(input),
+			Action:      ActionRedacted,
+			Placeholder: "[VALIDATED_EXTENSION_TEST]",
+			Priority:    90,
+		}},
+	})
+
+	detections := registry.Detect(input)
+	if len(detections) != 1 {
+		t.Fatalf("expected one code-level extension detection, got %d", len(detections))
+	}
+	if detections[0].Type != "validated_extension_test" {
+		t.Fatalf("unexpected extension detector type %q", detections[0].Type)
+	}
+}
+
 func TestP0EngineRedactsEmailAndPhone(t *testing.T) {
 	engine := NewP0Engine()
 
@@ -138,13 +160,13 @@ func TestP0EngineUsesRoleAwarePlaceholdersForKoreanPersonRoles(t *testing.T) {
 	engine := NewP0Engine()
 
 	result, err := engine.Apply(context.Background(), ApplyRequest{
-		Prompt: "\uace0\uac1d \uc774\uc724\uc9c0\uac00 \uc0c1\ub2f4\uc6d0 \uae40\ubbfc\uc218\uc5d0\uac8c \ud658\ubd88\uc744 \uc694\uccad\ud588\ub2e4. \ub2f4\ub2f9 \uc758\uc0ac \ubc15\uc9c0\ud6c8\uc774 \ud658\uc790 \ucd5c\uc11c\uc5f0\uc5d0\uac8c \uc124\uba85\ud588\ub2e4.",
+		Prompt: "\uace0\uac1d \uc774\uc724\uc9c0\ub2d8\uc740 \uc0c1\ub2f4\uc6d0 \uae40\ubbfc\uc218\uc5d0\uac8c \ud658\ubd88\uc744 \uc694\uccad\ud588\ub2e4. \ub2f4\ub2f9 \uc758\uc0ac \ubc15\uc9c0\ud6c8\ub2d8\uc740 \ud658\uc790 \ucd5c\uc11c\uc5f0\uc5d0\uac8c \uc124\uba85\ud588\ub2e4.",
 	})
 	if err != nil {
 		t.Fatalf("Apply returned error: %v", err)
 	}
 
-	expected := "[CUSTOMER_1]\uac00 [AGENT_1]\uc5d0\uac8c \ud658\ubd88\uc744 \uc694\uccad\ud588\ub2e4. [DOCTOR_1]\uc774 [PATIENT_1]\uc5d0\uac8c \uc124\uba85\ud588\ub2e4."
+	expected := "[CUSTOMER_1]\ub2d8\uc740 [AGENT_1]\uc5d0\uac8c \ud658\ubd88\uc744 \uc694\uccad\ud588\ub2e4. [DOCTOR_1]\ub2d8\uc740 [PATIENT_1]\uc5d0\uac8c \uc124\uba85\ud588\ub2e4."
 	if result.RedactedPrompt != expected {
 		t.Fatalf("expected role labels to be folded into placeholders %q, got %q", expected, result.RedactedPrompt)
 	}
@@ -164,13 +186,13 @@ func TestP0EngineUsesSemanticPlaceholdersForRecruitingPersonRoles(t *testing.T) 
 	engine := NewP0Engine()
 
 	result, err := engine.Apply(context.Background(), ApplyRequest{
-		Prompt: "applicant Alex Kim sent resume to interviewer Jamie Park. \uc9c0\uc6d0\uc790 \uc774\uc724\uc9c0\uac00 \uba74\uc811\uad00 \uae40\ubbfc\uc218\uc5d0\uac8c \uc774\ub825\uc11c\ub97c \ubcf4\ub0c8\ub2e4.",
+		Prompt: "applicant Alex Kim sent resume to interviewer Jamie Park. \uc9c0\uc6d0\uc790 \uc774\uc724\uc9c0\ub2d8\uc774 \uba74\uc811\uad00 \uae40\ubbfc\uc218\uc5d0\uac8c \uc774\ub825\uc11c\ub97c \ubcf4\ub0c8\ub2e4.",
 	})
 	if err != nil {
 		t.Fatalf("Apply returned error: %v", err)
 	}
 
-	expected := "[APPLICANT_1] sent resume to [INTERVIEWER_1]. [APPLICANT_2]\uac00 [INTERVIEWER_2]\uc5d0\uac8c \uc774\ub825\uc11c\ub97c \ubcf4\ub0c8\ub2e4."
+	expected := "[APPLICANT_1] sent resume to [INTERVIEWER_1]. [APPLICANT_2]\ub2d8\uc774 [INTERVIEWER_2]\uc5d0\uac8c \uc774\ub825\uc11c\ub97c \ubcf4\ub0c8\ub2e4."
 	if result.RedactedPrompt != expected {
 		t.Fatalf("expected semantic role placeholders %q, got %q", expected, result.RedactedPrompt)
 	}
@@ -589,6 +611,70 @@ func TestP0EngineBlocksCriticalDetectors(t *testing.T) {
 				t.Fatalf("redacted prompt must not include raw blocked value: %q", result.RedactedPrompt)
 			}
 		})
+	}
+}
+
+func TestP0EngineRejectsKoreanPersonNameFalsePositives(t *testing.T) {
+	engine := NewP0Engine()
+	prompts := []string{
+		"고객 문의를 확인해 주세요.",
+		"이름변경 기능을 설명해 주세요.",
+		"이름표를 새로 만들어 주세요.",
+		"고객센터 연결 방법을 알려 주세요.",
+		"고객지원 정책을 정리해 주세요.",
+		"ㅁㄴㅇㄹㅇㄹ",
+		"ㅂㄷㄱㄹㅇ 그냥 테스트 중",
+	}
+
+	for _, prompt := range prompts {
+		result, err := engine.Apply(context.Background(), ApplyRequest{Prompt: prompt})
+		if err != nil {
+			t.Fatalf("Apply returned error: %v", err)
+		}
+		if result.Action != ActionNone || result.DetectedCount != 0 {
+			t.Fatalf("safe Korean text must not be masked: action=%s types=%v", result.Action, result.DetectedTypes)
+		}
+		if result.RedactedPrompt != prompt {
+			t.Fatal("safe Korean text changed unexpectedly")
+		}
+	}
+}
+
+func TestP0EngineKeepsExplicitKoreanPersonNameFields(t *testing.T) {
+	engine := NewP0Engine()
+	prompt := "이름: 김민수, 고객명=이윤지"
+
+	result, err := engine.Apply(context.Background(), ApplyRequest{Prompt: prompt})
+	if err != nil {
+		t.Fatalf("Apply returned error: %v", err)
+	}
+	if result.Action != ActionRedacted || result.DetectedCount != 2 ||
+		!reflect.DeepEqual(result.DetectedTypes, []string{"person_name"}) {
+		t.Fatalf("explicit Korean name fields were not masked: %+v", result)
+	}
+	for _, rawName := range []string{"김민수", "이윤지"} {
+		if strings.Contains(result.RedactedPrompt, rawName) {
+			t.Fatal("redacted prompt retained an explicit Korean person name")
+		}
+	}
+}
+
+func TestP0EngineKeepsExplicitKoreanPersonNameTopicFields(t *testing.T) {
+	engine := NewP0Engine()
+	prompt := "이름은 김민수, 고객명은 이윤지"
+
+	result, err := engine.Apply(context.Background(), ApplyRequest{Prompt: prompt})
+	if err != nil {
+		t.Fatalf("Apply returned error: %v", err)
+	}
+	if result.Action != ActionRedacted || result.DetectedCount != 2 ||
+		!reflect.DeepEqual(result.DetectedTypes, []string{"person_name"}) {
+		t.Fatalf("explicit Korean topic name fields were not masked: %+v", result)
+	}
+	for _, rawName := range []string{"김민수", "이윤지"} {
+		if strings.Contains(result.RedactedPrompt, rawName) {
+			t.Fatal("redacted prompt retained an explicit Korean topic person name")
+		}
 	}
 }
 

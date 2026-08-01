@@ -106,10 +106,27 @@ def main() -> None:
             }
         )
 
-    negative_text = "너의이름은?"
-    negative_detections = adapter.detect(negative_text)
+    negative_cases = (
+        ("single_syllable_question", "너의이름은?"),
+        ("name_change_compound", "이름변경 기능을 설명해 주세요."),
+        ("name_tag_compound", "이름표를 새로 만들어 주세요."),
+        ("customer_center_compound", "고객센터 연결 방법을 알려 주세요."),
+        ("customer_inquiry_compound", "고객문의 내역을 정리해 주세요."),
+        ("compatibility_jamo_only", "ㅁㄴㅇㄹㅇㄹ"),
+    )
+    negative_results = []
+    for case_id, text in negative_cases:
+        detections = adapter.detect(text)
+        negative_results.append(
+            {
+                "caseId": case_id,
+                "personNameDetected": any(
+                    item.detector_type == "person_name" for item in detections
+                ),
+            }
+        )
     negative_passed = all(
-        item.detector_type != "person_name" for item in negative_detections
+        not item["personNameDetected"] for item in negative_results
     )
     passed = all(item["exactBoundaryDetected"] for item in results) and negative_passed
     output = {
@@ -120,6 +137,7 @@ def main() -> None:
         "detectedValueIncluded": False,
         "passed": passed,
         "cases": results,
+        "personNameFalsePositiveRegressions": negative_results,
         "singleSyllablePersonRegressionPassed": negative_passed,
     }
     print(json.dumps(output, ensure_ascii=False, indent=2, sort_keys=True))

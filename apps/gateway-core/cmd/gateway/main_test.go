@@ -445,7 +445,7 @@ func TestBuildOpenAIStaticCatalogModelsAddsManualExtraModels(t *testing.T) {
 func TestTenantChatLocalMaskingEnginePersonNameModelOnlyExcludesOnlyPersonRule(t *testing.T) {
 	ctx := context.Background()
 	modelOnlyResult, err := tenantChatLocalMaskingEngine(true).Apply(ctx, maskdomain.ApplyRequest{
-		Prompt: "고객 문의를 확인해 주세요.",
+		Prompt: "고객 김민수에게 안내해 주세요.",
 	})
 	if err != nil {
 		t.Fatalf("apply person-name model-only engine: %v", err)
@@ -465,7 +465,7 @@ func TestTenantChatLocalMaskingEnginePersonNameModelOnlyExcludesOnlyPersonRule(t
 	}
 
 	defaultResult, err := tenantChatLocalMaskingEngine(false).Apply(ctx, maskdomain.ApplyRequest{
-		Prompt: "고객 문의를 확인해 주세요.",
+		Prompt: "고객 김민수에게 안내해 주세요.",
 	})
 	if err != nil {
 		t.Fatalf("apply default tenant chat engine: %v", err)
@@ -484,7 +484,7 @@ func TestTenantChatFallbackMaskingEngineOnlyEnablesFullRulesForPersonNameModelOn
 		t.Fatal("person-name model-only mode must configure a full-rule Tenant Chat fallback engine")
 	}
 	result, err := fallback.Apply(context.Background(), maskdomain.ApplyRequest{
-		Prompt: "\uace0\uac1d \ubb38\uc758\ub97c \ud655\uc778\ud574 \uc8fc\uc138\uc694.",
+		Prompt: "\uace0\uac1d \uae40\ubbfc\uc218\uc5d0\uac8c \uc548\ub0b4\ud574 \uc8fc\uc138\uc694.",
 	})
 	if err != nil {
 		t.Fatalf("apply Tenant Chat full-rule fallback: %v", err)

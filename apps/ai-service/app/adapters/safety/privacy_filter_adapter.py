@@ -2,13 +2,18 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import threading
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
+from app.adapters.safety.pii_rule_registry import (
+    GATELM_ADDRESS_ADMIN_SUFFIX_PATTERN,
+    GATELM_ADDRESS_FRAGMENT_TYPES,
+    GATELM_ADDRESS_ORGANIZATION_SUFFIX_EXCLUSIONS,
+    is_plausible_model_person_name,
+)
 from app.domain.safety.detections import (
     DEFAULT_ML_MIN_CONFIDENCE,
     DEFAULT_ML_MIN_CONFIDENCE_BY_DETECTOR_TYPE,
@@ -142,36 +147,6 @@ DEFAULT_LABEL_MAP: Mapping[str, str] = {
     "webhook_url": "webhook_url",
 }
 
-_GATELM_ADDRESS_FRAGMENT_TYPES = frozenset(
-    {"organization_name", "postal_address"}
-)
-_GATELM_ADDRESS_ORGANIZATION_SUFFIX_EXCLUSIONS = (
-    "회사",
-    "법인",
-    "공사",
-    "공단",
-    "재단",
-    "협회",
-    "연구원",
-    "대학교",
-    "병원",
-    "은행",
-    "그룹",
-    "주식회사",
-    "유한회사",
-    "기술원",
-    "사업단",
-)
-_GATELM_ADDRESS_ADMIN_TOKEN = (
-    r"[가-힣]{1,10}(?:특별자치시|특별자치도|특별시|광역시|시|군|구|도)"
-)
-_GATELM_ADDRESS_ADMIN_SUFFIX_RE = re.compile(
-    r"(?<![가-힣])(?P<prefix>"
-    + _GATELM_ADDRESS_ADMIN_TOKEN
-    + r"(?:\s+"
-    + _GATELM_ADDRESS_ADMIN_TOKEN
-    + r"){0,2})\s*$"
-)
 
 
 @dataclass(frozen=True)
@@ -384,12 +359,10 @@ class PrivacyFilterAdapter:
             return None
         if start < 0 or end <= start or end > len(text):
             return None
-        detected_value = text[start:end]
-        if (
-            _is_gatelm_koelectra_pii_ner_model(self.model_name)
-            and detector_type == "person_name"
-            and len(detected_value) == 1
-            and "\uac00" <= detected_value <= "\ud7a3"
+        if _is_gatelm_koelectra_pii_ner_model(
+            self.model_name
+        ) and detector_type == "person_name" and not is_plausible_model_person_name(
+            text, start, end
         ):
             return None
 
@@ -438,7 +411,7 @@ def _repair_gatelm_address_boundaries(
                 item
                 for item in output
                 if item is not address
-                and item.detector_type in _GATELM_ADDRESS_FRAGMENT_TYPES
+                and item.detector_type in GATELM_ADDRESS_FRAGMENT_TYPES
                 and item.end <= new_start
                 and 0 <= new_start - item.end <= 2
                 and (item.end == new_start or text[item.end:new_start].isspace())
@@ -452,14 +425,14 @@ def _repair_gatelm_address_boundaries(
             if (
                 candidate.detector_type == "organization_name"
                 and candidate_text.endswith(
-                    _GATELM_ADDRESS_ORGANIZATION_SUFFIX_EXCLUSIONS
+                    GATELM_ADDRESS_ORGANIZATION_SUFFIX_EXCLUSIONS
                 )
             ):
                 continue
             new_start = candidate.start
             break
 
-        match = _GATELM_ADDRESS_ADMIN_SUFFIX_RE.search(text[:new_start])
+        match = GATELM_ADDRESS_ADMIN_SUFFIX_PATTERN.search(text[:new_start])
         if match is not None:
             new_start = min(new_start, match.start("prefix"))
         if new_start >= address.start:
@@ -470,7 +443,7 @@ def _repair_gatelm_address_boundaries(
             for item in output
             if not (
                 item is not address
-                and item.detector_type in _GATELM_ADDRESS_FRAGMENT_TYPES
+                and item.detector_type in GATELM_ADDRESS_FRAGMENT_TYPES
                 and new_start <= item.start
                 and item.end <= address.start
             )

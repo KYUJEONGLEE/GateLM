@@ -208,7 +208,22 @@ Pinned `amoeba04/koelectra-small-v3-privacy-ner` label mapping:
 | `PHN-*` / `phone` / `telephone` | `phone_number` | `redact` |
 | `RRN-*` | `resident_registration_number` | `block` |
 
-The pinned OpenAI label map also excludes person and organization labels. Current `person_name` and `organization_name` results come from `local_rule` backstops, not either ONNX model. When KoELECTRA is configured as an additional detector, the sidecar keeps the primary `model.modelId` as `openai/privacy-filter` and exposes accepted KoELECTRA contributions through sanitized `detections[].source` and `detectorSummary.detectorCategories`.
+Current `gatelm/koelectra-small-v3-pii-ner` v0.1.1 label mapping:
+
+| Model Label | GateLM Detector Type | Action Candidate |
+|---|---|---|
+| `ADDR-*` | `postal_address` | `redact` |
+| `EMA-*` | `email` | `redact` |
+| `ORG-*` | `organization_name` | `redact` |
+| `PER-*` | `person_name` | `redact` |
+| `PHN-*` | `phone_number` | `redact` |
+| `RRN-*` | `resident_registration_number` | `block` |
+
+The pinned OpenAI and `amoeba04` maps exclude person and organization labels. The current GateLM v0.1.1 model supports both. With `PERSON_NAME_MODEL_ONLY=true`, only the local `person_name` backstop is disabled; mandatory secret rules and other configured local detectors remain active. Sanitized model contributions are exposed through `detections[].source` and `detectorSummary.detectorCategories` without raw text, values, or offsets.
+
+Built-in Python detector regexes, model-candidate/action-context rules, and GateLM model boundary-repair patterns are centralized in `apps/ai-service/app/adapters/safety/pii_rule_registry.py`. Gateway P0 detector definitions are centralized in `apps/gateway-core/internal/domain/masking/pii_rule_registry.go`. Entity canonicalization, placeholder reuse, and role-aware redaction remain domain policy rather than tenant-configurable detector rules. Compatibility imports may keep the former Python module path, but new production code must use the centralized registry.
+
+Tenant-defined rules are not an active API, DB, RuntimeSnapshot, or UI capability. The code-level composition seams do not authorize accepting untrusted regular expressions; validation limits, versioning, audit, rollout, and rollback require a separate approved contract.
 
 ## 9. Schema
 
@@ -224,4 +239,4 @@ docs/ai-safety-lab/schemas/detector-sidecar-batch-response.schema.json
 
 The sidecar keeps message boundaries during rules, contextual policy, redaction, and response mapping. It flattens only eligible model windows, executes bounded dynamic ONNX micro-batches, then restores each detection to its original item/window before policy evaluation. Current micro-batch size defaults to 4 and is bounded to 1 through 64 by `AI_SERVICE_AI_SAFETY_MICRO_BATCH_SIZE`.
 
-Model candidate routing is detector-type aware. A configured adapter is invoked only when its accepted label map intersects an uncovered typed candidate. The pinned models do not advertise `person_name` or `organization_name`, so name/organization-only prompts remain rules-only. Message concatenation, skipping the new untrusted user message, full-history rescans on every normal turn, unauthenticated metadata-only safety caching, and raw text/value/offset response fields are forbidden. Stored schema v2 messages may skip repeat inspection only when Chat API has authenticated their safety provenance in AES-GCM AAD and signed the exact completion input.
+Model candidate routing is detector-type aware. A configured adapter is invoked only when its accepted label map intersects an uncovered typed candidate. GateLM v0.1.1 advertises `person_name` and `organization_name`; the older pinned OpenAI and `amoeba04` maps do not. Message concatenation, skipping the new untrusted user message, full-history rescans on every normal turn, unauthenticated metadata-only safety caching, and raw text/value/offset response fields are forbidden. Stored schema v2 messages may skip repeat inspection only when Chat API has authenticated their safety provenance in AES-GCM AAD and signed the exact completion input.

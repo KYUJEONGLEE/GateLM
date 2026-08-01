@@ -121,9 +121,51 @@ class AiSafetyDetectorServiceTests(unittest.TestCase):
                 person_name_model_only=True,
             )
 
-    def test_person_name_model_only_rejects_rule_false_positive(self) -> None:
+    def test_person_name_rules_reject_ambiguous_role_noun(self) -> None:
         prompt = "고객 문의"
-        rule_response = AiSafetyDetectorService(
+        for model_only in (False, True):
+            response = AiSafetyDetectorService(
+                adapter=PrivacyFilterAdapter(
+                    classifier=lambda _text: [],
+                    model_name=GATELM_KOELECTRA_PII_NER_MODEL,
+                    allowed_detector_types=frozenset({"person_name"}),
+                ),
+                ml_allowed_detector_types=("person_name",),
+                person_name_model_only=model_only,
+            ).detect(detect_request(prompt))
+
+            self.assertEqual(response.outcome, "passed")
+            self.assertEqual(response.detector_summary.detector_categories, [])
+
+    def test_person_name_compound_sentences_remain_unmasked(self) -> None:
+        classifier = RecordingBatchClassifier()
+        service = AiSafetyDetectorService(
+            adapter=PrivacyFilterAdapter(
+                classifier=classifier,
+                model_name=GATELM_KOELECTRA_PII_NER_MODEL,
+                allowed_detector_types=frozenset({"person_name"}),
+            ),
+            ml_allowed_detector_types=("person_name",),
+        )
+
+        response = service.detect_batch(
+            batch_request(
+                "이름변경 기능을 설명해 주세요.",
+                "이름표를 새로 만들어 주세요.",
+                "고객센터 연결 방법을 알려 주세요.",
+                "고객문의 내역을 정리해 주세요.",
+                "ㅁㄴㅇㄹㅇㄹ",
+            )
+        )
+
+        self.assertTrue(all(item.outcome == "passed" for item in response.results))
+        self.assertTrue(
+            all(item.detector_summary.detector_categories == [] for item in response.results)
+        )
+
+    def test_person_name_rules_keep_explicit_korean_topic_fields(self) -> None:
+        prompt = "이름은 김민수, 고객명은 이윤지"
+        response = AiSafetyDetectorService(
             adapter=PrivacyFilterAdapter(
                 classifier=lambda _text: [],
                 model_name=GATELM_KOELECTRA_PII_NER_MODEL,
@@ -131,21 +173,27 @@ class AiSafetyDetectorServiceTests(unittest.TestCase):
             ),
             ml_allowed_detector_types=("person_name",),
         ).detect(detect_request(prompt))
-        classifier_inputs: list[str] = []
-        model_only_response = AiSafetyDetectorService(
+
+        self.assertEqual(response.outcome, "redacted")
+        self.assertEqual(response.detector_summary.detector_categories, ["person_name"])
+        self.assertEqual(response.detector_summary.detected_count, 2)
+        self.assertNotIn("김민수", response.redacted_prompt)
+        self.assertNotIn("이윤지", response.redacted_prompt)
+
+    def test_person_name_rules_keep_strong_korean_role_context(self) -> None:
+        prompt = "고객 김민수에게 안내해 주세요."
+        response = AiSafetyDetectorService(
             adapter=PrivacyFilterAdapter(
-                classifier=lambda text: classifier_inputs.append(text) or [],
+                classifier=lambda _text: [],
                 model_name=GATELM_KOELECTRA_PII_NER_MODEL,
                 allowed_detector_types=frozenset({"person_name"}),
             ),
             ml_allowed_detector_types=("person_name",),
-            person_name_model_only=True,
         ).detect(detect_request(prompt))
 
-        self.assertEqual(rule_response.detector_summary.detector_categories, ["person_name"])
-        self.assertEqual(len(classifier_inputs), 1)
-        self.assertEqual(model_only_response.outcome, "passed")
-        self.assertEqual(model_only_response.detector_summary.detector_categories, [])
+        self.assertEqual(response.outcome, "redacted")
+        self.assertEqual(response.detector_summary.detector_categories, ["person_name"])
+        self.assertNotIn("김민수", response.redacted_prompt)
 
     def test_person_name_model_only_keeps_other_rules_and_accepts_model_name(self) -> None:
         prompt = "고객 김민수의 이메일은 person-model-only@example.test 입니다."

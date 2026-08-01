@@ -8,7 +8,19 @@ from dataclasses import dataclass, replace
 from time import perf_counter
 
 from app.adapters.safety import PrivacyFilterAdapter
-from app.adapters.safety.heuristic_evaluator import PromptDetector, default_detectors
+from app.adapters.safety.pii_rule_registry import (
+    ACTION_BLOCK_CONTEXT_PATTERN,
+    ACTION_REDACT_CONTEXT_PATTERN,
+    CHEAP_RULE_DETECTOR_TYPES,
+    ML_TYPED_CANDIDATE_PATTERNS,
+    NEGATED_REAL_DATA_CONTEXT_PATTERN,
+    NON_REAL_ALLOW_DETECTOR_TYPES,
+    NON_REAL_CONTEXT_CHARS,
+    NON_REAL_DATA_CONTEXT_PATTERN,
+    PromptDetector,
+    REAL_DATA_CONTEXT_PATTERN,
+    default_detectors,
+)
 from app.adapters.safety.privacy_filter_adapter import public_model_id_for_model, source_for_model
 from app.domain.safety.detections import (
     DEFAULT_ML_MIN_CONFIDENCE_BY_DETECTOR_ACTION,
@@ -17,7 +29,6 @@ from app.domain.safety.detections import (
     safety_signals_from_detections,
 )
 from app.domain.safety.policy import (
-    BUSINESS_ROLE_LABELS,
     EntityMaskingScope,
     effective_signals,
     preview_redacted_prompt,
@@ -43,174 +54,11 @@ from app.schemas.safety import (
 )
 
 
-FAST_RULE_DETECTOR_TYPES = frozenset(
-    {
-        "account_id",
-        "account_number",
-        "api_key",
-        "authorization_header",
-        "bank_account",
-        "cloud_access_key",
-        "confidential_business_context",
-        "credit_card",
-        "customer_id",
-        "database_url",
-        "date_of_birth",
-        "driver_license",
-        "email",
-        "employee_id",
-        "github_token",
-        "ip_address",
-        "jwt",
-        "organization_name",
-        "passport_number",
-        "password_assignment",
-        "phone_number",
-        "postal_address",
-        "private_date",
-        "private_key",
-        "private_url",
-        "provider_api_key",
-        "resident_registration_number",
-        "secret",
-        "sensitive_health_context",
-        "session_cookie",
-        "slack_token",
-        "webhook_url",
-    }
-)
-CHEAP_RULE_DETECTOR_TYPES = FAST_RULE_DETECTOR_TYPES | {"person_name"}
 ML_WINDOW_CONTEXT_CHARS = 240
 ML_WINDOW_MAX_CHARS = ML_WINDOW_CONTEXT_CHARS * 2
 ML_MAX_CANDIDATES_PER_REQUEST = 128
 ML_MAX_WINDOWS_PER_REQUEST = 64
 ML_WORK_LIMIT_ERROR = "AI safety model work limit exceeded."
-TITLE_CASE_PERSON_CANDIDATE_PATTERN = re.compile(
-    r"(?<![A-Za-z])"
-    r"[A-Z][a-z]{1,24}(?:\s+[A-Z][a-z]{1,24}){1,2}"
-    r"(?![A-Za-z])"
-)
-KOREAN_PERSON_CANDIDATE_PATTERN = re.compile(
-    r"[\uac00-\ud7a3]{2,4}"
-    r"(?:\ub2d8|\uc528|\uc5d0\uac8c|\uaed8|\uc740|\ub294|\uc774|\uac00|\uc744|\ub97c|\uc758)"
-)
-CONTEXT_LABEL_PREFIX_BOUNDARY = r"(?<![A-Za-z0-9_\uac00-\ud7a3])"
-CONTEXT_LABEL_SUFFIX_BOUNDARY = r"(?=$|[\s\"')\]}>,;:.!?]|[\uac00-\ud7a3])"
-ROLE_CONTEXT_PATTERN = re.compile(
-    "|".join(
-        CONTEXT_LABEL_PREFIX_BOUNDARY
-        + re.escape(role).replace(r"\ ", r"\s+")
-        + CONTEXT_LABEL_SUFFIX_BOUNDARY
-        for role in sorted(BUSINESS_ROLE_LABELS, key=len, reverse=True)
-    ),
-    re.IGNORECASE,
-)
-ML_TYPED_CANDIDATE_PATTERNS = (
-    (frozenset({"account_number"}), re.compile(r"\baccount(?:[_ -]?number)?\b", re.IGNORECASE)),
-    (frozenset({"postal_address"}), re.compile(r"\b(?:address|postal|shipping)\b", re.IGNORECASE)),
-    (frozenset({"private_date"}), re.compile(r"\b(?:birthday|date|dob)\b", re.IGNORECASE)),
-    (frozenset({"private_url"}), re.compile(r"\burl\b", re.IGNORECASE)),
-    (frozenset({"secret"}), re.compile(r"\bsecret\b", re.IGNORECASE)),
-    (
-        frozenset({"resident_registration_number"}),
-        re.compile(r"\bresident(?:[_ -]?registration)?(?:[_ -]?number)?\b", re.IGNORECASE),
-    ),
-    (frozenset({"email"}), re.compile(r"\b(?:email|e-mail)\b", re.IGNORECASE)),
-    (frozenset({"phone_number"}), re.compile(r"\b(?:phone|telephone|mobile)\b", re.IGNORECASE)),
-    (
-        frozenset({"organization_name"}),
-        re.compile(r"\b(?:company|employer|organization|organisation)\b", re.IGNORECASE),
-    ),
-    (
-        frozenset({"person_name"}),
-        re.compile(r"\b(?:applicant|candidate|doctor|interviewer|manager|name|patient)\b", re.IGNORECASE),
-    ),
-    (frozenset({"person_name"}), ROLE_CONTEXT_PATTERN),
-    (frozenset({"person_name"}), TITLE_CASE_PERSON_CANDIDATE_PATTERN),
-    (frozenset({"person_name"}), KOREAN_PERSON_CANDIDATE_PATTERN),
-)
-NON_REAL_CONTEXT_CHARS = 80
-NON_REAL_ALLOW_DETECTOR_TYPES = frozenset(
-    {
-        "account_id",
-        "account_number",
-        "api_key",
-        "authorization_header",
-        "bank_account",
-        "cloud_access_key",
-        "confidential_business_context",
-        "credit_card",
-        "customer_id",
-        "database_url",
-        "date_of_birth",
-        "driver_license",
-        "email",
-        "employee_id",
-        "github_token",
-        "ip_address",
-        "jwt",
-        "organization_name",
-        "passport_number",
-        "password_assignment",
-        "person_name",
-        "phone_number",
-        "postal_address",
-        "private_date",
-        "private_key",
-        "private_url",
-        "provider_api_key",
-        "resident_registration_number",
-        "secret",
-        "sensitive_health_context",
-        "session_cookie",
-        "slack_token",
-        "webhook_url",
-    }
-)
-NON_REAL_DATA_CONTEXT_PATTERN = re.compile(
-    r"(?<![@.])\b(?:example|sample|dummy|mock|fake|placeholder|fixture|template|"
-    r"format(?:\s+only|\s+example)?|docs?|documentation|catalog|training|"
-    r"synthetic|non[-\s]?real|unit\s+test)\b(?!\.[A-Za-z])|"
-    r"(?:\uc608\uc2dc|\uc0d8\ud50c\s*(?:\uac12|\ub370\uc774\ud130|\ubb38\uc11c|\uce74\ud0c8\ub85c\uadf8|\uc608\uc2dc)|\ub354\ubbf8|\uac00\uc9dc|"
-    r"\ud50c\ub808\uc774\uc2a4\ud640\ub354|\ubb38\uc11c|\ubb38\uc11c\ud654|"
-    r"\ud15c\ud50c\ub9bf|\ud615\uc2dd|\ud3ec\ub9f7|\uad50\uc721\uc790\ub8cc|"
-    r"\ud14c\uc2a4\ud2b8\uc6a9|\uc720\ub2db\s*\ud14c\uc2a4\ud2b8)",
-    re.IGNORECASE,
-)
-REAL_DATA_CONTEXT_PATTERN = re.compile(
-    r"(?<!non-)(?<!non\s)\b(?:real|actual|production|prod|live|raw|unmasked|external|"
-    r"customer\s+data|user\s+data)\b|"
-    r"(?:\uc2e4\uc81c|\uc6b4\uc601|\ud504\ub85c\ub355\uc158|\uc6d0\ubcf8|"
-    r"\ubbf8\ub9c8\uc2a4\ud0b9|\uc678\ubd80|\ubc18\ucd9c)",
-    re.IGNORECASE,
-)
-NEGATED_REAL_DATA_CONTEXT_PATTERN = re.compile(
-    r"\b(?:no|not|without)\s+"
-    r"(?:real|actual|production|prod|live|raw|unmasked|customer\s+data|user\s+data)"
-    r"(?:\s+(?:data|value|values|exposure|record|records))?\b|"
-    r"\bnon[-\s](?:real|production|prod|live)\b|"
-    r"(?:\uc2e4\uc81c\s*\ub370\uc774\ud130\s*\uc5c6|\uc6b4\uc601\s*\ub370\uc774\ud130\s*\uc5c6|"
-    r"\uac00\uc9dc\s*\ub370\uc774\ud130|\ube44\uc2e4\s*\ub370\uc774\ud130)",
-    re.IGNORECASE,
-)
-ACTION_BLOCK_CONTEXT_PATTERN = re.compile(
-    r"\b(?:external(?:ly)?|external\s+share|share\s+externally|outside|"
-    r"third[-\s]?party|contractor|bulk\s+export|export|download|"
-    r"unauthorized|copy|incident|paste|exfiltrat(?:e|ion))\b|"
-    r"(?:\uc678\ubd80|\ubc18\ucd9c|\uc720\ucd9c|\ub300\ub7c9|\ub0b4\ubcf4\ub0b4\uae30|"
-    r"\ubb34\ub2e8|\ubd99\uc5ec\ub123|\uc0ac\uace0|\ubcf4\uc548\s*\uc0ac\uace0)",
-    re.IGNORECASE,
-)
-ACTION_REDACT_CONTEXT_PATTERN = re.compile(
-    r"\b(?:support|legal\s+review|hr\s+record|hr|analytics|"
-    r"minimi[sz]e|data\s+minimi[sz]ation|policy\s+review|ops\s+note|"
-    r"internal\s+review|review\s+note|redact|mask(?:ed|ing)?|"
-    r"pseudonymi[sz]e)\b|"
-    r"(?:\ub0b4\ubd80|\uac80\ud1a0|\uc815\ucc45|\ub9c8\uc2a4\ud0b9|"
-    r"\ube44\uc2dd\ubcc4|\ucd5c\uc18c\ud654|\ubc95\ubb34|\uc778\uc0ac|"
-    r"\uc0c1\ub2f4|\uc9c0\uc6d0)",
-    re.IGNORECASE,
-)
 MICRO_BATCH_SIZE_ENV = "AI_SERVICE_AI_SAFETY_MICRO_BATCH_SIZE"
 
 

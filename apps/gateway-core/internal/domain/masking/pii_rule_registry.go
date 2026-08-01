@@ -32,7 +32,19 @@ func NewRegistry(detectors ...Detector) Registry {
 }
 
 func NewP0Registry() Registry {
-	return NewRegistry(
+	return NewP0RegistryWithAdditional()
+}
+
+// NewP0RegistryWithAdditional is the code-level extension seam for validated
+// rules. A future tenant-facing rule API still requires an explicit contract,
+// validation limits, and RuntimeSnapshot transport before it can call this.
+func NewP0RegistryWithAdditional(additional ...Detector) Registry {
+	detectors := append(builtinP0Detectors(), additional...)
+	return NewRegistry(detectors...)
+}
+
+func builtinP0Detectors() []Detector {
+	return []Detector{
 		NewRegexDetector(string(DetectorPrivateKey), `(?s)-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----`, 5),
 		NewRegexDetector(string(DetectorAPIKey), `(?i)\b(?:api[_-]?key|secret|token|access[_-]?key|client[_-]?secret)\s*[:=]\s*['"]?[A-Za-z0-9_.-]{20,}`, 10),
 		NewRegexDetector(string(DetectorAuthorizationHeader), `(?i)\b(?:authorization|proxy-authorization)\s*:\s*(?:bearer|basic)\s+[A-Za-z0-9._~+/\-=]{8,}`, 11),
@@ -40,13 +52,14 @@ func NewP0Registry() Registry {
 		NewRegexDetector(string(DetectorResidentRegistrationNumber), `\b\d{6}[-\s]?[1-8]\d{6}\b`, 20),
 		NewCaptureRegexDetector(string(DetectorPersonName), `(?i:\b(?:name|customer[_ -]?name|contact[_ -]?name|manager|agent[_ -]?name|doctor[_ -]?name|patient[_ -]?name|applicant[_ -]?name|candidate[_ -]?name|interviewer[_ -]?name))\s*[:=]\s*['"]?([A-Z][A-Za-z'-]*(?:\s+[A-Z][A-Za-z'-]*){0,2})`, 1, 31),
 		NewCaptureRegexDetector(string(DetectorPersonName), `(?i:\b(?:customer|agent|support agent|doctor|physician|patient|applicant|candidate|interviewer))\s+([A-Z][A-Za-z'-]*(?:\s+[A-Z][A-Za-z'-]*){0,2})`, 1, 32),
-		NewCaptureRegexDetector(string(DetectorPersonName), `(?:\x{ACE0}\x{AC1D}|\x{ACE0}\x{AC1D}\x{BA85}|\x{C0C1}\x{B2F4}\x{C6D0}|\x{C0C1}\x{B2F4}\x{C0AC}|\x{B2F4}\x{B2F9}\s*\x{C758}\x{C0AC}|\x{C758}\x{C0AC}|\x{C8FC}\x{CE58}\x{C758}|\x{D658}\x{C790}|\x{C9C0}\x{C6D0}\x{C790}|\x{BA74}\x{C811}\x{AD00})\s+([\x{AC00}-\x{D7A3}]{2,3}?)(?:\x{C5D0}\x{AC8C}|[\x{C774}\x{AC00}\x{C740}\x{B294}\x{C744}\x{B97C}]|[\s,.]|$)`, 1, 33),
+		NewCaptureRegexDetector(string(DetectorPersonName), `(?:이름|성명|고객명|담당자명|환자명|지원자명|면접관명)\s*(?::|=|(?:은|는)\s+)\s*['"]?([\x{AC00}-\x{D7A3}]{2,5})`, 1, 33),
+		NewCaptureRegexDetector(string(DetectorPersonName), `(?:고객|상담원|상담사|담당\s*의사|의사|주치의|환자|지원자|면접관)\s+([\x{AC00}-\x{D7A3}]{2,5}?)(?:님|씨|에게|께|의)`, 1, 34),
 		NewMultiCaptureRegexDetector(string(DetectorPersonName), `([\x{AC00}-\x{D7A3}]{2,4})\x{C758}\s*`+relationshipRolePattern()+`\s+([\x{AC00}-\x{D7A3}]{2,4})(?:[\x{C774}\x{AC00}\x{C740}\x{B294}\x{C744}\x{B97C}]|[\s,.]|$)`, []int{1, 2}, 34),
 		NewCaptureRegexDetector(string(DetectorPostalAddress), `(?i)\b(?:address|shipping[_ -]?address|postal[_ -]?address)\s*[:=]\s*['"]?([0-9]{1,6}\s+[A-Za-z0-9 .'-]{2,60}\s+(?:Street|St\.|Road|Rd\.|Avenue|Ave\.|Boulevard|Blvd\.|Drive|Dr\.|Lane|Ln\.|Way))`, 1, 35),
 		NewCaptureRegexDetector(string(DetectorOrganizationName), `(?i)\b(?:organization|organization[_ -]?name|company|company[_ -]?name|org)\s*[:=]\s*['"]?([A-Z][A-Za-z0-9&.'-]*(?:\s+[A-Za-z0-9&.'-]+){0,4})`, 1, 36),
 		NewRegexDetector(string(DetectorPhoneNumber), `\b(?:\+82[-.\s]?)?(?:0?1[016789])[-.\s]?\d{3,4}[-.\s]?\d{4}\b`, 40),
 		NewRegexDetector(string(DetectorEmail), `(?i)\b[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}\b`, 50),
-	)
+	}
 }
 
 func NewP0RegistryWithoutPersonName() Registry {
