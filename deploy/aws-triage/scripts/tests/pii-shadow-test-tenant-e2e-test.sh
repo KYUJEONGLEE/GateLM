@@ -23,6 +23,12 @@ grep -Fq -- '--verified-clean-source' "${SCRIPT_PATH}"
 grep -Fq -- '--requests 1000' "${SCRIPT_PATH}"
 grep -Fq -- '--sample-basis-points 500' "${SCRIPT_PATH}"
 grep -Fq 'GATELM_DEMO_TENANT_ID' "${SCRIPT_PATH}"
+grep -Fq 'docker create "${client_image}" /pii-shadow-e2e-client' "${SCRIPT_PATH}"
+grep -Fq 'docker cp' "${SCRIPT_PATH}"
+if grep -Fq -- '--output' "${SCRIPT_PATH}"; then
+  echo 'PII Shadow validation runner must support the host legacy Docker builder.' >&2
+  exit 1
+fi
 grep -Fq 'FROM scratch' "${DOCKERFILE_PATH}"
 
 if grep -Eq 'docker compose|systemctl|aws ec2|aws s3|--publish|^[[:space:]]+-p([[:space:]]|$)' "${SCRIPT_PATH}"; then

@@ -53,7 +53,13 @@ observed_model_sha="$(sha256sum "${model_dir}/model.onnx" | awk '{print $1}')"
 
 scratch_dir="$(mktemp -d)"
 validation_image="gatelm/pii-shadow-e2e-validation:${expected_source_sha:0:12}"
+client_image="gatelm/pii-shadow-e2e-client:${expected_source_sha:0:12}"
+client_container=""
 cleanup() {
+  if [[ -n "${client_container}" ]]; then
+    docker rm --force "${client_container}" >/dev/null 2>&1 || true
+  fi
+  docker image rm --force "${client_image}" >/dev/null 2>&1 || true
   docker image rm --force "${validation_image}" >/dev/null 2>&1 || true
   rm -rf -- "${scratch_dir}"
 }
@@ -74,11 +80,20 @@ mkdir -p "${scratch_dir}/client" "${scratch_dir}/evidence"
 if ! docker build \
   --quiet \
   --file "${source_dir}/infra/docker/pii-shadow-e2e-client.Dockerfile" \
-  --output "type=local,dest=${scratch_dir}/client" \
+  --tag "${client_image}" \
   "${source_dir}" \
   >"${scratch_dir}/gateway-client-build.log" 2>&1; then
   fail
 fi
+client_container="$(docker create "${client_image}" /pii-shadow-e2e-client)"
+if ! docker cp \
+  "${client_container}:/pii-shadow-e2e-client" \
+  "${scratch_dir}/client/pii-shadow-e2e-client" \
+  >/dev/null 2>&1; then
+  fail
+fi
+docker rm "${client_container}" >/dev/null
+client_container=""
 [[ -x "${scratch_dir}/client/pii-shadow-e2e-client" ]] || fail
 
 export PII_SHADOW_TEST_TENANT_ID="${test_tenant_id}"
