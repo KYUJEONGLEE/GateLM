@@ -199,9 +199,12 @@ def render_candidate_env(runtime_model_path: str) -> str:
         "AI_SERVICE_AI_SAFETY_DETECTOR_RUNTIME": "onnx",
         "AI_SERVICE_AI_SAFETY_PRELOAD_ENABLED": "true",
         "AI_SERVICE_AI_SAFETY_MICRO_BATCH_SIZE": "1",
-        "AI_SERVICE_AI_SAFETY_MAX_CONCURRENT": "1",
+        "AI_SERVICE_AI_SAFETY_MAX_CONCURRENT": "2",
         "AI_SERVICE_AI_SAFETY_MAX_PENDING": "4",
         "AI_SERVICE_AI_SAFETY_WAIT_TIMEOUT_MS": "50",
+        "AI_SERVICE_ONNX_INTRA_OP_THREADS": "2",
+        "AI_SERVICE_ONNX_INTER_OP_THREADS": "1",
+        "AI_SERVICE_ONNX_ALLOW_SPINNING": "false",
         "AI_SERVICE_AI_SAFETY_ML_ALLOWED_DETECTOR_TYPES": ",".join(TARGET_TYPES),
         "AI_SERVICE_AI_SAFETY_ML_DETECTOR_THRESHOLDS": ",".join(
             f"{detector_type}={threshold:.2f}"

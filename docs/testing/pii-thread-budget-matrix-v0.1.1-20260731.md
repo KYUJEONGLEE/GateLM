@@ -7,11 +7,11 @@
 33.571% 증가했고, 사용한 CPU를 고려한 처리 효율도 17.982% 증가했다.
 3,000건 모두 추론 오류와 출력 불일치가 없었다.
 
-그러나 운영 기본값은 1×4로 유지한다. 2×2는 direct p99가 49.772ms에서
-81.883ms로 64.516% 증가했고, bounded HTTP burst의 성공 p99도
-167.001ms에서 278.034ms로 증가했다. 현재 임시 Gateway timeout 300ms와의
-여유가 작고 실제 Linux, Uvicorn socket, Gateway 경로를 측정하지 않았으므로
-이번 결과만으로 production 설정을 변경하지 않는다.
+이 측정만으로는 운영 기본값을 바꾸지 않았지만, 2026-08-01 실제 4-vCPU
+Linux PII host에서 같은 v0.1.1 artifact를 aggregate-only direct 방식으로
+추가 확인한 뒤 고정 AWS profile을 2×2로 선택했다. 이 결정은 Uvicorn socket,
+Gateway 경로와 Shadow 부하까지 검증했다는 뜻이 아니며, 임시 Gateway timeout
+300ms에 대한 end-to-end 여유도 후속 검증으로 남긴다.
 
 ## 2. 검증 대상과 조건
 
@@ -82,8 +82,10 @@ process-local 대기를 포함하기 때문이다.
 
 ## 5. 적용 결정
 
-1. 현재 운영 기본값 active 1, intra-op 4를 유지한다.
-2. active 2, intra-op 2는 목표 4-vCPU Linux 재검증 후보로만 기록한다.
+1. 2026-08-01 후속 direct 검증을 반영해 고정 4-vCPU AWS profile은
+   active 2, intra-op 2를 사용한다.
+2. 일반 local과 Self-host 기본값은 CPU 예산이 고정되지 않으므로 active 1을
+   유지한다.
 3. 목표 환경에서는 Uvicorn socket과 실제 Gateway를 포함해 p95, p99,
    timeout, queued success, sanitized 503, fail-closed 결과를 함께 측정한다.
 4. 300ms timeout을 유지할 경우 network 여유까지 포함한 별도 기준을 먼저
@@ -91,9 +93,26 @@ process-local 대기를 포함하기 때문이다.
 5. worker 또는 replica를 늘리는 검증은 process-local active/pending 한도가
    곱해진다는 점을 포함해 별도 수행한다.
 
+### 5.1 2026-08-01 실제 4-vCPU Linux direct 확인
+
+운영 중인 두 PII replica 가운데 한 대에서 서비스 설정과 container를
+재시작하지 않고, 동일한 v0.1.1 artifact를 별도 process로 실행했다. 각 조합은
+1,000건씩 3회 교차 실행했고 총 9,000건에서 오류와 출력 불일치는 0건이었다.
+
+| 조합 | RPS 중앙값 | p99 중앙값 | CPU 사용률 중앙값 | 사용 CPU당 RPS |
+|---:|---:|---:|---:|---:|
+| 1×4 | 392.832 | 3.041ms | 48.793% | 200.399 |
+| 2×2 | 836.061 | 2.898ms | 67.300% | 310.377 |
+| 4×1 | 1,359.220 | 5.161ms | 91.693% | 372.172 |
+
+4×1이 direct 처리량은 가장 높았지만 CPU 사용률이 91.693%라 운영 여유가
+작았다. 2×2는 1×4보다 처리량이 높고 세 조합 중 p99가 가장 낮아 고정
+4-vCPU profile의 균형점으로 선택했다. 합성 단문 direct 결과이므로 FastAPI,
+Regex, network, 대기열과 Gateway 전체 처리량을 나타내지는 않는다.
+
 ## 6. 한계
 
-- Windows process affinity 4는 AWS 4-vCPU Linux quota와 같지 않다.
+- 초기 Windows process affinity 4는 AWS 4-vCPU Linux quota와 같지 않으며, 후속 AWS 확인도 direct 추론만 포함한다.
 - HTTP 비교는 profile별 한 번의 20-wave 실행이며, 운영 RPS 측정이 아니다.
 - HTTP transport는 실제 socket이 아닌 in-process ASGI다.
 - 실제 Gateway timeout, fail-closed 응답, Provider 미실행은 포함하지 않았다.

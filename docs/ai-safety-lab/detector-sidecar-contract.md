@@ -165,6 +165,12 @@ Error responses are sanitized.
 
 Each route returns its own contract version in the same envelope: `ai-safety-detector.v1` for single detection and `ai-safety-detector-batch.v1` for batch detection. Active inference is process-local and defaults to `1`. At most `4` additional requests wait for at most `50ms`; a newly arrived request is rejected immediately when the pending bound is full, and an expired wait returns the same HTTP 503, `code=sidecar_unavailable`, `retryable=true` envelope. A `0` pending bound or `0ms` wait preserves immediate rejection. Cancellation removes the waiter, and workers or replicas multiply both process-local bounds.
 
+The fixed 4-vCPU AWS PII deployment profile explicitly overrides the generic
+default with active inference `2` and ONNX intra-op threads `2`. The pending
+bound `4`, wait `50ms`, inter-op `1`, and spinning-disabled settings remain
+unchanged. This profile selection does not change the response schema or the
+sanitized overload envelope.
+
 Error responses must not echo prompt text, rejected values, stack traces containing input, raw model output, raw headers, or credential material.
 
 ## 7. Failure Behavior Candidate

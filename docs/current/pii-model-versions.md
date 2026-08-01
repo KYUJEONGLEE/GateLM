@@ -52,7 +52,7 @@
 
 위 파일의 `v314`, `v3.14` 표기는 2026-07-21에 생성된 증거와 배포 식별자의 일부이므로 고치거나 이름을 바꾸지 않는다. 현재 문서에서는 동일한 ONNX SHA-256을 `v0.1.1`로 부른다.
 
-동시성 evidence는 local 검증이며 `origin/dev` 병합이나 production 승격 근거가 아니다. 2×2는 후속 후보일 뿐이고, 목표 4-vCPU Linux와 실제 network 경로에서 다시 검증해야 한다.
+동시성 evidence와 2026-08-01 실제 4-vCPU Linux host의 aggregate-only direct 재검증에 따라 PR #564의 고정 AWS PII profile은 active 2/intra-op 2를 선택했다. 이 선택은 `origin/dev` 병합, production 배포 또는 network/Gateway E2E 완료를 뜻하지 않는다.
 
 ## 2. First-pass Historical Aliases
 
