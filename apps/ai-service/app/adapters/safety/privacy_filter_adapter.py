@@ -47,6 +47,7 @@ MODEL_WARMUP_TEXT = "GateLM synthetic PII detector warmup."
 ONNX_INTRA_OP_THREADS_ENV = "AI_SERVICE_ONNX_INTRA_OP_THREADS"
 ONNX_INTER_OP_THREADS_ENV = "AI_SERVICE_ONNX_INTER_OP_THREADS"
 ONNX_ALLOW_SPINNING_ENV = "AI_SERVICE_ONNX_ALLOW_SPINNING"
+_ONNX_SESSION_OPTIONS_UNSET = object()
 
 OPENAI_PRIVACY_FILTER_LABEL_MAP: Mapping[str, str] = {
     "account_number": "account_number",
@@ -168,6 +169,9 @@ class PrivacyFilterAdapter:
         aggregation_strategy: str | None = None,
         runtime: str = PRIVACY_FILTER_RUNTIME_ONNX,
         allowed_detector_types: frozenset[str] | None = None,
+        onnx_intra_op_threads: int | None = None,
+        onnx_inter_op_threads: int | None = None,
+        onnx_allow_spinning: bool | None = None,
     ) -> None:
         self._lock = threading.Lock()
         self._classifier = classifier
@@ -194,6 +198,9 @@ class PrivacyFilterAdapter:
         )
         self.aggregation_strategy = aggregation_strategy or aggregation_strategy_for_model(model_name)
         self.runtime = runtime_for_value(runtime)
+        self.onnx_intra_op_threads = onnx_intra_op_threads
+        self.onnx_inter_op_threads = onnx_inter_op_threads
+        self.onnx_allow_spinning = onnx_allow_spinning
 
     def detect(self, text: str) -> list[Detection]:
         if text == "":
@@ -318,12 +325,25 @@ class PrivacyFilterAdapter:
         )
 
     def _load_onnx_classifier(self) -> Callable[[str], object]:
+        session_options = _onnx_session_options(
+            intra_op_threads=self.onnx_intra_op_threads,
+            inter_op_threads=self.onnx_inter_op_threads,
+            allow_spinning=self.onnx_allow_spinning,
+        )
         model_dir = _local_openai_privacy_filter_onnx_dir(self.model_name)
         if model_dir is not None:
-            return _OpenAIPrivacyFilterOnnxClassifier(model_dir)
+            if session_options is None:
+                return _OpenAIPrivacyFilterOnnxClassifier(model_dir)
+            return _OpenAIPrivacyFilterOnnxClassifier(
+                model_dir, session_options=session_options
+            )
         model_dir = _local_koelectra_privacy_ner_onnx_dir(self.model_name)
         if model_dir is not None:
-            return _KoElectraPrivacyNerOnnxClassifier(model_dir)
+            if session_options is None:
+                return _KoElectraPrivacyNerOnnxClassifier(model_dir)
+            return _KoElectraPrivacyNerOnnxClassifier(
+                model_dir, session_options=session_options
+            )
 
         try:
             from optimum.onnxruntime import ORTModelForTokenClassification
@@ -336,7 +356,6 @@ class PrivacyFilterAdapter:
 
         tokenizer = AutoTokenizer.from_pretrained(self.model_name)
         model_kwargs: dict[str, object] = {}
-        session_options = _onnx_session_options()
         if session_options is not None:
             model_kwargs["session_options"] = session_options
         model = ORTModelForTokenClassification.from_pretrained(self.model_name, **model_kwargs)
@@ -464,9 +483,19 @@ def _repair_gatelm_address_boundaries(
 
 
 class _OpenAIPrivacyFilterOnnxClassifier:
-    def __init__(self, model_dir: Path) -> None:
+    def __init__(
+        self,
+        model_dir: Path,
+        *,
+        session_options: Any = _ONNX_SESSION_OPTIONS_UNSET,
+    ) -> None:
         self.model_dir = model_dir
         self._session: Any | None = None
+        self._session_options = (
+            _onnx_session_options()
+            if session_options is _ONNX_SESSION_OPTIONS_UNSET
+            else session_options
+        )
         self._tokenizer: Any | None = None
         config = json.loads((model_dir / "config.json").read_text(encoding="utf-8"))
         self._id_to_label = {int(index): str(label) for index, label in config["id2label"].items()}
@@ -537,7 +566,7 @@ class _OpenAIPrivacyFilterOnnxClassifier:
             session_kwargs: dict[str, object] = {
                 "providers": ["CPUExecutionProvider"],
             }
-            session_options = _onnx_session_options()
+            session_options = self._session_options
             if session_options is not None:
                 session_kwargs["sess_options"] = session_options
             session = ort.InferenceSession(
@@ -565,9 +594,19 @@ class _KoElectraPrivacyNerOnnxClassifier:
     # Keep item boundaries in one HTTP request while running this adapter one by one.
     max_safe_batch_size = 1
 
-    def __init__(self, model_dir: Path) -> None:
+    def __init__(
+        self,
+        model_dir: Path,
+        *,
+        session_options: Any = _ONNX_SESSION_OPTIONS_UNSET,
+    ) -> None:
         self.model_dir = model_dir
         self._session: Any | None = None
+        self._session_options = (
+            _onnx_session_options()
+            if session_options is _ONNX_SESSION_OPTIONS_UNSET
+            else session_options
+        )
         self._tokenizer: Any | None = None
         config = json.loads((model_dir / "config.json").read_text(encoding="utf-8"))
         self._id_to_label = {int(index): str(label) for index, label in config["id2label"].items()}
@@ -632,7 +671,7 @@ class _KoElectraPrivacyNerOnnxClassifier:
             except ImportError as exc:
                 raise RuntimeError("KoELECTRA privacy NER ONNX runtime requires onnxruntime.") from exc
             session_kwargs: dict[str, object] = {"providers": ["CPUExecutionProvider"]}
-            session_options = _onnx_session_options()
+            session_options = self._session_options
             if session_options is not None:
                 session_kwargs["sess_options"] = session_options
             session = ort.InferenceSession(str(self.model_dir / "model.onnx"), **session_kwargs)
@@ -961,12 +1000,24 @@ def _strip_bio_suffix(label: str) -> str:
     return label
 
 
-def _onnx_session_options() -> Any | None:
-    intra_op_threads = _positive_env_int(ONNX_INTRA_OP_THREADS_ENV)
-    inter_op_threads = _positive_env_int(ONNX_INTER_OP_THREADS_ENV)
-    allow_spinning = _optional_env_bool(ONNX_ALLOW_SPINNING_ENV)
+def _onnx_session_options(
+    *,
+    intra_op_threads: int | None = None,
+    inter_op_threads: int | None = None,
+    allow_spinning: bool | None = None,
+) -> Any | None:
+    if intra_op_threads is None:
+        intra_op_threads = _positive_env_int(ONNX_INTRA_OP_THREADS_ENV)
+    if inter_op_threads is None:
+        inter_op_threads = _positive_env_int(ONNX_INTER_OP_THREADS_ENV)
+    if allow_spinning is None:
+        allow_spinning = _optional_env_bool(ONNX_ALLOW_SPINNING_ENV)
     if intra_op_threads is None and inter_op_threads is None and allow_spinning is None:
         return None
+    if intra_op_threads is not None and not 1 <= intra_op_threads <= 256:
+        raise ValueError("ONNX intra-op threads must be between 1 and 256.")
+    if inter_op_threads is not None and not 1 <= inter_op_threads <= 256:
+        raise ValueError("ONNX inter-op threads must be between 1 and 256.")
 
     try:
         import onnxruntime as ort

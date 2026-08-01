@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 import os
+import re
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -21,6 +22,9 @@ AI_SAFETY_DETECTOR_RUNTIMES = {
     AI_SAFETY_DETECTOR_RUNTIME_TRANSFORMERS,
     AI_SAFETY_DETECTOR_RUNTIME_ONNX,
 }
+PII_SHADOW_CANDIDATE_VERSION_PATTERN = re.compile(
+    r"^v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$"
+)
 RAG_TOKENIZER_MODEL = "text-embedding-3-large"
 RAG_TOKENIZER_ENCODING = "cl100k_base"
 PRODUCTION_LIKE_DEPLOYMENT_MODES = {
@@ -66,6 +70,16 @@ class Settings:
     ai_safety_max_concurrent: int = 1
     ai_safety_max_pending: int = 4
     ai_safety_wait_timeout_ms: int = 50
+    pii_shadow_enabled: bool = False
+    pii_shadow_candidate_model_id: str = ""
+    pii_shadow_candidate_version: str = ""
+    pii_shadow_max_items: int = 5_000
+    pii_shadow_max_bytes: int = 10 * 1024 * 1024
+    pii_shadow_ttl_seconds: int = 12 * 60 * 60
+    pii_shadow_timezone: str = "Asia/Seoul"
+    pii_shadow_window_start_hour: int = 2
+    pii_shadow_window_end_hour: int = 5
+    pii_shadow_poll_interval_ms: int = 250
     deployment_mode: str = "local"
     rag_enabled: bool = False
     rag_service_token: str = field(default="", repr=False)
@@ -143,6 +157,48 @@ def load_settings() -> Settings:
             "AI_SERVICE_AI_SAFETY_WAIT_TIMEOUT_MS",
             50,
             allow_zero=True,
+        ),
+        pii_shadow_enabled=_env_strict_bool(
+            "AI_SERVICE_PII_SHADOW_ENABLED",
+            False,
+        ),
+        pii_shadow_candidate_model_id=_env_string(
+            "AI_SERVICE_PII_SHADOW_CANDIDATE_MODEL_ID",
+            "",
+        ).strip(),
+        pii_shadow_candidate_version=_env_string(
+            "AI_SERVICE_PII_SHADOW_CANDIDATE_VERSION",
+            "",
+        ).strip(),
+        pii_shadow_max_items=_env_strict_int(
+            "AI_SERVICE_PII_SHADOW_MAX_ITEMS",
+            5_000,
+        ),
+        pii_shadow_max_bytes=_env_strict_int(
+            "AI_SERVICE_PII_SHADOW_MAX_BYTES",
+            10 * 1024 * 1024,
+        ),
+        pii_shadow_ttl_seconds=_env_strict_int(
+            "AI_SERVICE_PII_SHADOW_TTL_SECONDS",
+            12 * 60 * 60,
+        ),
+        pii_shadow_timezone=_env_string(
+            "AI_SERVICE_PII_SHADOW_TIMEZONE",
+            "Asia/Seoul",
+        ).strip(),
+        pii_shadow_window_start_hour=_env_strict_int(
+            "AI_SERVICE_PII_SHADOW_WINDOW_START_HOUR",
+            2,
+            allow_zero=True,
+        ),
+        pii_shadow_window_end_hour=_env_strict_int(
+            "AI_SERVICE_PII_SHADOW_WINDOW_END_HOUR",
+            5,
+            allow_zero=True,
+        ),
+        pii_shadow_poll_interval_ms=_env_strict_int(
+            "AI_SERVICE_PII_SHADOW_POLL_INTERVAL_MS",
+            250,
         ),
         deployment_mode=_env_string("DEPLOYMENT_MODE", "local").strip().lower(),
         rag_enabled=_env_strict_bool("TENANT_CHAT_RAG_ENABLED", False),
@@ -258,6 +314,32 @@ def _validate_ai_safety_settings(settings: Settings) -> None:
         raise ValueError(
             "AI_SERVICE_AI_SAFETY_WAIT_TIMEOUT_MS must be between 0 and 1000"
         )
+    if settings.pii_shadow_candidate_version and not (
+        PII_SHADOW_CANDIDATE_VERSION_PATTERN.fullmatch(
+            settings.pii_shadow_candidate_version
+        )
+    ):
+        raise ValueError("AI_SERVICE_PII_SHADOW_CANDIDATE_VERSION must be SemVer")
+    if settings.pii_shadow_enabled and not settings.pii_shadow_candidate_version:
+        raise ValueError("PII Shadow requires a candidate version")
+    if not 1 <= settings.pii_shadow_max_items <= 5_000:
+        raise ValueError("AI_SERVICE_PII_SHADOW_MAX_ITEMS must be between 1 and 5000")
+    if not 1 <= settings.pii_shadow_max_bytes <= 10 * 1024 * 1024:
+        raise ValueError("AI_SERVICE_PII_SHADOW_MAX_BYTES must be between 1 and 10485760")
+    if not 1 <= settings.pii_shadow_ttl_seconds <= 12 * 60 * 60:
+        raise ValueError("AI_SERVICE_PII_SHADOW_TTL_SECONDS must be between 1 and 43200")
+    if not 0 <= settings.pii_shadow_window_start_hour <= 23:
+        raise ValueError("AI_SERVICE_PII_SHADOW_WINDOW_START_HOUR must be between 0 and 23")
+    if not 0 <= settings.pii_shadow_window_end_hour <= 23:
+        raise ValueError("AI_SERVICE_PII_SHADOW_WINDOW_END_HOUR must be between 0 and 23")
+    if settings.pii_shadow_window_start_hour == settings.pii_shadow_window_end_hour:
+        raise ValueError("PII Shadow window start and end hours must differ")
+    if not 50 <= settings.pii_shadow_poll_interval_ms <= 60_000:
+        raise ValueError("AI_SERVICE_PII_SHADOW_POLL_INTERVAL_MS must be between 50 and 60000")
+    if settings.pii_shadow_timezone not in {"Asia/Seoul", "UTC"}:
+        raise ValueError("AI_SERVICE_PII_SHADOW_TIMEZONE must be Asia/Seoul or UTC")
+    if settings.pii_shadow_enabled and settings.ai_safety_detector_runtime != AI_SAFETY_DETECTOR_RUNTIME_ONNX:
+        raise ValueError("PII Shadow comparison requires the ONNX detector runtime")
 
 
 def _validate_rag_settings(settings: Settings) -> None:

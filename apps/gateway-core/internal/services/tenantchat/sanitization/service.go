@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"gatelm/apps/gateway-core/internal/domain/masking"
 	"gatelm/apps/gateway-core/internal/domain/tenantchat"
 	tenantchatruntime "gatelm/apps/gateway-core/internal/domain/tenantchat/runtime"
 )
@@ -86,7 +87,12 @@ func (s *Service) Sanitize(
 		}
 		return tenantchat.SanitizationResponse{}, tenantchat.ErrRuntimeUnavailable
 	}
-	evaluation, err := s.safety.Sanitize(ctx, snapshot, request.Input)
+	safetyContext := masking.WithPIIShadowScope(
+		ctx,
+		request.Context.ExecutionScope.TenantID,
+		request.Context.RequestID,
+	)
+	evaluation, err := s.safety.Sanitize(safetyContext, snapshot, request.Input)
 	if err != nil {
 		return tenantchat.SanitizationResponse{}, tenantchat.ErrRuntimeUnavailable
 	}

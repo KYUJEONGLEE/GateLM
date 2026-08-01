@@ -240,3 +240,66 @@ docs/ai-safety-lab/schemas/detector-sidecar-batch-response.schema.json
 The sidecar keeps message boundaries during rules, contextual policy, redaction, and response mapping. It flattens only eligible model windows, executes bounded dynamic ONNX micro-batches, then restores each detection to its original item/window before policy evaluation. Current micro-batch size defaults to 4 and is bounded to 1 through 64 by `AI_SERVICE_AI_SAFETY_MICRO_BATCH_SIZE`.
 
 Model candidate routing is detector-type aware. A configured adapter is invoked only when its accepted label map intersects an uncovered typed candidate. GateLM v0.1.1 advertises `person_name` and `organization_name`; the older pinned OpenAI and `amoeba04` maps do not. Message concatenation, skipping the new untrusted user message, full-history rescans on every normal turn, unauthenticated metadata-only safety caching, and raw text/value/offset response fields are forbidden. Stored schema v2 messages may skip repeat inspection only when Chat API has authenticated their safety provenance in AES-GCM AAD and signed the exact completion input.
+
+## 11. Offline PII Shadow comparison
+
+Offline PII Shadow는 위 request body의 `mode=shadow`와 다른 기능이다.
+`mode=shadow`는 현재 sidecar 결과를 실시간 요청에 강제하지 않는 정책 모드이고,
+offline PII Shadow는 이미 반환된 기준 결과와 별도 후보 ONNX 세션의 결과를
+나중에 비교하는 운영 검증 경로다. 두 기능의 이름이 같더라도 lifecycle과
+실행 시점이 다르며 서로를 대신하지 않는다.
+
+Gateway는 아래 조건을 모두 만족할 때만 trusted 내부 요청에
+`X-GateLM-PII-Shadow-Capture: 1`을 추가한다.
+
+- `GATEWAY_PII_SHADOW_ENABLED=true`
+- 인증된 서버 컨텍스트의 tenant가 exact allowlist에 포함됨
+- tenant ID와 request ID를 사용한 deterministic SHA-256 bucket이 설정한
+  `1..10000` basis points 안에 포함됨
+
+기본 샘플은 `500` basis points, 즉 5%이며 기능은 기본적으로 꺼져 있다.
+Gateway는 header 한 비트만 sidecar에 보내고 tenant, user, request, conversation
+식별자를 추가로 전달하지 않는다. 일반 client가 이 header를 신뢰 경계 밖에서
+직접 주입할 수 있도록 endpoint를 공개해서는 안 된다.
+
+AI Service는 `AI_SERVICE_PII_SHADOW_ENABLED=true`일 때만 header를 처리한다.
+실시간 기준 추론이 끝나면 request와 sanitized 기준 결과를 같은 thread에서
+즉시 AES-256-GCM으로 암호화해 process-local buffer에 넣는다. 이 단계에서는
+후보 추론을 실행하거나 기다리지 않는다. key는 process memory에만 존재하고
+재시작 복구를 위한 file, DB, queue, KMS 저장은 하지 않는다.
+
+buffer hard limit은 다음과 같다.
+
+- 최대 5,000건
+- 암호문과 nonce 합계 최대 10 MiB
+- TTL 최대 12시간
+- 크기 초과 항목은 버리고, 가득 차면 가장 오래된 항목부터 제거
+- process 종료 또는 재시작 시 모든 항목과 key를 폐기
+
+worker는 기본 `Asia/Seoul` 02:00 이상 05:00 미만에만 동작한다. 기준 PII
+runtime은 4-vCPU profile의 active `2`, intra-op `2`, inter-op `1`을 유지하고
+후보 세션은 intra-op `1`, inter-op `1`, spinning disabled로 고정한다. worker는
+live active request와 waiter가 없음을 확인한 뒤 한 항목씩 시작한다. 이미 시작한
+ONNX call은 안전하게 preempt할 수 없으므로 도중에 live request가 들어오면 그
+한 건은 끝날 수 있지만, 다음 후보 항목은 live gate가 다시 idle이 될 때까지
+시작하지 않는다.
+
+후보 식별자는 local artifact 경로를 log에 넣지 않는다. 설정한 SemVer와
+정규화된 public model ID만 aggregate에 기록한다. aggregate에 허용되는 값은
+다음으로 제한한다.
+
+- capture, pending, expired, evicted, oversized, decrypt error count
+- compared, matched, mismatched, inference error, live-pause count와 agreement percent
+- 기준·후보 model invocation과 accepted model detection의 bounded aggregate count
+- 기준·후보 latency의 count, p50, p95, p99, max
+
+raw input, redacted text, preview, detection value, span, offset, 개별 결과, tenant,
+request ID와 hash는 aggregate log에 남기지 않는다. 현재 구현은 sanitized
+structured log만 출력하며 ClickHouse, PostgreSQL, public/internal read API,
+Event와 Metrics contract를 추가하지 않는다. durable aggregate 저장과 조회는
+별도 계약 승인 후 연결한다.
+
+최초 연결 검증은 기준과 후보 모두 canonical `v0.1.1` artifact를 사용한다.
+같은 artifact의 100% 일치는 암호화·queue·재추론·비교 배관을 확인할 뿐, 새
+후보 모델의 품질 승격, production 전체 활성화, SLA 또는 DLP 완성을 승인하지
+않는다.

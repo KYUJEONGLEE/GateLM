@@ -4,6 +4,7 @@ version = "0.0.0"
 description = "GateLM AI Safety and Evaluation Lab"
 requires-python = ">=3.12"
 dependencies = [
+  "cryptography>=48,<49",
   "fastapi>=0.115,<0.116",
   "pypdf==6.14.2",
   "pydantic>=2.7,<2.11",
@@ -23,6 +24,7 @@ gatelm-pii-ner-candidate-eval = "app.services.pii_ner_candidate_eval_cli:main"
 gatelm-pii-ner-deployment-gate = "app.services.pii_ner_deployment_gate_cli:main"
 gatelm-pii-concurrency-benchmark = "app.services.pii_direct_inference_concurrency_benchmark_runner:run"
 gatelm-pii-thread-budget-matrix = "app.services.pii_thread_budget_matrix_benchmark_runner:run"
+gatelm-pii-shadow-e2e = "app.services.pii_shadow_e2e_runner:run"
 gatelm-pii-http-admission-benchmark = "app.services.pii_http_admission_concurrency_benchmark_runner:run"
 
 [build-system]

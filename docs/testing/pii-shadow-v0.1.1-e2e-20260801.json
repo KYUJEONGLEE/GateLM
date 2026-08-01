@@ -1,0 +1,139 @@
+{
+  "dataSafety": {
+    "aggregateOnly": true,
+    "detectedValuesPersisted": false,
+    "individualResultsPersisted": false,
+    "rawInputPersisted": false,
+    "syntheticCorpusOnly": true
+  },
+  "eligibility": {
+    "checks": {
+      "allGatewayRequestsSucceeded": true,
+      "capturedRequestsProcessed": true,
+      "identicalModelAgreementIsExact": true,
+      "realModelInferenceCompared": true,
+      "sampledRequestsCaptured": true,
+      "shadowPathHasNoErrors": true
+    },
+    "doesNotApprove": [
+      "candidate_model_promotion",
+      "production_global_enablement",
+      "production_sla_claim"
+    ],
+    "eligible": true,
+    "purpose": "same_model_shadow_plumbing_validation_only"
+  },
+  "gatewayClient": {
+    "errorCount": 0,
+    "requestCount": 1000,
+    "sampledRequestCount": 44,
+    "schemaVersion": "gatelm.pii-shadow-e2e-client.v1",
+    "successCount": 1000
+  },
+  "generatedAt": "2026-08-01T10:48:36.393605Z",
+  "gitSha": "faaa3a5f7a859a5ecba24b381889ef2167126566",
+  "model": {
+    "artifactBytes": 15678950,
+    "artifactFileCount": 7,
+    "artifactManifestSha256": "c7eb7c6cafc6cf4a038f30988538825e482d81959e9b42fa71f338edf814fb78",
+    "legacyRevision": "v3.14",
+    "lifecycle": "production-deployed-and-role-healthy-model-active-e2e-unverified",
+    "modelId": "gatelm/koelectra-small-v3-pii-ner",
+    "modelOnnxBytes": 14595587,
+    "modelOnnxSha256": "8a5cb146e84d413910a423d304e662a6aba9f69e83db129f5061d007a6de9381",
+    "registrySha256": "2a1773d8d3938f6a6e0c3312445765348c70fbdc0610fb1233bc73bd288ed812",
+    "registryVersion": "gatelm.pii-model-canonical-registry.v1",
+    "runtime": "onnx-cpu-dynamic-qint8",
+    "sourceManifestSha256": [
+      "320a4afd888071052975158eee1a22973f66e8782300d18d3007dac25336f74b",
+      "a3168b3a3d9bea915a6c524bb31c7d2999dc0596f540406931d0795b07f706eb"
+    ],
+    "version": "v0.1.1"
+  },
+  "reportVersion": "gatelm.pii-shadow-e2e.v1",
+  "runtime": {
+    "candidateProfile": {
+      "allowSpinning": false,
+      "maximumConcurrentInference": 1,
+      "onnxInterOpThreads": 1,
+      "onnxIntraOpThreads": 1
+    },
+    "liveProfile": {
+      "allowSpinning": false,
+      "maximumConcurrentInference": 2,
+      "onnxInterOpThreads": 1,
+      "onnxIntraOpThreads": 2
+    },
+    "logicalCpuCount": 8,
+    "onnxruntimeVersion": "1.27.0",
+    "operatingSystem": "Windows",
+    "pythonVersion": "3.12.13"
+  },
+  "scope": {
+    "aiServiceHttpRoute": "real",
+    "baselineOnnxModel": "real",
+    "candidateOnnxModel": "real_identical_artifact",
+    "encryptedProcessLocalBuffer": "real",
+    "gatewaySamplerAndHttpAdapter": "real",
+    "nightWindowBypassedForExplicitE2E": true,
+    "productionDeployment": false,
+    "productionTraffic": false,
+    "transport": "loopback_tcp"
+  },
+  "shadow": {
+    "buffer": {
+      "capturedItems": 44,
+      "decryptErrors": 0,
+      "evictedItems": 0,
+      "expiredItems": 0,
+      "oversizedItems": 0,
+      "pendingItems": 0,
+      "storedBytes": 0
+    },
+    "candidate": {
+      "modelId": "gatelm/koelectra-small-v3-pii-ner",
+      "version": "v0.1.1"
+    },
+    "comparison": {
+      "agreementPercent": 100.0,
+      "baselineAcceptedModelDetections": 11,
+      "baselineModelInvocations": 13,
+      "candidateAcceptedModelDetections": 11,
+      "candidateModelInvocations": 13,
+      "captureErrors": 0,
+      "comparedItems": 44,
+      "inferenceErrors": 0,
+      "matchedItems": 44,
+      "mismatchedItems": 0,
+      "modelActiveComparedItems": 13,
+      "pausedForLiveRequests": 0
+    },
+    "latencyMs": {
+      "baseline": {
+        "count": 44,
+        "max": 5,
+        "p50": 0,
+        "p95": 4,
+        "p99": 5
+      },
+      "candidate": {
+        "count": 44,
+        "max": 7,
+        "p50": 0,
+        "p95": 4,
+        "p99": 7
+      }
+    }
+  },
+  "syntheticOnly": true,
+  "trackedWorktreeDirty": false,
+  "workload": {
+    "actualSamplePercent": 4.4,
+    "configuredSamplePercent": 5.0,
+    "corpusSha256": "b5e678d09af9e99a1c1a807def7caee4b0e081b18368fbee82e8168778467090",
+    "requestCount": 1000,
+    "sampleBasisPoints": 500,
+    "sampledRequestCount": 44,
+    "sourceCaseCount": 50
+  }
+}

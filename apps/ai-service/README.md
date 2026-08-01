@@ -309,6 +309,63 @@ affinity, and ONNX thread settings. Set `AI_SERVICE_ONNX_INTRA_OP_THREADS` to
 the matrix candidate before launching this runner; the report makes a mismatch
 visible but does not promote the candidate to a production default.
 
+## PII Offline Shadow E2E
+
+PII Offline Shadow는 실시간 응답에서 후보 모델을 같이 실행하지 않는다.
+Gateway가 허용된 테스트 tenant의 요청 중 기본 5%만 표시하면 AI Service가
+입력과 기준 결과를 즉시 암호화해 bounded process memory에 보관하고, 기본
+02:00~05:00 KST에 별도 1×1 ONNX 세션으로 비교한다. 실시간 2×2 추론이나
+대기 요청이 있으면 새 Shadow 항목을 시작하지 않는다.
+
+`mode=shadow`는 sidecar 결과를 실시간 정책에 강제하지 않는 기존 request
+mode다. `X-GateLM-PII-Shadow-Capture: 1`로 시작하는 Offline Shadow와
+같은 기능이 아니다.
+
+Gateway와 AI Service 양쪽 기능은 기본적으로 꺼져 있다. 처음에는 테스트
+tenant 하나와 동일한 v0.1.1 candidate만 설정한다.
+
+```text
+GATEWAY_PII_SHADOW_ENABLED=true
+GATEWAY_PII_SHADOW_ALLOWED_TENANT_IDS=<exact-test-tenant-id>
+GATEWAY_PII_SHADOW_SAMPLE_BASIS_POINTS=500
+
+AI_SERVICE_PII_SHADOW_ENABLED=true
+AI_SERVICE_PII_SHADOW_CANDIDATE_MODEL_ID=<canonical-v0.1.1-model-directory>
+AI_SERVICE_PII_SHADOW_CANDIDATE_VERSION=v0.1.1
+AI_SERVICE_PII_SHADOW_MAX_ITEMS=5000
+AI_SERVICE_PII_SHADOW_MAX_BYTES=10485760
+AI_SERVICE_PII_SHADOW_TTL_SECONDS=43200
+AI_SERVICE_PII_SHADOW_TIMEZONE=Asia/Seoul
+AI_SERVICE_PII_SHADOW_WINDOW_START_HOUR=2
+AI_SERVICE_PII_SHADOW_WINDOW_END_HOUR=5
+AI_SERVICE_PII_SHADOW_POLL_INTERVAL_MS=250
+```
+
+동일 모델 배관 검증은 Docker나 운영 서버 없이도 실행할 수 있다. 로컬에
+canonical registry와 SHA-256이 일치하는 v0.1.1 artifact, Python ONNX
+dependencies와 Go toolchain이 필요하다.
+
+```bash
+cd apps/ai-service
+python -m app.services.pii_shadow_e2e_runner \
+  --model-dir <canonical-v0.1.1-model-directory> \
+  --model-version v0.1.1 \
+  --requests 1000 \
+  --sample-basis-points 500 \
+  --out ../../docs/testing/pii-shadow-v0.1.1-e2e-aggregate.json
+```
+
+runner는 실제 Gateway sampler와 HTTP adapter, loopback TCP의 실제 FastAPI
+route, 기준 2×2 ONNX, AES-256-GCM buffer와 후보 1×1 ONNX를 순서대로
+통과한다. 50건 synthetic corpus를 메모리에서 반복하며 report에는 총 요청·
+샘플·일치·오류 수와 latency percentile만 남긴다. input, detection, span,
+개별 결과와 로컬 artifact 경로는 저장하지 않는다.
+
+E2E runner는 검증을 위해 야간 window만 명시적으로 우회한다. 같은 모델의
+100% agreement는 배관 정상 여부만 증명하며 production traffic, 전역 활성화,
+새 후보 승격 또는 SLA 근거가 아니다. 운영 buffer는 process 재시작 시 복구하지
+않고 폐기하며, 현재 durable DB나 조회 API를 제공하지 않는다.
+
 ## Safety Eval Runner
 
 Run detector-output fixture evaluation:

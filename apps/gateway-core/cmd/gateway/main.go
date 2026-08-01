@@ -410,17 +410,20 @@ func main() {
 		)
 		if cfg.AISafetySidecar.Enabled {
 			tenantChatMaskingEngine = aiservice.NewMaskingEngine(aiservice.MaskingEngineConfig{
-				Local:          tenantChatMaskingEngine,
-				FallbackLocal:  tenantChatFallbackMaskingEngine(cfg.AISafetySidecar.PersonNameModelOnly),
-				EndpointURL:    cfg.AISafetySidecar.EndpointURL,
-				Timeout:        cfg.AISafetySidecar.Timeout,
-				ModelID:        cfg.AISafetySidecar.ModelID,
-				DetectorSet:    cfg.AISafetySidecar.DetectorSet,
-				Locale:         cfg.AISafetySidecar.Locale,
-				Mode:           cfg.AISafetySidecar.Mode,
-				OverloadPolicy: cfg.AISafetySidecar.OverloadPolicy,
-				Surface:        "tenant_chat",
-				Metrics:        metricsRegistry,
+				Local:                      tenantChatMaskingEngine,
+				FallbackLocal:              tenantChatFallbackMaskingEngine(cfg.AISafetySidecar.PersonNameModelOnly),
+				EndpointURL:                cfg.AISafetySidecar.EndpointURL,
+				Timeout:                    cfg.AISafetySidecar.Timeout,
+				ModelID:                    cfg.AISafetySidecar.ModelID,
+				DetectorSet:                cfg.AISafetySidecar.DetectorSet,
+				Locale:                     cfg.AISafetySidecar.Locale,
+				Mode:                       cfg.AISafetySidecar.Mode,
+				OverloadPolicy:             cfg.AISafetySidecar.OverloadPolicy,
+				Surface:                    "tenant_chat",
+				Metrics:                    metricsRegistry,
+				PIIShadowEnabled:           cfg.AISafetySidecar.PIIShadowEnabled,
+				PIIShadowAllowedTenantIDs:  cfg.AISafetySidecar.PIIShadowAllowedTenantIDs,
+				PIIShadowSampleBasisPoints: cfg.AISafetySidecar.PIIShadowSampleBasisPoints,
 			})
 		}
 		tenantChatSafety := tenantsafety.NewEvaluatorWithEngine(tenantChatMaskingEngine)

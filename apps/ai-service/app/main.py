@@ -7,6 +7,7 @@ from app.api.dependencies import (
     AiSafetyConcurrencyGate,
     RoutingDifficultyConcurrencyGate,
     create_ai_safety_detector_service,
+    create_pii_shadow_evaluator,
     create_routing_difficulty_batcher,
     create_routing_difficulty_service,
 )
@@ -22,6 +23,7 @@ from app.core.errors import (
 from app.domain.rag_extraction.errors import RagExtractionError
 from app.domain.rag_extraction.temp_files import prepare_rag_temp_directory
 from app.core.logging import configure_logging
+from app.services.pii_shadow import PiiShadowWorker
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -36,15 +38,32 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         redoc_url=None,
     )
     app.state.settings = resolved_settings
-    app.state.ai_safety_concurrency_gate = AiSafetyConcurrencyGate(
+    ai_safety_concurrency_gate = AiSafetyConcurrencyGate(
         resolved_settings.ai_safety_max_concurrent,
         waiting_capacity=resolved_settings.ai_safety_max_pending,
         wait_timeout_ms=resolved_settings.ai_safety_wait_timeout_ms,
     )
+    app.state.ai_safety_concurrency_gate = ai_safety_concurrency_gate
     detector_service = create_ai_safety_detector_service(resolved_settings)
     if resolved_settings.ai_safety_preload_enabled:
         detector_service.warmup()
     app.state.ai_safety_detector_service = detector_service
+    if resolved_settings.pii_shadow_enabled:
+        pii_shadow_evaluator = create_pii_shadow_evaluator(resolved_settings)
+        pii_shadow_worker = PiiShadowWorker(
+            evaluator=pii_shadow_evaluator,
+            live_gate=ai_safety_concurrency_gate,
+            timezone_name=resolved_settings.pii_shadow_timezone,
+            window_start_hour=resolved_settings.pii_shadow_window_start_hour,
+            window_end_hour=resolved_settings.pii_shadow_window_end_hour,
+            poll_interval_seconds=(
+                resolved_settings.pii_shadow_poll_interval_ms / 1000
+            ),
+        )
+        app.state.pii_shadow_evaluator = pii_shadow_evaluator
+        app.state.pii_shadow_worker = pii_shadow_worker
+        app.add_event_handler("startup", pii_shadow_worker.start)
+        app.add_event_handler("shutdown", pii_shadow_worker.stop)
     if resolved_settings.routing_difficulty_enabled:
         routing_difficulty_service = create_routing_difficulty_service(
             resolved_settings

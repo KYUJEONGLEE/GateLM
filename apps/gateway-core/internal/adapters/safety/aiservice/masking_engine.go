@@ -30,6 +30,7 @@ const (
 	OverloadPolicyFailClosed    = "fail_closed"
 	DefaultOverloadPolicy       = OverloadPolicyLocalFallback
 	DefaultTimeout              = 750 * time.Millisecond
+	PIIShadowCaptureHeader      = "X-GateLM-PII-Shadow-Capture"
 	maxBatchItems               = 64
 	maxBatchResponseBytes       = 16 * 1024 * 1024
 	maxErrorResponseBytes       = 4 * 1024
@@ -68,32 +69,36 @@ type MaskingEngineConfig struct {
 	Local LocalMaskingEngine
 	// FallbackLocal receives the original request when the sidecar cannot
 	// produce a valid result. A fallback error is returned to the caller.
-	FallbackLocal  LocalMaskingEngine
-	EndpointURL    string
-	HTTPClient     *http.Client
-	Timeout        time.Duration
-	ModelID        string
-	DetectorSet    string
-	Locale         string
-	Mode           string
-	OverloadPolicy string
-	Surface        string
-	Metrics        *metrics.Registry
+	FallbackLocal              LocalMaskingEngine
+	EndpointURL                string
+	HTTPClient                 *http.Client
+	Timeout                    time.Duration
+	ModelID                    string
+	DetectorSet                string
+	Locale                     string
+	Mode                       string
+	OverloadPolicy             string
+	Surface                    string
+	Metrics                    *metrics.Registry
+	PIIShadowEnabled           bool
+	PIIShadowAllowedTenantIDs  []string
+	PIIShadowSampleBasisPoints int
 }
 
 type MaskingEngine struct {
-	local          LocalMaskingEngine
-	fallbackLocal  LocalMaskingEngine
-	endpointURL    string
-	httpClient     *http.Client
-	timeout        time.Duration
-	modelID        string
-	detectorSet    string
-	locale         string
-	mode           string
-	overloadPolicy string
-	surface        string
-	metrics        *metrics.Registry
+	local            LocalMaskingEngine
+	fallbackLocal    LocalMaskingEngine
+	endpointURL      string
+	httpClient       *http.Client
+	timeout          time.Duration
+	modelID          string
+	detectorSet      string
+	locale           string
+	mode             string
+	overloadPolicy   string
+	surface          string
+	metrics          *metrics.Registry
+	piiShadowSampler maskdomain.PIIShadowSampler
 }
 
 func NewMaskingEngine(config MaskingEngineConfig) MaskingEngine {
@@ -130,6 +135,11 @@ func NewMaskingEngine(config MaskingEngineConfig) MaskingEngine {
 		overloadPolicy: maskingOverloadPolicy(config.OverloadPolicy),
 		surface:        config.Surface,
 		metrics:        config.Metrics,
+		piiShadowSampler: maskdomain.NewPIIShadowSampler(
+			config.PIIShadowEnabled,
+			config.PIIShadowAllowedTenantIDs,
+			config.PIIShadowSampleBasisPoints,
+		),
 	}
 }
 
@@ -350,6 +360,9 @@ func (e MaskingEngine) detect(ctx context.Context, req maskdomain.ApplyRequest) 
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Accept", "application/json")
+	if e.piiShadowSampler.ShouldCapture(ctx) {
+		httpReq.Header.Set(PIIShadowCaptureHeader, "1")
+	}
 
 	resp, err := e.httpClient.Do(httpReq)
 	if err != nil {
@@ -429,6 +442,9 @@ func (e MaskingEngine) detectBatch(
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Accept", "application/json")
+	if e.piiShadowSampler.ShouldCapture(ctx) {
+		httpReq.Header.Set(PIIShadowCaptureHeader, "1")
+	}
 
 	resp, err := e.httpClient.Do(httpReq)
 	if err != nil {

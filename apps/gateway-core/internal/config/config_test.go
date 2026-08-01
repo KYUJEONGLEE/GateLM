@@ -44,6 +44,9 @@ var aiSafetySidecarEnvKeys = []string{
 	"GATEWAY_AI_SAFETY_SIDECAR_MODE",
 	"GATEWAY_AI_SAFETY_OVERLOAD_POLICY",
 	"GATEWAY_AI_SAFETY_PERSON_NAME_MODEL_ONLY",
+	"GATEWAY_PII_SHADOW_ENABLED",
+	"GATEWAY_PII_SHADOW_ALLOWED_TENANT_IDS",
+	"GATEWAY_PII_SHADOW_SAMPLE_BASIS_POINTS",
 }
 
 var runtimeSnapshotCacheEnvKeys = []string{
@@ -230,6 +233,15 @@ func TestAISafetySidecarConfigDefaults(t *testing.T) {
 	if cfg.AISafetySidecar.PersonNameModelOnly {
 		t.Fatal("person-name model-only evaluation should be disabled by default")
 	}
+	if cfg.AISafetySidecar.PIIShadowEnabled {
+		t.Fatal("PII Shadow capture should be disabled by default")
+	}
+	if len(cfg.AISafetySidecar.PIIShadowAllowedTenantIDs) != 0 {
+		t.Fatalf("unexpected default PII Shadow tenants: %v", cfg.AISafetySidecar.PIIShadowAllowedTenantIDs)
+	}
+	if cfg.AISafetySidecar.PIIShadowSampleBasisPoints != 500 {
+		t.Fatalf("unexpected default PII Shadow sample: %d", cfg.AISafetySidecar.PIIShadowSampleBasisPoints)
+	}
 	if !cfg.RuntimeSnapshotCache.Enabled {
 		t.Fatal("runtime snapshot cache should be enabled by default")
 	}
@@ -293,6 +305,73 @@ func TestAISafetySidecarConfigLoadsEnvOverrides(t *testing.T) {
 		t.Fatalf("unexpected sidecar overload policy: %q", cfg.AISafetySidecar.OverloadPolicy)
 	}
 }
+
+func TestPIIShadowConfigLoadsFivePercentTestTenantRollout(t *testing.T) {
+	resetSemanticCacheEnv(t)
+	resetAISafetySidecarEnv(t)
+	resetRuntimeSnapshotCacheEnv(t)
+	resetProviderCatalogCacheEnv(t)
+	t.Setenv("GATEWAY_PII_SHADOW_ENABLED", "true")
+	t.Setenv("GATEWAY_PII_SHADOW_ALLOWED_TENANT_IDS", "tenant_demo")
+	t.Setenv("GATEWAY_PII_SHADOW_SAMPLE_BASIS_POINTS", "500")
+
+	cfg, err := LoadWithError()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if !cfg.AISafetySidecar.PIIShadowEnabled {
+		t.Fatal("PII Shadow capture should be enabled")
+	}
+	if !reflect.DeepEqual(cfg.AISafetySidecar.PIIShadowAllowedTenantIDs, []string{"tenant_demo"}) {
+		t.Fatalf("unexpected PII Shadow tenants: %v", cfg.AISafetySidecar.PIIShadowAllowedTenantIDs)
+	}
+	if cfg.AISafetySidecar.PIIShadowSampleBasisPoints != 500 {
+		t.Fatalf("unexpected PII Shadow basis points: %d", cfg.AISafetySidecar.PIIShadowSampleBasisPoints)
+	}
+}
+
+func TestPIIShadowConfigRejectsUnsafeRollout(t *testing.T) {
+	tests := []struct {
+		name        string
+		env         map[string]string
+		wantErrPart string
+	}{
+		{
+			name: "sidecar disabled",
+			env: map[string]string{
+				"GATEWAY_PII_SHADOW_ENABLED":            "true",
+				"GATEWAY_PII_SHADOW_ALLOWED_TENANT_IDS": "tenant_demo",
+				"GATEWAY_AI_SAFETY_SIDECAR_ENABLED":     "false",
+			},
+			wantErrPart: "SIDECAR_ENABLED=true",
+		},
+		{
+			name:        "missing tenant allowlist",
+			env:         map[string]string{"GATEWAY_PII_SHADOW_ENABLED": "true"},
+			wantErrPart: "ALLOWED_TENANT_IDS",
+		},
+		{
+			name:        "sample above one hundred percent",
+			env:         map[string]string{"GATEWAY_PII_SHADOW_SAMPLE_BASIS_POINTS": "10001"},
+			wantErrPart: "SAMPLE_BASIS_POINTS",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			resetSemanticCacheEnv(t)
+			resetAISafetySidecarEnv(t)
+			resetRuntimeSnapshotCacheEnv(t)
+			resetProviderCatalogCacheEnv(t)
+			for key, value := range tc.env {
+				t.Setenv(key, value)
+			}
+			if _, err := LoadWithError(); err == nil || !strings.Contains(err.Error(), tc.wantErrPart) {
+				t.Fatalf("expected error containing %q, got %v", tc.wantErrPart, err)
+			}
+		})
+	}
+}
+
 func TestAISafetyPersonNameModelOnlyLoadsSafeEnvOverrides(t *testing.T) {
 
 	resetSemanticCacheEnv(t)

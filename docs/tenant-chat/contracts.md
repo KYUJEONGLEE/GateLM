@@ -477,6 +477,8 @@ Idempotency rules:
 
 검증된 retryable sidecar overload `503`은 기존 `outcome=http_error`로 기록한다. `local_fallback`에서 실제 full-P0 fallback이 실행된 경우에만 `fallback_total{reason="http_error"}`를 증가시키며, `fail_closed`는 fallback을 실행하지 않으므로 증가시키지 않는다. Gateway deadline은 기존 `outcome=timeout`과 실제 timeout fallback으로 기록한다. `fail_closed`에서 sidecar readiness는 기존 `required=true`를 사용하며 새 metric 이름이나 label을 추가하지 않는다.
 
+Offline PII Shadow 비교값은 현재 위 Prometheus metric을 확장하지 않는다. raw·개별 결과·식별자·hash 없이 bounded count와 latency percentile만 sanitized structured log로 남기며, ClickHouse/PostgreSQL durable 저장과 read API는 별도 계약 전에는 만들지 않는다.
+
 ### 11.2 Required aggregate
 
 - request total과 terminal outcome counts
@@ -529,6 +531,7 @@ Chat Web BFF가 호출하는 private wire는 [Chat conversation OpenAPI](./opena
 - 새 user message는 admission 뒤 `sanitization` phase에서 한 번만 검사한다. Chat API는 Gateway가 반환한 ordered content를 `safety.status=sanitized`와 exact `policyDigest`로 저장하며 이후 completion에는 그 ciphertext 복호화 결과만 사용한다.
 - safety policy가 비활성화됐거나 detector/masking runtime이 준비되지 않으면 sanitization은 fail closed한다. 원문을 그대로 반환해 `sanitized`로 저장하는 우회 동작은 허용하지 않는다.
 - process-local overload 처리는 RuntimeSnapshot field가 아닌 operator-global Gateway 설정이다. 기본 `local_fallback`은 검증된 retryable overload `503`에서 complete local P0가 성공한 경우에만 계속한다. `fail_closed`는 `enforce` mode에서만 허용하며 같은 overload를 기존 `503 CHAT_RUNTIME_UNAVAILABLE`로 변환해 encrypted persistence, cache, routing, Provider 호출 전에 종료한다. sidecar timeout, transport failure, non-overload HTTP failure와 invalid response는 기존 complete local P0 fallback을 유지한다.
+- Offline PII Shadow는 RuntimeSnapshot이나 직원 설정이 아닌 operator-global 검증 기능이며 기본적으로 꺼져 있다. Gateway는 인증된 execution scope의 tenant가 exact allowlist에 있고 trusted request ID의 deterministic sampler가 선택한 경우에만 sidecar 요청에 `X-GateLM-PII-Shadow-Capture: 1` 한 비트를 추가한다. tenant/user/request/conversation 식별자는 sidecar에 추가로 전달하지 않는다. AI Service는 기준 응답을 바꾸거나 후보 추론을 기다리지 않고 선택 항목을 즉시 process-local AES-256-GCM buffer에 넣으며, 후보 결과는 Provider prompt, action, encrypted message와 usage에 영향을 주지 않는다. buffer·야간 worker·live-priority·aggregate 허용 범위는 [AI Safety Detector Sidecar draft](../ai-safety-lab/detector-sidecar-contract.md)의 Offline PII Shadow section을 따른다.
 - assistant message는 이미 sanitized user context로 Provider가 생성한 provenance를 `safety.status=provider_generated`로 저장한다. 이것은 output DLP 검사를 통과했다는 뜻이 아니며 `policyDigest`를 갖지 않는다.
 - completion message의 optional `safety` object는 additive wire compatibility를 위한 것이다. Chat API는 schema v2 AAD로 인증된 provenance만 이 field에 싣고 workload JWT의 `bindingDigest`로 exact completion input을 서명한다. Tenant Chat stored history에서 이 field가 없거나 user status/digest와 role 조합이 맞지 않으면 provider-bound context에서 제외하거나 fail closed하며, Gateway도 이를 trusted history로 보지 않고 방어적으로 safety 처리한다.
 - placeholder counter는 `[EMAIL_2]`의 `EMAIL`처럼 실제 masked text에 쓰는 uppercase placeholder prefix별 이미 사용한 최대 숫자 suffix만 전달할 수 있다. detector type, raw entity, raw-to-placeholder mapping, message/conversation identifier는 포함하지 않는다.

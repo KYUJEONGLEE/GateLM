@@ -151,7 +151,7 @@ class AiServiceLauncherConfigTests(unittest.TestCase):
             settings.ai_safety_detector_runtime, DEFAULT_AI_SAFETY_DETECTOR_RUNTIME
         )
 
-    def test_settings_has_no_shadow_classifier_configuration(self) -> None:
+    def test_settings_exposes_only_reviewed_runtime_configuration(self) -> None:
         self.assertEqual(
             {field.name for field in fields(Settings)},
             {
@@ -170,6 +170,16 @@ class AiServiceLauncherConfigTests(unittest.TestCase):
                 "ai_safety_max_concurrent",
                 "ai_safety_max_pending",
                 "ai_safety_wait_timeout_ms",
+                "pii_shadow_enabled",
+                "pii_shadow_candidate_model_id",
+                "pii_shadow_candidate_version",
+                "pii_shadow_max_items",
+                "pii_shadow_max_bytes",
+                "pii_shadow_ttl_seconds",
+                "pii_shadow_timezone",
+                "pii_shadow_window_start_hour",
+                "pii_shadow_window_end_hour",
+                "pii_shadow_poll_interval_ms",
                 "deployment_mode",
                 "rag_enabled",
                 "rag_service_token",
@@ -217,6 +227,73 @@ class AiServiceLauncherConfigTests(unittest.TestCase):
         self.assertEqual(settings.ai_safety_max_concurrent, 1)
         self.assertEqual(settings.ai_safety_max_pending, 4)
         self.assertEqual(settings.ai_safety_wait_timeout_ms, 50)
+
+    def test_settings_defaults_pii_shadow_to_disabled_bounded_kst_window(self) -> None:
+        with patch.dict(os.environ, {}, clear=True):
+            settings = load_settings()
+
+        self.assertFalse(settings.pii_shadow_enabled)
+        self.assertEqual(settings.pii_shadow_candidate_model_id, "")
+        self.assertEqual(settings.pii_shadow_candidate_version, "")
+        self.assertEqual(settings.pii_shadow_max_items, 5_000)
+        self.assertEqual(settings.pii_shadow_max_bytes, 10 * 1024 * 1024)
+        self.assertEqual(settings.pii_shadow_ttl_seconds, 12 * 60 * 60)
+        self.assertEqual(settings.pii_shadow_timezone, "Asia/Seoul")
+        self.assertEqual(settings.pii_shadow_window_start_hour, 2)
+        self.assertEqual(settings.pii_shadow_window_end_hour, 5)
+        self.assertEqual(settings.pii_shadow_poll_interval_ms, 250)
+
+    def test_settings_loads_pii_shadow_overrides(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "AI_SERVICE_PII_SHADOW_ENABLED": "true",
+                "AI_SERVICE_PII_SHADOW_CANDIDATE_MODEL_ID": "candidate/model",
+                "AI_SERVICE_PII_SHADOW_CANDIDATE_VERSION": "v0.1.1",
+                "AI_SERVICE_PII_SHADOW_MAX_ITEMS": "100",
+                "AI_SERVICE_PII_SHADOW_MAX_BYTES": "1048576",
+                "AI_SERVICE_PII_SHADOW_TTL_SECONDS": "3600",
+                "AI_SERVICE_PII_SHADOW_TIMEZONE": "UTC",
+                "AI_SERVICE_PII_SHADOW_WINDOW_START_HOUR": "23",
+                "AI_SERVICE_PII_SHADOW_WINDOW_END_HOUR": "2",
+                "AI_SERVICE_PII_SHADOW_POLL_INTERVAL_MS": "500",
+            },
+            clear=True,
+        ):
+            settings = load_settings()
+
+        self.assertTrue(settings.pii_shadow_enabled)
+        self.assertEqual(settings.pii_shadow_candidate_model_id, "candidate/model")
+        self.assertEqual(settings.pii_shadow_candidate_version, "v0.1.1")
+        self.assertEqual(settings.pii_shadow_max_items, 100)
+        self.assertEqual(settings.pii_shadow_max_bytes, 1_048_576)
+        self.assertEqual(settings.pii_shadow_ttl_seconds, 3_600)
+        self.assertEqual(settings.pii_shadow_timezone, "UTC")
+        self.assertEqual(settings.pii_shadow_window_start_hour, 23)
+        self.assertEqual(settings.pii_shadow_window_end_hour, 2)
+        self.assertEqual(settings.pii_shadow_poll_interval_ms, 500)
+
+    def test_settings_rejects_unbounded_or_unsupported_pii_shadow_values(self) -> None:
+        cases = {
+            "AI_SERVICE_PII_SHADOW_MAX_ITEMS": "5001",
+            "AI_SERVICE_PII_SHADOW_MAX_BYTES": "10485761",
+            "AI_SERVICE_PII_SHADOW_TTL_SECONDS": "43201",
+            "AI_SERVICE_PII_SHADOW_TIMEZONE": "local",
+            "AI_SERVICE_PII_SHADOW_WINDOW_START_HOUR": "24",
+            "AI_SERVICE_PII_SHADOW_POLL_INTERVAL_MS": "49",
+            "AI_SERVICE_PII_SHADOW_CANDIDATE_VERSION": "legacy-v3.14",
+        }
+        for key, value in cases.items():
+            with self.subTest(key=key), patch.dict(os.environ, {key: value}, clear=True):
+                with self.assertRaises(ValueError):
+                    load_settings()
+
+    def test_settings_rejects_enabled_pii_shadow_without_candidate_version(self) -> None:
+        with patch.dict(
+            os.environ, {"AI_SERVICE_PII_SHADOW_ENABLED": "true"}, clear=True
+        ):
+            with self.assertRaises(ValueError):
+                load_settings()
 
     def test_settings_loads_ai_safety_max_concurrent(self) -> None:
         with patch.dict(
