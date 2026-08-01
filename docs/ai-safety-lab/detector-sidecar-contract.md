@@ -162,6 +162,8 @@ Error responses are sanitized.
 }
 ```
 
+Each route returns its own contract version in the same envelope: `ai-safety-detector.v1` for single detection and `ai-safety-detector-batch.v1` for batch detection. When the process-local admission limit is full, the sidecar fails immediately with HTTP 503, `code=sidecar_unavailable`, and `retryable=true` instead of building an unbounded inference queue.
+
 Error responses must not echo prompt text, rejected values, stack traces containing input, raw model output, raw headers, or credential material.
 
 ## 7. Failure Behavior Candidate
@@ -172,6 +174,7 @@ Error responses must not echo prompt text, rejected values, stack traces contain
 | critical detector failure | fail closed |
 | ML NER timeout/failure | shadow unavailable, continue with regex result |
 | full sidecar unavailable | regex-only fallback |
+| process-local admission limit full | immediate sanitized 503; Gateway regex-only fallback |
 | invalid sidecar response | sanitized adapter failure |
 
 ## 8. Model Label Mapping

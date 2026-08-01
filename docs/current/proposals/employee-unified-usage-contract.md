@@ -2,7 +2,9 @@
 
 | Field | Value |
 |---|---|
-| Status | Implementation companion proposal |
+| Status | Proposal with implementation; not active |
+| Contract lifecycle | Proposed |
+| Document role | Contract proposal; implementation companion |
 | Applies to | Control Plane employee usage reader and Web client |
 | Does not apply to | Gateway quota enforcement, Tenant Chat accounting, employee policy mutation |
 | Baseline | `origin/dev @ 11cc6506` |

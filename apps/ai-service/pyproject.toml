@@ -21,6 +21,8 @@ gatelm-pii-ner-train = "app.services.pii_ner_train_cli:main"
 gatelm-pii-ner-export = "app.services.pii_ner_export_cli:main"
 gatelm-pii-ner-candidate-eval = "app.services.pii_ner_candidate_eval_cli:main"
 gatelm-pii-ner-deployment-gate = "app.services.pii_ner_deployment_gate_cli:main"
+gatelm-pii-concurrency-benchmark = "app.services.pii_direct_inference_concurrency_benchmark_runner:run"
+gatelm-pii-http-admission-benchmark = "app.services.pii_http_admission_concurrency_benchmark_runner:run"
 
 [build-system]
 requires = ["setuptools>=69"]

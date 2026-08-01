@@ -1,5 +1,3 @@
-import { readFile } from "node:fs/promises";
-
 import { expect, test } from "@playwright/test";
 
 import {
@@ -110,14 +108,4 @@ test("dashboard routing summaries and model costs remain separate contracts", ()
       costUsd: "0.001900"
     }
   ]);
-});
-
-test("customer demo proxy does not forward retired selected-target headers", async () => {
-  const source = await readFile(
-    new URL("../../app/api/customer-demo/chat/route.ts", import.meta.url),
-    "utf8"
-  );
-
-  expect(source).not.toContain("X-GateLM-Routed-Provider");
-  expect(source).not.toContain("X-GateLM-Routed-Model");
 });

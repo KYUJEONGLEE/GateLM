@@ -3,7 +3,9 @@
 | Field | Value |
 |---|---|
 | Status | Proposed; 구현 PR과 함께 검토하며 병합 전에는 active 계약이 아님 |
-| Scope | Dashboard와 active Tenant Chat의 공통 local-password account recovery and password change |
+| Contract lifecycle | Proposed |
+| Document role | Contract proposal; implementation companion |
+| Applies to | Dashboard와 active Tenant Chat의 공통 local-password account recovery and password change |
 | Baseline | `origin/dev @ 63734d195d03ad39fcbb72a40f1c4cc366b26efc` |
 | Proposed at | 2026-07-23 |
 | Event change | 없음 |

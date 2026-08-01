@@ -2,16 +2,19 @@
 
 이 문서는 GateLM에서 Codex, Claude Code 같은 구현 에이전트가 작업을 시작할 때 따르는 기준이다.
 
-GateLM의 현재 개발 상태는 하나의 확정된 SemVer로 선언되어 있지 않다. 공식 GitHub 최신 릴리스는 `v0.0.1`이고, 현재 제품 개발은 `dev` 브랜치에서 계속 진행된다. `v2.0.0` workstream은 더 이상 active가 아니며 문서는 historical behavior baseline으로 남는다. 최신 versioned 문서는 `v2.1.0` 범위까지 존재한다.
+GateLM의 현재 개발 상태는 `Unreleased`이며 제품 개발은 `dev` 브랜치에서 계속 진행된다. 공식 GitHub 최신 릴리스는 `v0.0.1`이고, 리팩토링과 전체 release gate가 끝난 시점의 목표 제품 버전은 `v1.0.0`이다. 정확한 release SHA와 tag를 고정하기 전에는 현재 개발본을 v1.0.0 또는 GA로 선언하지 않는다.
+
+기존 `docs/v1.0.0`, `docs/v2.0.0`, `docs/v2.1.0`은 정식 제품 릴리스가 아니라 pre-v1 내부 workstream label이다. 폴더별 상태와 단계적 이관 계획은 `docs/pre-v1/README.md`가 설명한다.
 
 현재 작업의 고정 진입점은 `docs/current/README.md`다. 버전이 바뀌어도 에이전트의 첫 진입 경로는 이 파일을 유지한다.
 
 ## 1. Reading Order And Source Of Truth
 
-모든 작업은 아래 두 문서로 시작한다.
+모든 작업은 아래 세 문서로 시작한다.
 
 1. `docs/current/README.md`
 2. `docs/current/source-of-truth.md`
+3. `docs/current/contract-map.md`
 
 그다음 scope router에 따라 필요한 문서만 추가로 읽는다.
 
@@ -29,13 +32,14 @@ GateLM의 현재 개발 상태는 하나의 확정된 SemVer로 선언되어 있
 4. 명시적으로 상속된 baseline compatibility 문서
 5. architecture, policy, testing evidence, reference, archive
 
-현재 versioned 범위는 다음처럼 사용한다.
+현재 범위는 다음처럼 사용한다.
 
 - `docs/tenant-chat/`: 신규 Tenant Chat의 active scoped contract다. release SemVer와 독립되며 `docs/current` scope router가 연결한다.
 - `docs/rag/`: Tenant Chat 전용 RAG의 approved implementation planning 범위다. `implementation-plan.md`와 ADR은 설계 근거이며, 그 자체로 active API/DB/Event/Security contract나 production 구현을 의미하지 않는다.
-- `docs/v2.1.0/`: 최신 versioned 문서 범위다. Self-host delivery와 Advanced Routing offline evidence 작업에 한해 사용한다.
-- `docs/v2.0.0/`: 닫힌 historical workstream의 behavior baseline이다. 새 기능의 roadmap이나 착수 계획으로 사용하지 않는다.
-- `docs/v1.0.0/`: 더 오래된 compatibility/history 문서다.
+- `docs/pre-v1/`: 과거 release-like workstream label의 상태와 이관 순서를 설명한다.
+- `docs/v2.1.0/`: pre-v1 Self-host delivery와 Advanced Routing offline evidence workstream이다. 해당 범위에서만 사용한다.
+- `docs/v2.0.0/`: pre-v1의 닫힌 historical behavior baseline이다. 새 기능의 roadmap이나 착수 계획으로 사용하지 않는다.
+- `docs/v1.0.0/`: pre-v1 초기 계약 동결안과 legacy fixture다. 새 공식 v1 계약으로 재사용하지 않는다.
 
 아직 current 계약으로 대체되지 않은 Gateway/API/DB/Event/Metrics/Security 의미를 검토할 때만 아래 v2.0.0 기준을 baseline compatibility로 확인한다.
 
@@ -43,7 +47,7 @@ GateLM의 현재 개발 상태는 하나의 확정된 SemVer로 선언되어 있
 2. `docs/v2.0.0/schemas/*.schema.json`
 3. `docs/v2.0.0/fixtures/*.fixture.json`
 
-위 목록은 호환성 기준이다. v2.0.0의 공식 release 또는 전체 구현 완료를 증명하는 목록은 아니다.
+위 목록은 호환성 기준이다. former v2.0.0 workstream의 공식 release 또는 전체 구현 완료를 증명하는 목록은 아니다.
 
 다음 문서는 historical plan/criteria로만 사용한다.
 
@@ -74,7 +78,7 @@ feature / fix / docs branch
 
 - 새 API route, DB column, Event field, Metrics label, Security-sensitive field는 근거 계약 없이 만들지 않는다.
 - Tenant Chat 관련 계약 민감 작업은 `docs/tenant-chat/README.md`와 `contracts.md`부터 읽는다.
-- current 계약이 없고 v2 baseline만 있는 영역은 baseline 호환성을 확인한 뒤 current 계약 제안부터 만든다.
+- current 계약이 없고 pre-v1 baseline만 있는 영역은 baseline 호환성을 확인한 뒤 current 계약 제안부터 만든다.
 - 기능 PR에 계약 의미 변경을 몰래 섞지 않는다.
 - legacy field는 바로 삭제하지 말고 compatibility bridge 여부를 확인한다.
 - Provider와 Model은 catalog/config data로 유지하며 DB enum 또는 code enum으로 고정하지 않는다.
@@ -125,8 +129,8 @@ cache key, metrics label, dashboard aggregate label에도 위 값이나 high-car
 - 문서에 적혀 있다는 이유만으로 현재 구현 사실이라고 단정하지 않는다.
 - 코드가 존재한다는 이유만으로 GA, production-ready, release-complete라고 단정하지 않는다.
 - 특정 시점의 branch/PR/evidence는 기준 날짜와 commit을 함께 기록한다.
-- versioned 문서는 자동으로 active가 되지 않는다. `docs/current/README.md`에서 상태를 승격해야 한다.
-- release version은 tag, release, package metadata가 합의되기 전까지 임의로 만들지 않는다.
+- pre-v1 문서는 자동으로 active가 되지 않는다. `docs/current/contract-map.md`에서 상태를 승격해야 한다.
+- 목표 버전은 `v1.0.0`이지만 exact SHA, tag, package/image/docs 정렬과 release evidence가 합의되기 전에는 릴리스로 선언하지 않는다.
 
 ## 6. Verification Baseline
 
@@ -134,7 +138,7 @@ cache key, metrics label, dashboard aggregate label에도 위 값이나 high-car
 
 ```powershell
 git diff --check
-corepack pnpm run verify:v2-docs
+corepack pnpm run verify:docs
 ```
 
 v2.1 routing dataset/schema/fixture에 닿으면 추가로 실행한다.
@@ -151,6 +155,8 @@ pnpm --filter @gatelm/control-plane-api typecheck
 pnpm --filter @gatelm/web typecheck
 go test ./...
 ```
+
+`verify:v2-final`은 과거 v2 workstream에서 시작된 광범위 회귀 suite이며, target `v1.0.0`의 전체 release gate나 freeze를 의미하지 않는다.
 
 공식 로컬/CI/agent 기준은 Node `22`, pnpm `9.15.0`이다.
 

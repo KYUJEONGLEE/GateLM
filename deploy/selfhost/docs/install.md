@@ -150,6 +150,7 @@ ${EDITOR:-vi} secrets/pii-model-bundle-url
 GATEWAY_AI_SAFETY_SIDECAR_ENABLED=true
 AI_SERVICE_INSTALL_ML_DEPS=true
 AI_SERVICE_AI_SAFETY_PRELOAD_ENABLED=true
+AI_SERVICE_AI_SAFETY_MAX_CONCURRENT=1
 AI_SERVICE_PII_MODEL_BUNDLE_URL_FILE=./secrets/pii-model-bundle-url
 AI_SERVICE_AI_SAFETY_ML_ALLOWED_DETECTOR_TYPES=phone_number,secret
 AI_SERVICE_AI_SAFETY_ADDITIONAL_DETECTOR_MODEL_IDS=
@@ -161,7 +162,9 @@ Compose secret. It verifies the pinned outer bundle hash, embedded manifest,
 and all runtime file hashes before atomically exposing the versioned model
 directory to AI Service. `AI_SERVICE_INSTALL_ML_DEPS=true` is mandatory for
 this opt-in because an image without the pinned ONNX dependencies cannot load
-the verified files.
+the verified files. Keep `AI_SERVICE_AI_SAFETY_MAX_CONCURRENT=1` until the
+same vCPU and ONNX thread profile has been benchmarked. The value is
+process-local, so multiple replicas multiply total possible concurrency.
 
 Demo seed is disabled for self-host/prod-like deployments. Keep demo UUID values only for non-prod local seed experiments:
 

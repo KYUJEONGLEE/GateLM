@@ -63,6 +63,7 @@ class Settings:
     ai_safety_person_name_model_only: bool = False
     ai_safety_detector_runtime: str = DEFAULT_AI_SAFETY_DETECTOR_RUNTIME
     ai_safety_preload_enabled: bool = False
+    ai_safety_max_concurrent: int = 1
     deployment_mode: str = "local"
     rag_enabled: bool = False
     rag_service_token: str = field(default="", repr=False)
@@ -97,6 +98,7 @@ class Settings:
     routing_difficulty_onnx_inter_op_threads: int = 1
 
     def __post_init__(self) -> None:
+        _validate_ai_safety_settings(self)
         _validate_rag_settings(self)
         _validate_routing_difficulty_settings(self)
 
@@ -125,6 +127,10 @@ def load_settings() -> Settings:
         ai_safety_preload_enabled=_env_bool(
             "AI_SERVICE_AI_SAFETY_PRELOAD_ENABLED",
             False,
+        ),
+        ai_safety_max_concurrent=_env_strict_int(
+            "AI_SERVICE_AI_SAFETY_MAX_CONCURRENT",
+            1,
         ),
         deployment_mode=_env_string("DEPLOYMENT_MODE", "local").strip().lower(),
         rag_enabled=_env_strict_bool("TENANT_CHAT_RAG_ENABLED", False),
@@ -225,6 +231,13 @@ def load_settings() -> Settings:
             1,
         ),
     )
+
+
+def _validate_ai_safety_settings(settings: Settings) -> None:
+    if not 1 <= settings.ai_safety_max_concurrent <= 32:
+        raise ValueError(
+            "AI_SERVICE_AI_SAFETY_MAX_CONCURRENT must be between 1 and 32"
+        )
 
 
 def _validate_rag_settings(settings: Settings) -> None:

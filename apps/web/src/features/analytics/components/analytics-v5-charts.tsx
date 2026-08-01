@@ -5,6 +5,7 @@ import {
   ANALYTICS_OTHER_ROW_ID,
   compactAnalyticsValueRows
 } from "@/features/analytics/analytics-chart-data";
+import { resolveAnalyticsModelProviderFamily } from "@/features/analytics/analytics-model-provider";
 import type { AnalyticsV5Evidence } from "@/features/analytics/analytics-v5-evidence";
 import type { AnalyticsValueRow } from "@/features/analytics/analytics-read-model";
 import {
@@ -15,9 +16,9 @@ import {
   useAnalyticsChartTheme
 } from "@/features/analytics/components/analytics-echart";
 import {
-  getProviderFamilyFromKey,
   ProviderFamilyIcon
 } from "@/features/provider-connections/components/provider-family-icon";
+import type { ProviderDisplayDirectory } from "@/lib/control-plane/provider-display";
 import { formatModelDisplayName } from "@/lib/formatting/display-identifiers";
 import type { LiveAnalyticsRange } from "@/lib/gateway/live-analytics-performance";
 import type { Locale } from "@/lib/i18n/locale";
@@ -129,10 +130,12 @@ export function AnalyticsV5ModelTrafficChart({
 export function AnalyticsV5ModelShareChart({
   ariaLabel,
   locale,
+  providerDirectory,
   rows
 }: {
   ariaLabel: string;
   locale: Locale;
+  providerDirectory: ProviderDisplayDirectory;
   rows: AnalyticsValueRow[];
 }) {
   const theme = useAnalyticsChartTheme();
@@ -202,7 +205,11 @@ export function AnalyticsV5ModelShareChart({
             ) : (
               <ProviderFamilyIcon
                 className="analytics-v5-model-share-provider"
-                family={getProviderFamilyFromKey(modelRowProvider(row.id))}
+                family={resolveAnalyticsModelProviderFamily(
+                  row.id,
+                  row.label,
+                  providerDirectory
+                )}
                 size={18}
               />
             )}
@@ -287,15 +294,6 @@ function truncateModelLegendLabel(value: string) {
   }
 
   return `${value.slice(0, MODEL_LEGEND_MAX_LENGTH - 3)}...`;
-}
-
-function modelRowProvider(id: string) {
-  try {
-    const value = JSON.parse(id) as unknown;
-    return Array.isArray(value) && typeof value[0] === "string" ? value[0] : "";
-  } catch {
-    return "";
-  }
 }
 
 export function AnalyticsV5ProjectUsageChart({

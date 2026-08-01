@@ -149,7 +149,7 @@ promote_pii_release_env() {
   set_env_value GATELM_PRODUCTION_DISTRIBUTED_PII_MODEL_DIR "${pii_release_model_dir}"
   set_env_value GATELM_PRODUCTION_DISTRIBUTED_PII_ARTIFACT_S3_URI "${bucket_uri}/${pii_release_artifact_key}"
   set_env_value GATELM_PRODUCTION_DISTRIBUTED_PII_ARTIFACT_SHA256 "${pii_release_archive_sha256}"
-  deploy_log "Pinned the production PII release to v3.14."
+  deploy_log "Pinned the production PII release to v0.1.1 (legacy v3.14)."
 }
 
 artifact_paths=(

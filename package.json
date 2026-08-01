@@ -7,7 +7,8 @@
     "node": ">=22 <23"
   },
   "scripts": {
-    "verify:v2-docs": "node scripts/verify-v2-docs.mjs",
+    "verify:docs": "node scripts/verify-v2-docs.mjs",
+    "verify:v2-docs": "pnpm verify:docs",
     "rag:evaluate": "node --test scripts/rag/evaluate-retrieval.test.mjs && node scripts/rag/evaluate-retrieval.mjs",
     "rag:evaluate:openai": "node scripts/rag/evaluate-openai-opt-in.mjs",
     "rag:benchmark:exact": "node scripts/rag/benchmark-exact-search.mjs",
@@ -101,14 +102,11 @@
     "dev:chat-web": "pnpm --filter @gatelm/chat-web dev",
     "build:chat-web": "pnpm --filter @gatelm/chat-web build",
     "typecheck:chat-web": "pnpm --filter @gatelm/chat-web typecheck",
-    "dev:web": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/dev/web-dev-prewarm.ps1",
+    "dev:web": "pnpm --filter @gatelm/web dev",
+    "dev:web:prewarm:windows": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev/web-dev-prewarm.ps1",
     "dev:web:raw": "pnpm --filter @gatelm/web dev",
     "build:web": "pnpm --filter @gatelm/web build",
     "lint:web": "pnpm --filter @gatelm/web lint",
-    "typecheck:web": "pnpm --filter @gatelm/web typecheck",
-    "dev:application": "pnpm --filter @gatelm/application dev",
-    "build:application": "pnpm --filter @gatelm/application build",
-    "lint:application": "pnpm --filter @gatelm/application lint",
-    "typecheck:application": "pnpm --filter @gatelm/application typecheck"
+    "typecheck:web": "pnpm --filter @gatelm/web typecheck"
   }
 }

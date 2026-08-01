@@ -1,0 +1,1592 @@
+{
+  "concurrencySummary": [
+    {
+      "adjustedResourceMedian": {
+        "contextSwitches": {
+          "involuntary": 0.0,
+          "perCompletedRequest": 597.576,
+          "total": 597576.0,
+          "voluntary": 597576.0
+        },
+        "cpuAvailableUtilizationPct": 29.277,
+        "cpuCoreEquivalentPct": 234.218,
+        "peakRssMiB": 0.0,
+        "peakThreadCount": 1,
+        "processCpuSeconds": 39.843,
+        "samplingStatus": "collected"
+      },
+      "completed": 3000,
+      "concurrency": 1,
+      "deadlineExceededCount": 10,
+      "eligible": false,
+      "eligibleRoundCount": 0,
+      "eligibleSuccessfulRps": null,
+      "inferenceErrorCount": 0,
+      "latencyMs": {
+        "max": 148.583,
+        "p50": 6.913,
+        "p95": 64.654,
+        "p99": 76.651,
+        "population": "successful_requests_across_all_rounds",
+        "sampleCount": 3000
+      },
+      "observedSuccessfulRps": 56.529,
+      "outputMismatchCount": 0,
+      "requested": 3000,
+      "roundCount": 3,
+      "successful": 3000
+    },
+    {
+      "adjustedResourceMedian": {
+        "contextSwitches": {
+          "involuntary": 0.0,
+          "perCompletedRequest": 345.836,
+          "total": 345836.0,
+          "voluntary": 345836.0
+        },
+        "cpuAvailableUtilizationPct": 43.439,
+        "cpuCoreEquivalentPct": 347.517,
+        "peakRssMiB": 0.191,
+        "peakThreadCount": 2,
+        "processCpuSeconds": 38.344,
+        "samplingStatus": "collected"
+      },
+      "completed": 3000,
+      "concurrency": 2,
+      "deadlineExceededCount": 13,
+      "eligible": false,
+      "eligibleRoundCount": 0,
+      "eligibleSuccessfulRps": null,
+      "inferenceErrorCount": 0,
+      "latencyMs": {
+        "max": 189.569,
+        "p50": 7.532,
+        "p95": 84.322,
+        "p99": 94.798,
+        "population": "successful_requests_across_all_rounds",
+        "sampleCount": 3000
+      },
+      "observedSuccessfulRps": 91.092,
+      "outputMismatchCount": 0,
+      "requested": 3000,
+      "roundCount": 3,
+      "successful": 3000
+    },
+    {
+      "adjustedResourceMedian": {
+        "contextSwitches": {
+          "involuntary": 0.0,
+          "perCompletedRequest": 178.409,
+          "total": 178409.0,
+          "voluntary": 178409.0
+        },
+        "cpuAvailableUtilizationPct": 57.614,
+        "cpuCoreEquivalentPct": 460.914,
+        "peakRssMiB": 0.407,
+        "peakThreadCount": 4,
+        "processCpuSeconds": 38.765,
+        "samplingStatus": "collected"
+      },
+      "completed": 3000,
+      "concurrency": 4,
+      "deadlineExceededCount": 499,
+      "eligible": false,
+      "eligibleRoundCount": 0,
+      "eligibleSuccessfulRps": null,
+      "inferenceErrorCount": 0,
+      "latencyMs": {
+        "max": 243.468,
+        "p50": 10.639,
+        "p95": 135.274,
+        "p99": 161.064,
+        "population": "successful_requests_across_all_rounds",
+        "sampleCount": 3000
+      },
+      "observedSuccessfulRps": 119.302,
+      "outputMismatchCount": 0,
+      "requested": 3000,
+      "roundCount": 3,
+      "successful": 3000
+    },
+    {
+      "adjustedResourceMedian": {
+        "contextSwitches": {
+          "involuntary": 0.0,
+          "perCompletedRequest": 105.994,
+          "total": 105994.0,
+          "voluntary": 105994.0
+        },
+        "cpuAvailableUtilizationPct": 67.056,
+        "cpuCoreEquivalentPct": 536.45,
+        "peakRssMiB": 0.812,
+        "peakThreadCount": 8,
+        "processCpuSeconds": 39.734,
+        "samplingStatus": "collected"
+      },
+      "completed": 3000,
+      "concurrency": 8,
+      "deadlineExceededCount": 600,
+      "eligible": false,
+      "eligibleRoundCount": 0,
+      "eligibleSuccessfulRps": null,
+      "inferenceErrorCount": 0,
+      "latencyMs": {
+        "max": 448.163,
+        "p50": 11.257,
+        "p95": 263.101,
+        "p99": 322.735,
+        "population": "successful_requests_across_all_rounds",
+        "sampleCount": 3000
+      },
+      "observedSuccessfulRps": 134.182,
+      "outputMismatchCount": 0,
+      "requested": 3000,
+      "roundCount": 3,
+      "successful": 3000
+    },
+    {
+      "adjustedResourceMedian": {
+        "contextSwitches": {
+          "involuntary": 0.0,
+          "perCompletedRequest": 67.332,
+          "total": 67332.0,
+          "voluntary": 67332.0
+        },
+        "cpuAvailableUtilizationPct": 68.981,
+        "cpuCoreEquivalentPct": 551.844,
+        "peakRssMiB": 1.605,
+        "peakThreadCount": 16,
+        "processCpuSeconds": 36.594,
+        "samplingStatus": "collected"
+      },
+      "completed": 3000,
+      "concurrency": 16,
+      "deadlineExceededCount": 658,
+      "eligible": false,
+      "eligibleRoundCount": 0,
+      "eligibleSuccessfulRps": null,
+      "inferenceErrorCount": 0,
+      "latencyMs": {
+        "max": 750.135,
+        "p50": 10.206,
+        "p95": 475.585,
+        "p99": 588.586,
+        "population": "successful_requests_across_all_rounds",
+        "sampleCount": 3000
+      },
+      "observedSuccessfulRps": 149.031,
+      "outputMismatchCount": 0,
+      "requested": 3000,
+      "roundCount": 3,
+      "successful": 3000
+    },
+    {
+      "adjustedResourceMedian": {
+        "contextSwitches": {
+          "involuntary": 0.0,
+          "perCompletedRequest": 54.098,
+          "total": 54098.0,
+          "voluntary": 54098.0
+        },
+        "cpuAvailableUtilizationPct": 79.148,
+        "cpuCoreEquivalentPct": 633.182,
+        "peakRssMiB": 3.25,
+        "peakThreadCount": 32,
+        "processCpuSeconds": 36.078,
+        "samplingStatus": "collected"
+      },
+      "completed": 3000,
+      "concurrency": 32,
+      "deadlineExceededCount": 1070,
+      "eligible": false,
+      "eligibleRoundCount": 0,
+      "eligibleSuccessfulRps": null,
+      "inferenceErrorCount": 0,
+      "latencyMs": {
+        "max": 1547.473,
+        "p50": 10.934,
+        "p95": 833.286,
+        "p99": 1025.66,
+        "population": "successful_requests_across_all_rounds",
+        "sampleCount": 3000
+      },
+      "observedSuccessfulRps": 165.069,
+      "outputMismatchCount": 0,
+      "requested": 3000,
+      "roundCount": 3,
+      "successful": 3000
+    }
+  ],
+  "evidenceOnly": true,
+  "generatedAt": "2026-07-31T08:52:00.356075Z",
+  "gitSha": "970c0c08e315c45e535b9470bc5907a7cbf8c195",
+  "model": {
+    "artifactBytes": 15678950,
+    "artifactFileCount": 7,
+    "artifactManifestSha256": "f495c3df17bc191c0a0331442ddca46421262a3938bebf67b9c49d1cf6d690bd",
+    "legacyRevision": "v3.14",
+    "lifecycle": "selected-offline-and-product-adapter-pass-production-unapproved",
+    "modelId": "gatelm/koelectra-small-v3-pii-ner",
+    "modelOnnxBytes": 14595587,
+    "modelOnnxSha256": "8a5cb146e84d413910a423d304e662a6aba9f69e83db129f5061d007a6de9381",
+    "registrySha256": "f47a932ea350a9bab2b5c218bb36eefb3d9793717d366023f19574720fdafd00",
+    "registryVersion": "gatelm.pii-model-canonical-registry.v1",
+    "runtime": "onnx-cpu-dynamic-qint8",
+    "sourceManifestSha256": [
+      "320a4afd888071052975158eee1a22973f66e8782300d18d3007dac25336f74b",
+      "a3168b3a3d9bea915a6c524bb31c7d2999dc0596f540406931d0795b07f706eb"
+    ],
+    "version": "v0.1.1"
+  },
+  "provenance": {
+    "adapterImplementationSha256": "c556c9d9268c87af5995c34ebb790a164e75b738028e0a5f8434b64b7b4fbee9",
+    "benchmarkRunnerSha256": "9bfbdc2cc22f2c87fa34c03189500c48aa8f3624219e306439c46c3bc3202fd0",
+    "corpusImplementationSha256": "c4292b21a434d4ba7668c470d07862a38cce7dd1459394a3b53e3dae5708e5e3",
+    "statsImplementationSha256": "7eed822bb56e2f3d0e120c7bd5ab748bcd0eaf01e1423b0a557842f247e76546"
+  },
+  "reportVersion": "gatelm.pii-direct-inference-concurrency-benchmark.v1",
+  "roundExecutionOrder": [
+    {
+      "concurrencyLevels": [
+        1,
+        2,
+        4,
+        8,
+        16,
+        32
+      ],
+      "round": 1
+    },
+    {
+      "concurrencyLevels": [
+        32,
+        16,
+        8,
+        4,
+        2,
+        1
+      ],
+      "round": 2
+    },
+    {
+      "concurrencyLevels": [
+        2,
+        4,
+        8,
+        16,
+        32,
+        1
+      ],
+      "round": 3
+    }
+  ],
+  "roundResults": [
+    {
+      "completed": 1000,
+      "completedRps": 60.946,
+      "concurrency": 1,
+      "deadlineExceededCount": 1,
+      "eligible": false,
+      "inferenceErrorCount": 0,
+      "latencyMs": {
+        "max": 135.145,
+        "p50": 6.139,
+        "p95": 61.959,
+        "p99": 67.488,
+        "population": "successful_requests_in_this_round",
+        "sampleCount": 1000
+      },
+      "observedPeakActiveAdapterCalls": 1,
+      "orderIndex": 0,
+      "outputMismatchCount": 0,
+      "requested": 1000,
+      "resources": {
+        "adjusted": {
+          "contextSwitches": {
+            "involuntary": 0,
+            "perCompletedRequest": 575.337,
+            "total": 575337,
+            "voluntary": 575337
+          },
+          "cpuAvailableUtilizationPct": 30.354,
+          "cpuCoreEquivalentPct": 242.832,
+          "peakRssMiB": 0.102,
+          "peakThreadCount": 1,
+          "processCpuSeconds": 39.843,
+          "samplingStatus": "collected"
+        },
+        "idleControl": {
+          "contextSwitches": {
+            "involuntary": 0,
+            "total": 2716,
+            "voluntary": 2716
+          },
+          "cpuAvailableUtilizationPct": 0.774,
+          "cpuCoreEquivalentPct": 6.19,
+          "peakRssMiB": 362.668,
+          "peakThreadCount": 26,
+          "processCpuSeconds": 1.016,
+          "samplingStatus": "collected"
+        },
+        "idleControlWallTimeSeconds": 16.408,
+        "measurementScope": "benchmark_process_including_harness",
+        "raw": {
+          "contextSwitches": {
+            "involuntary": 0,
+            "total": 578053,
+            "voluntary": 578053
+          },
+          "cpuAvailableUtilizationPct": 31.128,
+          "cpuCoreEquivalentPct": 249.022,
+          "peakRssMiB": 362.77,
+          "peakThreadCount": 27,
+          "processCpuSeconds": 40.859,
+          "samplingStatus": "collected"
+        },
+        "rawWallTimeSeconds": 16.408,
+        "sampleIntervalMs": 100.0
+      },
+      "round": 1,
+      "successful": 1000,
+      "successfulRps": 60.946,
+      "wallTimeSeconds": 16.408
+    },
+    {
+      "completed": 1000,
+      "completedRps": 94.49,
+      "concurrency": 2,
+      "deadlineExceededCount": 3,
+      "eligible": false,
+      "inferenceErrorCount": 0,
+      "latencyMs": {
+        "max": 189.569,
+        "p50": 7.612,
+        "p95": 81.032,
+        "p99": 88.68,
+        "population": "successful_requests_in_this_round",
+        "sampleCount": 1000
+      },
+      "observedPeakActiveAdapterCalls": 2,
+      "orderIndex": 1,
+      "outputMismatchCount": 0,
+      "requested": 1000,
+      "resources": {
+        "adjusted": {
+          "contextSwitches": {
+            "involuntary": 0,
+            "perCompletedRequest": 289.74,
+            "total": 289740,
+            "voluntary": 289740
+          },
+          "cpuAvailableUtilizationPct": 45.086,
+          "cpuCoreEquivalentPct": 360.688,
+          "peakRssMiB": 0.191,
+          "peakThreadCount": 2,
+          "processCpuSeconds": 38.172,
+          "samplingStatus": "collected"
+        },
+        "idleControl": {
+          "contextSwitches": {
+            "involuntary": 0,
+            "total": 1970,
+            "voluntary": 1970
+          },
+          "cpuAvailableUtilizationPct": 0.867,
+          "cpuCoreEquivalentPct": 6.939,
+          "peakRssMiB": 374.621,
+          "peakThreadCount": 26,
+          "processCpuSeconds": 0.734,
+          "samplingStatus": "collected"
+        },
+        "idleControlWallTimeSeconds": 10.583,
+        "measurementScope": "benchmark_process_including_harness",
+        "raw": {
+          "contextSwitches": {
+            "involuntary": 0,
+            "total": 291710,
+            "voluntary": 291710
+          },
+          "cpuAvailableUtilizationPct": 45.953,
+          "cpuCoreEquivalentPct": 367.627,
+          "peakRssMiB": 374.812,
+          "peakThreadCount": 28,
+          "processCpuSeconds": 38.906,
+          "samplingStatus": "collected"
+        },
+        "rawWallTimeSeconds": 10.583,
+        "sampleIntervalMs": 100.0
+      },
+      "round": 1,
+      "successful": 1000,
+      "successfulRps": 94.49,
+      "wallTimeSeconds": 10.583
+    },
+    {
+      "completed": 1000,
+      "completedRps": 123.025,
+      "concurrency": 4,
+      "deadlineExceededCount": 166,
+      "eligible": false,
+      "inferenceErrorCount": 0,
+      "latencyMs": {
+        "max": 181.233,
+        "p50": 10.199,
+        "p95": 134.288,
+        "p99": 157.678,
+        "population": "successful_requests_in_this_round",
+        "sampleCount": 1000
+      },
+      "observedPeakActiveAdapterCalls": 4,
+      "orderIndex": 2,
+      "outputMismatchCount": 0,
+      "requested": 1000,
+      "resources": {
+        "adjusted": {
+          "contextSwitches": {
+            "involuntary": 0,
+            "perCompletedRequest": 178.409,
+            "total": 178409,
+            "voluntary": 178409
+          },
+          "cpuAvailableUtilizationPct": 57.764,
+          "cpuCoreEquivalentPct": 462.113,
+          "peakRssMiB": 0.406,
+          "peakThreadCount": 4,
+          "processCpuSeconds": 37.562,
+          "samplingStatus": "collected"
+        },
+        "idleControl": {
+          "contextSwitches": {
+            "involuntary": 0,
+            "total": 1011,
+            "voluntary": 1011
+          },
+          "cpuAvailableUtilizationPct": 1.057,
+          "cpuCoreEquivalentPct": 8.458,
+          "peakRssMiB": 396.906,
+          "peakThreadCount": 23,
+          "processCpuSeconds": 0.688,
+          "samplingStatus": "collected"
+        },
+        "idleControlWallTimeSeconds": 8.129,
+        "measurementScope": "benchmark_process_including_harness",
+        "raw": {
+          "contextSwitches": {
+            "involuntary": 0,
+            "total": 179420,
+            "voluntary": 179420
+          },
+          "cpuAvailableUtilizationPct": 58.821,
+          "cpuCoreEquivalentPct": 470.571,
+          "peakRssMiB": 397.312,
+          "peakThreadCount": 27,
+          "processCpuSeconds": 38.25,
+          "samplingStatus": "collected"
+        },
+        "rawWallTimeSeconds": 8.128,
+        "sampleIntervalMs": 100.0
+      },
+      "round": 1,
+      "successful": 1000,
+      "successfulRps": 123.025,
+      "wallTimeSeconds": 8.128
+    },
+    {
+      "completed": 1000,
+      "completedRps": 138.951,
+      "concurrency": 8,
+      "deadlineExceededCount": 199,
+      "eligible": false,
+      "inferenceErrorCount": 0,
+      "latencyMs": {
+        "max": 411.373,
+        "p50": 10.698,
+        "p95": 253.863,
+        "p99": 318.41,
+        "population": "successful_requests_in_this_round",
+        "sampleCount": 1000
+      },
+      "observedPeakActiveAdapterCalls": 8,
+      "orderIndex": 3,
+      "outputMismatchCount": 0,
+      "requested": 1000,
+      "resources": {
+        "adjusted": {
+          "contextSwitches": {
+            "involuntary": 0,
+            "perCompletedRequest": 103.153,
+            "total": 103153,
+            "voluntary": 103153
+          },
+          "cpuAvailableUtilizationPct": 67.657,
+          "cpuCoreEquivalentPct": 541.259,
+          "peakRssMiB": 0.812,
+          "peakThreadCount": 8,
+          "processCpuSeconds": 38.953,
+          "samplingStatus": "collected"
+        },
+        "idleControl": {
+          "contextSwitches": {
+            "involuntary": 0,
+            "total": 1177,
+            "voluntary": 1177
+          },
+          "cpuAvailableUtilizationPct": 0.19,
+          "cpuCoreEquivalentPct": 1.52,
+          "peakRssMiB": 462.75,
+          "peakThreadCount": 23,
+          "processCpuSeconds": 0.109,
+          "samplingStatus": "collected"
+        },
+        "idleControlWallTimeSeconds": 7.197,
+        "measurementScope": "benchmark_process_including_harness",
+        "raw": {
+          "contextSwitches": {
+            "involuntary": 0,
+            "total": 104330,
+            "voluntary": 104330
+          },
+          "cpuAvailableUtilizationPct": 67.847,
+          "cpuCoreEquivalentPct": 542.779,
+          "peakRssMiB": 463.562,
+          "peakThreadCount": 31,
+          "processCpuSeconds": 39.062,
+          "samplingStatus": "collected"
+        },
+        "rawWallTimeSeconds": 7.197,
+        "sampleIntervalMs": 100.0
+      },
+      "round": 1,
+      "successful": 1000,
+      "successfulRps": 138.951,
+      "wallTimeSeconds": 7.197
+    },
+    {
+      "completed": 1000,
+      "completedRps": 157.336,
+      "concurrency": 16,
+      "deadlineExceededCount": 210,
+      "eligible": false,
+      "inferenceErrorCount": 0,
+      "latencyMs": {
+        "max": 750.135,
+        "p50": 10.263,
+        "p95": 447.526,
+        "p99": 577.537,
+        "population": "successful_requests_in_this_round",
+        "sampleCount": 1000
+      },
+      "observedPeakActiveAdapterCalls": 16,
+      "orderIndex": 4,
+      "outputMismatchCount": 0,
+      "requested": 1000,
+      "resources": {
+        "adjusted": {
+          "contextSwitches": {
+            "involuntary": 0,
+            "perCompletedRequest": 62.634,
+            "total": 62634,
+            "voluntary": 62634
+          },
+          "cpuAvailableUtilizationPct": 74.058,
+          "cpuCoreEquivalentPct": 592.471,
+          "peakRssMiB": 1.625,
+          "peakThreadCount": 16,
+          "processCpuSeconds": 37.656,
+          "samplingStatus": "collected"
+        },
+        "idleControl": {
+          "contextSwitches": {
+            "involuntary": 0,
+            "total": 806,
+            "voluntary": 806
+          },
+          "cpuAvailableUtilizationPct": 1.168,
+          "cpuCoreEquivalentPct": 9.341,
+          "peakRssMiB": 531.277,
+          "peakThreadCount": 23,
+          "processCpuSeconds": 0.594,
+          "samplingStatus": "collected"
+        },
+        "idleControlWallTimeSeconds": 6.356,
+        "measurementScope": "benchmark_process_including_harness",
+        "raw": {
+          "contextSwitches": {
+            "involuntary": 0,
+            "total": 63440,
+            "voluntary": 63440
+          },
+          "cpuAvailableUtilizationPct": 75.226,
+          "cpuCoreEquivalentPct": 601.812,
+          "peakRssMiB": 532.902,
+          "peakThreadCount": 39,
+          "processCpuSeconds": 38.25,
+          "samplingStatus": "collected"
+        },
+        "rawWallTimeSeconds": 6.356,
+        "sampleIntervalMs": 100.0
+      },
+      "round": 1,
+      "successful": 1000,
+      "successfulRps": 157.336,
+      "wallTimeSeconds": 6.356
+    },
+    {
+      "completed": 1000,
+      "completedRps": 173.916,
+      "concurrency": 32,
+      "deadlineExceededCount": 345,
+      "eligible": false,
+      "inferenceErrorCount": 0,
+      "latencyMs": {
+        "max": 1225.744,
+        "p50": 11.386,
+        "p95": 802.498,
+        "p99": 1031.621,
+        "population": "successful_requests_in_this_round",
+        "sampleCount": 1000
+      },
+      "observedPeakActiveAdapterCalls": 32,
+      "orderIndex": 5,
+      "outputMismatchCount": 0,
+      "requested": 1000,
+      "resources": {
+        "adjusted": {
+          "contextSwitches": {
+            "involuntary": 0,
+            "perCompletedRequest": 54.098,
+            "total": 54098,
+            "voluntary": 54098
+          },
+          "cpuAvailableUtilizationPct": 79.519,
+          "cpuCoreEquivalentPct": 636.151,
+          "peakRssMiB": 3.25,
+          "peakThreadCount": 32,
+          "processCpuSeconds": 36.578,
+          "samplingStatus": "collected"
+        },
+        "idleControl": {
+          "contextSwitches": {
+            "involuntary": 0,
+            "total": 930,
+            "voluntary": 930
+          },
+          "cpuAvailableUtilizationPct": 0.272,
+          "cpuCoreEquivalentPct": 2.174,
+          "peakRssMiB": 698.57,
+          "peakThreadCount": 23,
+          "processCpuSeconds": 0.125,
+          "samplingStatus": "collected"
+        },
+        "idleControlWallTimeSeconds": 5.75,
+        "measurementScope": "benchmark_process_including_harness",
+        "raw": {
+          "contextSwitches": {
+            "involuntary": 0,
+            "total": 55028,
+            "voluntary": 55028
+          },
+          "cpuAvailableUtilizationPct": 79.791,
+          "cpuCoreEquivalentPct": 638.325,
+          "peakRssMiB": 701.82,
+          "peakThreadCount": 55,
+          "processCpuSeconds": 36.703,
+          "samplingStatus": "collected"
+        },
+        "rawWallTimeSeconds": 5.75,
+        "sampleIntervalMs": 100.0
+      },
+      "round": 1,
+      "successful": 1000,
+      "successfulRps": 173.916,
+      "wallTimeSeconds": 5.75
+    },
+    {
+      "completed": 1000,
+      "completedRps": 175.503,
+      "concurrency": 32,
+      "deadlineExceededCount": 363,
+      "eligible": false,
+      "inferenceErrorCount": 0,
+      "latencyMs": {
+        "max": 1154.382,
+        "p50": 11.092,
+        "p95": 784.333,
+        "p99": 897.399,
+        "population": "successful_requests_in_this_round",
+        "sampleCount": 1000
+      },
+      "observedPeakActiveAdapterCalls": 32,
+      "orderIndex": 0,
+      "outputMismatchCount": 0,
+      "requested": 1000,
+      "resources": {
+        "adjusted": {
+          "contextSwitches": {
+            "involuntary": 0,
+            "perCompletedRequest": 48.495,
+            "total": 48495,
+            "voluntary": 48495
+          },
+          "cpuAvailableUtilizationPct": 79.148,
+          "cpuCoreEquivalentPct": 633.182,
+          "peakRssMiB": 3.266,
+          "peakThreadCount": 33,
+          "processCpuSeconds": 36.078,
+          "samplingStatus": "collected"
+        },
+        "idleControl": {
+          "contextSwitches": {
+            "involuntary": 0,
+            "total": 800,
+            "voluntary": 800
+          },
+          "cpuAvailableUtilizationPct": 0.754,
+          "cpuCoreEquivalentPct": 6.032,
+          "peakRssMiB": 709.066,
+          "peakThreadCount": 22,
+          "processCpuSeconds": 0.344,
+          "samplingStatus": "collected"
+        },
+        "idleControlWallTimeSeconds": 5.698,
+        "measurementScope": "benchmark_process_including_harness",
+        "raw": {
+          "contextSwitches": {
+            "involuntary": 0,
+            "total": 49295,
+            "voluntary": 49295
+          },
+          "cpuAvailableUtilizationPct": 79.902,
+          "cpuCoreEquivalentPct": 639.214,
+          "peakRssMiB": 712.332,
+          "peakThreadCount": 55,
+          "processCpuSeconds": 36.422,
+          "samplingStatus": "collected"
+        },
+        "rawWallTimeSeconds": 5.698,
+        "sampleIntervalMs": 100.0
+      },
+      "round": 2,
+      "successful": 1000,
+      "successfulRps": 175.503,
+      "wallTimeSeconds": 5.698
+    },
+    {
+      "completed": 1000,
+      "completedRps": 150.803,
+      "concurrency": 16,
+      "deadlineExceededCount": 225,
+      "eligible": false,
+      "inferenceErrorCount": 0,
+      "latencyMs": {
+        "max": 678.413,
+        "p50": 9.981,
+        "p95": 483.463,
+        "p99": 593.984,
+        "population": "successful_requests_in_this_round",
+        "sampleCount": 1000
+      },
+      "observedPeakActiveAdapterCalls": 16,
+      "orderIndex": 1,
+      "outputMismatchCount": 0,
+      "requested": 1000,
+      "resources": {
+        "adjusted": {
+          "contextSwitches": {
+            "involuntary": 0,
+            "perCompletedRequest": 67.332,
+            "total": 67332,
+            "voluntary": 67332
+          },
+          "cpuAvailableUtilizationPct": 68.981,
+          "cpuCoreEquivalentPct": 551.844,
+          "peakRssMiB": 0.0,
+          "peakThreadCount": 17,
+          "processCpuSeconds": 36.594,
+          "samplingStatus": "collected"
+        },
+        "idleControl": {
+          "contextSwitches": {
+            "involuntary": 0,
+            "total": 1210,
+            "voluntary": 1210
+          },
+          "cpuAvailableUtilizationPct": 0.795,
+          "cpuCoreEquivalentPct": 6.362,
+          "peakRssMiB": 773.047,
+          "peakThreadCount": 21,
+          "processCpuSeconds": 0.422,
+          "samplingStatus": "collected"
+        },
+        "idleControlWallTimeSeconds": 6.631,
+        "measurementScope": "benchmark_process_including_harness",
+        "raw": {
+          "contextSwitches": {
+            "involuntary": 0,
+            "total": 68542,
+            "voluntary": 68542
+          },
+          "cpuAvailableUtilizationPct": 69.776,
+          "cpuCoreEquivalentPct": 558.206,
+          "peakRssMiB": 710.691,
+          "peakThreadCount": 38,
+          "processCpuSeconds": 37.016,
+          "samplingStatus": "collected"
+        },
+        "rawWallTimeSeconds": 6.631,
+        "sampleIntervalMs": 100.0
+      },
+      "round": 2,
+      "successful": 1000,
+      "successfulRps": 150.803,
+      "wallTimeSeconds": 6.631
+    },
+    {
+      "completed": 1000,
+      "completedRps": 128.965,
+      "concurrency": 8,
+      "deadlineExceededCount": 202,
+      "eligible": false,
+      "inferenceErrorCount": 0,
+      "latencyMs": {
+        "max": 448.163,
+        "p50": 11.519,
+        "p95": 266.854,
+        "p99": 325.812,
+        "population": "successful_requests_in_this_round",
+        "sampleCount": 1000
+      },
+      "observedPeakActiveAdapterCalls": 8,
+      "orderIndex": 2,
+      "outputMismatchCount": 0,
+      "requested": 1000,
+      "resources": {
+        "adjusted": {
+          "contextSwitches": {
+            "involuntary": 0,
+            "perCompletedRequest": 119.063,
+            "total": 119063,
+            "voluntary": 119063
+          },
+          "cpuAvailableUtilizationPct": 64.432,
+          "cpuCoreEquivalentPct": 515.458,
+          "peakRssMiB": 0.812,
+          "peakThreadCount": 8,
+          "processCpuSeconds": 39.969,
+          "samplingStatus": "collected"
+        },
+        "idleControl": {
+          "contextSwitches": {
+            "involuntary": 0,
+            "total": 1216,
+            "voluntary": 1216
+          },
+          "cpuAvailableUtilizationPct": 0.378,
+          "cpuCoreEquivalentPct": 3.023,
+          "peakRssMiB": 773.047,
+          "peakThreadCount": 21,
+          "processCpuSeconds": 0.234,
+          "samplingStatus": "collected"
+        },
+        "idleControlWallTimeSeconds": 7.754,
+        "measurementScope": "benchmark_process_including_harness",
+        "raw": {
+          "contextSwitches": {
+            "involuntary": 0,
+            "total": 120279,
+            "voluntary": 120279
+          },
+          "cpuAvailableUtilizationPct": 64.81,
+          "cpuCoreEquivalentPct": 518.481,
+          "peakRssMiB": 773.859,
+          "peakThreadCount": 29,
+          "processCpuSeconds": 40.203,
+          "samplingStatus": "collected"
+        },
+        "rawWallTimeSeconds": 7.754,
+        "sampleIntervalMs": 100.0
+      },
+      "round": 2,
+      "successful": 1000,
+      "successfulRps": 128.965,
+      "wallTimeSeconds": 7.754
+    },
+    {
+      "completed": 1000,
+      "completedRps": 118.706,
+      "concurrency": 4,
+      "deadlineExceededCount": 169,
+      "eligible": false,
+      "inferenceErrorCount": 0,
+      "latencyMs": {
+        "max": 243.468,
+        "p50": 10.268,
+        "p95": 135.375,
+        "p99": 159.557,
+        "population": "successful_requests_in_this_round",
+        "sampleCount": 1000
+      },
+      "observedPeakActiveAdapterCalls": 4,
+      "orderIndex": 3,
+      "outputMismatchCount": 0,
+      "requested": 1000,
+      "resources": {
+        "adjusted": {
+          "contextSwitches": {
+            "involuntary": 0,
+            "perCompletedRequest": 177.571,
+            "total": 177571,
+            "voluntary": 177571
+          },
+          "cpuAvailableUtilizationPct": 57.614,
+          "cpuCoreEquivalentPct": 460.914,
+          "peakRssMiB": 0.407,
+          "peakThreadCount": 4,
+          "processCpuSeconds": 38.828,
+          "samplingStatus": "collected"
+        },
+        "idleControl": {
+          "contextSwitches": {
+            "involuntary": 0,
+            "total": 1219,
+            "voluntary": 1219
+          },
+          "cpuAvailableUtilizationPct": 0.51,
+          "cpuCoreEquivalentPct": 4.08,
+          "peakRssMiB": 773.066,
+          "peakThreadCount": 21,
+          "processCpuSeconds": 0.344,
+          "samplingStatus": "collected"
+        },
+        "idleControlWallTimeSeconds": 8.425,
+        "measurementScope": "benchmark_process_including_harness",
+        "raw": {
+          "contextSwitches": {
+            "involuntary": 0,
+            "total": 178790,
+            "voluntary": 178790
+          },
+          "cpuAvailableUtilizationPct": 58.124,
+          "cpuCoreEquivalentPct": 464.994,
+          "peakRssMiB": 773.473,
+          "peakThreadCount": 25,
+          "processCpuSeconds": 39.172,
+          "samplingStatus": "collected"
+        },
+        "rawWallTimeSeconds": 8.424,
+        "sampleIntervalMs": 100.0
+      },
+      "round": 2,
+      "successful": 1000,
+      "successfulRps": 118.706,
+      "wallTimeSeconds": 8.424
+    },
+    {
+      "completed": 1000,
+      "completedRps": 90.632,
+      "concurrency": 2,
+      "deadlineExceededCount": 7,
+      "eligible": false,
+      "inferenceErrorCount": 0,
+      "latencyMs": {
+        "max": 124.029,
+        "p50": 7.132,
+        "p95": 85.493,
+        "p99": 96.155,
+        "population": "successful_requests_in_this_round",
+        "sampleCount": 1000
+      },
+      "observedPeakActiveAdapterCalls": 2,
+      "orderIndex": 4,
+      "outputMismatchCount": 0,
+      "requested": 1000,
+      "resources": {
+        "adjusted": {
+          "contextSwitches": {
+            "involuntary": 0,
+            "perCompletedRequest": 345.836,
+            "total": 345836,
+            "voluntary": 345836
+          },
+          "cpuAvailableUtilizationPct": 43.439,
+          "cpuCoreEquivalentPct": 347.517,
+          "peakRssMiB": 0.203,
+          "peakThreadCount": 2,
+          "processCpuSeconds": 38.344,
+          "samplingStatus": "collected"
+        },
+        "idleControl": {
+          "contextSwitches": {
+            "involuntary": 0,
+            "total": 1531,
+            "voluntary": 1531
+          },
+          "cpuAvailableUtilizationPct": 1.027,
+          "cpuCoreEquivalentPct": 8.213,
+          "peakRssMiB": 773.094,
+          "peakThreadCount": 21,
+          "processCpuSeconds": 0.906,
+          "samplingStatus": "collected"
+        },
+        "idleControlWallTimeSeconds": 11.034,
+        "measurementScope": "benchmark_process_including_harness",
+        "raw": {
+          "contextSwitches": {
+            "involuntary": 0,
+            "total": 347367,
+            "voluntary": 347367
+          },
+          "cpuAvailableUtilizationPct": 44.466,
+          "cpuCoreEquivalentPct": 355.73,
+          "peakRssMiB": 773.297,
+          "peakThreadCount": 23,
+          "processCpuSeconds": 39.25,
+          "samplingStatus": "collected"
+        },
+        "rawWallTimeSeconds": 11.034,
+        "sampleIntervalMs": 100.0
+      },
+      "round": 2,
+      "successful": 1000,
+      "successfulRps": 90.632,
+      "wallTimeSeconds": 11.034
+    },
+    {
+      "completed": 1000,
+      "completedRps": 56.459,
+      "concurrency": 1,
+      "deadlineExceededCount": 2,
+      "eligible": false,
+      "inferenceErrorCount": 0,
+      "latencyMs": {
+        "max": 112.437,
+        "p50": 6.904,
+        "p95": 64.822,
+        "p99": 73.606,
+        "population": "successful_requests_in_this_round",
+        "sampleCount": 1000
+      },
+      "observedPeakActiveAdapterCalls": 1,
+      "orderIndex": 5,
+      "outputMismatchCount": 0,
+      "requested": 1000,
+      "resources": {
+        "adjusted": {
+          "contextSwitches": {
+            "involuntary": 0,
+            "perCompletedRequest": 597.576,
+            "total": 597576,
+            "voluntary": 597576
+          },
+          "cpuAvailableUtilizationPct": 29.277,
+          "cpuCoreEquivalentPct": 234.218,
+          "peakRssMiB": 0.0,
+          "peakThreadCount": 0,
+          "processCpuSeconds": 41.484,
+          "samplingStatus": "collected"
+        },
+        "idleControl": {
+          "contextSwitches": {
+            "involuntary": 0,
+            "total": 63,
+            "voluntary": 63
+          },
+          "cpuAvailableUtilizationPct": 0.706,
+          "cpuCoreEquivalentPct": 5.646,
+          "peakRssMiB": 933.188,
+          "peakThreadCount": 21,
+          "processCpuSeconds": 1.0,
+          "samplingStatus": "collected"
+        },
+        "idleControlWallTimeSeconds": 17.713,
+        "measurementScope": "benchmark_process_including_harness",
+        "raw": {
+          "contextSwitches": {
+            "involuntary": 0,
+            "total": 597639,
+            "voluntary": 597639
+          },
+          "cpuAvailableUtilizationPct": 29.983,
+          "cpuCoreEquivalentPct": 239.864,
+          "peakRssMiB": 901.254,
+          "peakThreadCount": 21,
+          "processCpuSeconds": 42.484,
+          "samplingStatus": "collected"
+        },
+        "rawWallTimeSeconds": 17.712,
+        "sampleIntervalMs": 100.0
+      },
+      "round": 2,
+      "successful": 1000,
+      "successfulRps": 56.459,
+      "wallTimeSeconds": 17.712
+    },
+    {
+      "completed": 1000,
+      "completedRps": 88.363,
+      "concurrency": 2,
+      "deadlineExceededCount": 3,
+      "eligible": false,
+      "inferenceErrorCount": 0,
+      "latencyMs": {
+        "max": 159.99,
+        "p50": 7.818,
+        "p95": 85.939,
+        "p99": 94.848,
+        "population": "successful_requests_in_this_round",
+        "sampleCount": 1000
+      },
+      "observedPeakActiveAdapterCalls": 2,
+      "orderIndex": 0,
+      "outputMismatchCount": 0,
+      "requested": 1000,
+      "resources": {
+        "adjusted": {
+          "contextSwitches": {
+            "involuntary": 0,
+            "perCompletedRequest": 361.193,
+            "total": 361193,
+            "voluntary": 361193
+          },
+          "cpuAvailableUtilizationPct": 43.145,
+          "cpuCoreEquivalentPct": 345.167,
+          "peakRssMiB": 0.098,
+          "peakThreadCount": 2,
+          "processCpuSeconds": 39.062,
+          "samplingStatus": "collected"
+        },
+        "idleControl": {
+          "contextSwitches": {
+            "involuntary": 0,
+            "total": 1487,
+            "voluntary": 1487
+          },
+          "cpuAvailableUtilizationPct": 0.57,
+          "cpuCoreEquivalentPct": 4.556,
+          "peakRssMiB": 932.164,
+          "peakThreadCount": 21,
+          "processCpuSeconds": 0.516,
+          "samplingStatus": "collected"
+        },
+        "idleControlWallTimeSeconds": 11.317,
+        "measurementScope": "benchmark_process_including_harness",
+        "raw": {
+          "contextSwitches": {
+            "involuntary": 0,
+            "total": 362680,
+            "voluntary": 362680
+          },
+          "cpuAvailableUtilizationPct": 43.715,
+          "cpuCoreEquivalentPct": 349.723,
+          "peakRssMiB": 932.262,
+          "peakThreadCount": 23,
+          "processCpuSeconds": 39.578,
+          "samplingStatus": "collected"
+        },
+        "rawWallTimeSeconds": 11.317,
+        "sampleIntervalMs": 100.0
+      },
+      "round": 3,
+      "successful": 1000,
+      "successfulRps": 88.363,
+      "wallTimeSeconds": 11.317
+    },
+    {
+      "completed": 1000,
+      "completedRps": 116.366,
+      "concurrency": 4,
+      "deadlineExceededCount": 164,
+      "eligible": false,
+      "inferenceErrorCount": 0,
+      "latencyMs": {
+        "max": 210.367,
+        "p50": 11.516,
+        "p95": 134.957,
+        "p99": 169.892,
+        "population": "successful_requests_in_this_round",
+        "sampleCount": 1000
+      },
+      "observedPeakActiveAdapterCalls": 4,
+      "orderIndex": 1,
+      "outputMismatchCount": 0,
+      "requested": 1000,
+      "resources": {
+        "adjusted": {
+          "contextSwitches": {
+            "involuntary": 0,
+            "perCompletedRequest": 187.767,
+            "total": 187767,
+            "voluntary": 187767
+          },
+          "cpuAvailableUtilizationPct": 56.388,
+          "cpuCoreEquivalentPct": 451.1,
+          "peakRssMiB": 0.407,
+          "peakThreadCount": 4,
+          "processCpuSeconds": 38.765,
+          "samplingStatus": "collected"
+        },
+        "idleControl": {
+          "contextSwitches": {
+            "involuntary": 0,
+            "total": 1779,
+            "voluntary": 1779
+          },
+          "cpuAvailableUtilizationPct": 0.318,
+          "cpuCoreEquivalentPct": 2.545,
+          "peakRssMiB": 932.23,
+          "peakThreadCount": 21,
+          "processCpuSeconds": 0.219,
+          "samplingStatus": "collected"
+        },
+        "idleControlWallTimeSeconds": 8.594,
+        "measurementScope": "benchmark_process_including_harness",
+        "raw": {
+          "contextSwitches": {
+            "involuntary": 0,
+            "total": 189546,
+            "voluntary": 189546
+          },
+          "cpuAvailableUtilizationPct": 56.706,
+          "cpuCoreEquivalentPct": 453.645,
+          "peakRssMiB": 932.637,
+          "peakThreadCount": 25,
+          "processCpuSeconds": 38.984,
+          "samplingStatus": "collected"
+        },
+        "rawWallTimeSeconds": 8.594,
+        "sampleIntervalMs": 100.0
+      },
+      "round": 3,
+      "successful": 1000,
+      "successfulRps": 116.366,
+      "wallTimeSeconds": 8.594
+    },
+    {
+      "completed": 1000,
+      "completedRps": 135.009,
+      "concurrency": 8,
+      "deadlineExceededCount": 199,
+      "eligible": false,
+      "inferenceErrorCount": 0,
+      "latencyMs": {
+        "max": 395.74,
+        "p50": 11.722,
+        "p95": 261.435,
+        "p99": 323.757,
+        "population": "successful_requests_in_this_round",
+        "sampleCount": 1000
+      },
+      "observedPeakActiveAdapterCalls": 8,
+      "orderIndex": 2,
+      "outputMismatchCount": 0,
+      "requested": 1000,
+      "resources": {
+        "adjusted": {
+          "contextSwitches": {
+            "involuntary": 0,
+            "perCompletedRequest": 105.994,
+            "total": 105994,
+            "voluntary": 105994
+          },
+          "cpuAvailableUtilizationPct": 67.056,
+          "cpuCoreEquivalentPct": 536.45,
+          "peakRssMiB": 0.812,
+          "peakThreadCount": 8,
+          "processCpuSeconds": 39.734,
+          "samplingStatus": "collected"
+        },
+        "idleControl": {
+          "contextSwitches": {
+            "involuntary": 0,
+            "total": 139,
+            "voluntary": 139
+          },
+          "cpuAvailableUtilizationPct": 0.844,
+          "cpuCoreEquivalentPct": 6.75,
+          "peakRssMiB": 932.262,
+          "peakThreadCount": 21,
+          "processCpuSeconds": 0.5,
+          "samplingStatus": "collected"
+        },
+        "idleControlWallTimeSeconds": 7.407,
+        "measurementScope": "benchmark_process_including_harness",
+        "raw": {
+          "contextSwitches": {
+            "involuntary": 0,
+            "total": 106133,
+            "voluntary": 106133
+          },
+          "cpuAvailableUtilizationPct": 67.9,
+          "cpuCoreEquivalentPct": 543.2,
+          "peakRssMiB": 933.074,
+          "peakThreadCount": 29,
+          "processCpuSeconds": 40.234,
+          "samplingStatus": "collected"
+        },
+        "rawWallTimeSeconds": 7.407,
+        "sampleIntervalMs": 100.0
+      },
+      "round": 3,
+      "successful": 1000,
+      "successfulRps": 135.009,
+      "wallTimeSeconds": 7.407
+    },
+    {
+      "completed": 1000,
+      "completedRps": 139.995,
+      "concurrency": 16,
+      "deadlineExceededCount": 223,
+      "eligible": false,
+      "inferenceErrorCount": 0,
+      "latencyMs": {
+        "max": 706.735,
+        "p50": 10.298,
+        "p95": 488.737,
+        "p99": 585.369,
+        "population": "successful_requests_in_this_round",
+        "sampleCount": 1000
+      },
+      "observedPeakActiveAdapterCalls": 16,
+      "orderIndex": 3,
+      "outputMismatchCount": 0,
+      "requested": 1000,
+      "resources": {
+        "adjusted": {
+          "contextSwitches": {
+            "involuntary": 0,
+            "perCompletedRequest": 72.464,
+            "total": 72464,
+            "voluntary": 72464
+          },
+          "cpuAvailableUtilizationPct": 61.768,
+          "cpuCoreEquivalentPct": 494.137,
+          "peakRssMiB": 1.605,
+          "peakThreadCount": 15,
+          "processCpuSeconds": 35.297,
+          "samplingStatus": "collected"
+        },
+        "idleControl": {
+          "contextSwitches": {
+            "involuntary": 0,
+            "total": 1467,
+            "voluntary": 1467
+          },
+          "cpuAvailableUtilizationPct": 0.355,
+          "cpuCoreEquivalentPct": 2.844,
+          "peakRssMiB": 932.594,
+          "peakThreadCount": 23,
+          "processCpuSeconds": 0.203,
+          "samplingStatus": "collected"
+        },
+        "idleControlWallTimeSeconds": 7.143,
+        "measurementScope": "benchmark_process_including_harness",
+        "raw": {
+          "contextSwitches": {
+            "involuntary": 0,
+            "total": 73931,
+            "voluntary": 73931
+          },
+          "cpuAvailableUtilizationPct": 62.123,
+          "cpuCoreEquivalentPct": 496.981,
+          "peakRssMiB": 934.199,
+          "peakThreadCount": 38,
+          "processCpuSeconds": 35.5,
+          "samplingStatus": "collected"
+        },
+        "rawWallTimeSeconds": 7.143,
+        "sampleIntervalMs": 100.0
+      },
+      "round": 3,
+      "successful": 1000,
+      "successfulRps": 139.995,
+      "wallTimeSeconds": 7.143
+    },
+    {
+      "completed": 1000,
+      "completedRps": 148.668,
+      "concurrency": 32,
+      "deadlineExceededCount": 362,
+      "eligible": false,
+      "inferenceErrorCount": 0,
+      "latencyMs": {
+        "max": 1547.473,
+        "p50": 10.427,
+        "p95": 917.221,
+        "p99": 1068.701,
+        "population": "successful_requests_in_this_round",
+        "sampleCount": 1000
+      },
+      "observedPeakActiveAdapterCalls": 32,
+      "orderIndex": 4,
+      "outputMismatchCount": 0,
+      "requested": 1000,
+      "resources": {
+        "adjusted": {
+          "contextSwitches": {
+            "involuntary": 0,
+            "perCompletedRequest": 59.987,
+            "total": 59987,
+            "voluntary": 59987
+          },
+          "cpuAvailableUtilizationPct": 66.204,
+          "cpuCoreEquivalentPct": 529.633,
+          "peakRssMiB": 3.25,
+          "peakThreadCount": 32,
+          "processCpuSeconds": 35.624,
+          "samplingStatus": "collected"
+        },
+        "idleControl": {
+          "contextSwitches": {
+            "involuntary": 0,
+            "total": 1178,
+            "voluntary": 1178
+          },
+          "cpuAvailableUtilizationPct": 0.348,
+          "cpuCoreEquivalentPct": 2.786,
+          "peakRssMiB": 933.582,
+          "peakThreadCount": 23,
+          "processCpuSeconds": 0.188,
+          "samplingStatus": "collected"
+        },
+        "idleControlWallTimeSeconds": 6.731,
+        "measurementScope": "benchmark_process_including_harness",
+        "raw": {
+          "contextSwitches": {
+            "involuntary": 0,
+            "total": 61164,
+            "voluntary": 61164
+          },
+          "cpuAvailableUtilizationPct": 66.552,
+          "cpuCoreEquivalentPct": 532.419,
+          "peakRssMiB": 936.832,
+          "peakThreadCount": 55,
+          "processCpuSeconds": 35.812,
+          "samplingStatus": "collected"
+        },
+        "rawWallTimeSeconds": 6.726,
+        "sampleIntervalMs": 100.0
+      },
+      "round": 3,
+      "successful": 1000,
+      "successfulRps": 148.668,
+      "wallTimeSeconds": 6.726
+    },
+    {
+      "completed": 1000,
+      "completedRps": 52.771,
+      "concurrency": 1,
+      "deadlineExceededCount": 7,
+      "eligible": false,
+      "inferenceErrorCount": 0,
+      "latencyMs": {
+        "max": 148.583,
+        "p50": 7.842,
+        "p95": 67.248,
+        "p99": 89.399,
+        "population": "successful_requests_in_this_round",
+        "sampleCount": 1000
+      },
+      "observedPeakActiveAdapterCalls": 1,
+      "orderIndex": 5,
+      "outputMismatchCount": 0,
+      "requested": 1000,
+      "resources": {
+        "adjusted": {
+          "contextSwitches": {
+            "involuntary": 0,
+            "perCompletedRequest": 622.151,
+            "total": 622151,
+            "voluntary": 622151
+          },
+          "cpuAvailableUtilizationPct": 25.942,
+          "cpuCoreEquivalentPct": 207.539,
+          "peakRssMiB": 0.0,
+          "peakThreadCount": 1,
+          "processCpuSeconds": 39.328,
+          "samplingStatus": "collected"
+        },
+        "idleControl": {
+          "contextSwitches": {
+            "involuntary": 0,
+            "total": 3765,
+            "voluntary": 3765
+          },
+          "cpuAvailableUtilizationPct": 0.804,
+          "cpuCoreEquivalentPct": 6.431,
+          "peakRssMiB": 937.078,
+          "peakThreadCount": 23,
+          "processCpuSeconds": 1.219,
+          "samplingStatus": "collected"
+        },
+        "idleControlWallTimeSeconds": 18.95,
+        "measurementScope": "benchmark_process_including_harness",
+        "raw": {
+          "contextSwitches": {
+            "involuntary": 0,
+            "total": 625916,
+            "voluntary": 625916
+          },
+          "cpuAvailableUtilizationPct": 26.746,
+          "cpuCoreEquivalentPct": 213.97,
+          "peakRssMiB": 933.684,
+          "peakThreadCount": 24,
+          "processCpuSeconds": 40.547,
+          "samplingStatus": "collected"
+        },
+        "rawWallTimeSeconds": 18.95,
+        "sampleIntervalMs": 100.0
+      },
+      "round": 3,
+      "successful": 1000,
+      "successfulRps": 52.771,
+      "wallTimeSeconds": 18.95
+    }
+  ],
+  "runtime": {
+    "cpuModel": "Intel64 Family 6 Model 189 Stepping 1, GenuineIntel",
+    "logicalCpuCount": 8,
+    "machine": "AMD64",
+    "onnxAllowSpinning": false,
+    "onnxAvailableProviders": [
+      "AzureExecutionProvider",
+      "CPUExecutionProvider"
+    ],
+    "onnxInterOpThreads": 1,
+    "onnxIntraOpThreads": 4,
+    "os": "Windows-11-10.0.26200-SP0",
+    "packageVersions": {
+      "numpy": "2.5.0",
+      "onnxruntime": "1.27.0",
+      "psutil": "7.0.0",
+      "tokenizers": "0.22.2",
+      "transformers": "4.57.6"
+    },
+    "peakSampleIntervalMs": 100.0,
+    "physicalCpuCount": 8,
+    "processAffinityCpuCount": 8,
+    "pythonVersion": "3.12.13",
+    "resourceControl": "same_wall_idle_process_control"
+  },
+  "selectionSummary": {
+    "eligibilityRule": "all_rounds_have_zero_inference_errors_output_mismatches_and_deadline_excesses",
+    "eligibleConcurrencyLevels": [],
+    "highestEligibleSuccessfulRps": null,
+    "highestEligibleThroughputConcurrency": null
+  },
+  "trackedWorktreeDirty": false,
+  "workload": {
+    "baselineSemantics": "full_detection_objects_compared_in_memory_only",
+    "caseCount": 50,
+    "corpusSha256": "b5e678d09af9e99a1c1a807def7caee4b0e081b18368fbee82e8168778467090",
+    "deadlineMs": 100.0,
+    "deadlinePopulation": "all_completed_requests_including_inference_errors",
+    "deadlineSemantics": "observed_after_completion_no_forced_interrupt",
+    "measuredRequestsPerLevelPerRound": 1000,
+    "measuredRequestsPerLevelTotal": 3000,
+    "p99Population": "successful_requests_across_all_rounds_for_each_concurrency",
+    "rounds": 3,
+    "sequentialBaselineRequests": 50,
+    "valueMode": "rendered_synthetic_values_in_memory_not_persisted",
+    "warmupRequestsPerLevelPerRound": 32
+  }
+}

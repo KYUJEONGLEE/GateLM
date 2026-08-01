@@ -4,7 +4,9 @@
 
 | Field | Value |
 |---|---|
-| Status | Accepted implementation companion contract |
+| Status | Superseded; legacy implementation remains until deprecation is completed |
+| Contract lifecycle | Superseded |
+| Document role | Superseded contract; legacy implementation reference |
 | Applies to | Tenant-scoped employee daily/weekly cost policy, Control Plane mutation, Web Console, Gateway enforcement |
 | Does not replace | Project employee assignment policy, Tenant Chat user token quota, Tenant monthly cost budget |
 | Baseline | `origin/dev` after employee unified usage integration |

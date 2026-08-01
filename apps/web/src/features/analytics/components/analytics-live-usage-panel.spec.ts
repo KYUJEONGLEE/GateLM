@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { expect, test } from "@playwright/test";
 
 const panelUrl = new URL("./analytics-live-usage-panel.tsx", import.meta.url);
+const chartUrl = new URL("./analytics-charts.tsx", import.meta.url);
 const stylesUrl = new URL("../analytics-live-usage.css", import.meta.url);
 
 test("live usage defaults off and polls without overlap only while visible", async () => {
@@ -36,5 +37,29 @@ test("static usage keeps the selected range while live usage uses the rolling wi
   expect(source).toContain("rollingWindow={Boolean(snapshot)}");
   expect(source).toMatch(
     /displayBuckets\.slice\(snapshot\s+\? analyticsLiveChartStartIndex\(displayBuckets\)\s+: 0\)/
+  );
+});
+
+test("live usage displays Seoul time and keeps ECharts line colors hover-safe", async () => {
+  const [panelSource, chartSource] = await Promise.all([
+    readFile(panelUrl, "utf8"),
+    readFile(chartUrl, "utf8")
+  ]);
+
+  expect(panelSource).toContain("timeZone: DEFAULT_DISPLAY_TIMEZONE");
+  expect(chartSource).toContain("timeZone: DEFAULT_DISPLAY_TIMEZONE");
+  expect(chartSource).toMatch(/bucket\.incomingRps\),\s+palette\[1\]/);
+  expect(chartSource).toMatch(/bucket\.processedRps\),\s+palette\[0\]/);
+  expect(chartSource).toMatch(/bucket\.rateLimitedRps\),\s+palette\[2\]/);
+});
+
+test("top project rank and name stay readable in the compact two-column layout", async () => {
+  const styles = await readFile(stylesUrl, "utf8");
+
+  expect(styles).toMatch(
+    /\.analytics-live-project-line > span \{[\s\S]*?font-size: calc\(19px \+ var\(--global-font-lift\)\);/
+  );
+  expect(styles).toMatch(
+    /\.analytics-live-project-line > a \{[\s\S]*?font-size: calc\(21px \+ var\(--global-font-lift\)\);[\s\S]*?line-height: 1\.25;/
   );
 });

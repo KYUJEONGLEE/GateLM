@@ -5,6 +5,8 @@
 GateLM은 애플리케이션과 LLM Provider 사이에서 인증, 정책, 비용, 안전, 라우팅, 로그를 일관되게 관리합니다. 각 애플리케이션이 Provider별 연동과 운영 정책을 따로 구현하지 않아도 되도록 제어 영역과 요청 처리 경로를 분리해 제공합니다.
 
 > GateLM은 현재 활발히 개발 중입니다. 코드가 존재하더라도 모든 기능이 GA 또는 릴리스 완료 상태를 의미하지는 않습니다. 정확한 범위는 [현재 구현 상태](docs/current/implementation-status.md)에서 확인해 주세요.
+>
+> 현재 `dev` 개발본은 `Unreleased`입니다. 공식 GitHub 최신 릴리스는 `v0.0.1`이며, 리팩토링과 전체 release gate가 끝난 exact SHA를 target `v1.0.0`으로 만드는 것이 목표입니다. 기존 `docs/v1.0.0`, `docs/v2.0.0`, `docs/v2.1.0`은 정식 제품 릴리스가 아닌 pre-v1 내부 workstream 이름입니다.
 
 ## 핵심 기능
 
@@ -95,6 +97,10 @@ pnpm dev:web
 go run ./apps/gateway-core/cmd/gateway
 ```
 
+`pnpm dev:web`은 Windows, macOS, Linux에서 같은 Web 개발 서버를 시작한다.
+Windows에서 주요 Console route를 미리 compile하려면
+`pnpm dev:web:prewarm:windows`를 사용할 수 있다.
+
 Control Plane의 migration과 seed를 포함한 상세 절차는 [Control Plane 로컬 가이드](apps/control-plane-api/README.md)를 참고하세요. 전체 셀프 호스팅 구성은 [Self-host Compose 가이드](deploy/selfhost/README.md)에서 확인할 수 있습니다. 외부에 서비스를 노출하기 전에는 `.env`의 예시 Secret을 반드시 교체해야 합니다.
 
 ## 검증
@@ -102,9 +108,11 @@ Control Plane의 migration과 seed를 포함한 상세 절차는 [Control Plane 
 문서와 저장소 계약을 검증합니다.
 
 ```bash
-corepack pnpm run verify:v2-docs
+corepack pnpm run verify:docs
 corepack pnpm run verify:v2-final
 ```
+
+`verify:v2-final`은 former v2 workstream에서 시작된 광범위 회귀 suite이며 target `v1.0.0`의 전체 release gate나 freeze를 뜻하지 않습니다. v1 release gate 자동화는 별도 계약과 evidence가 필요합니다.
 
 변경 범위에 따라 애플리케이션과 Gateway 검증을 추가합니다.
 
@@ -118,13 +126,15 @@ go test ./...
 
 - [현재 문서 진입점](docs/current/README.md): 작업 범위별로 어떤 문서를 읽어야 하는지 안내합니다.
 - [문서 Source of Truth](docs/current/source-of-truth.md): 계약과 구현이 충돌할 때의 판단 기준입니다.
+- [현재 계약 지도](docs/current/contract-map.md): 범위별 active contract와 proposal 상태를 연결합니다.
 - [현재 구현 상태](docs/current/implementation-status.md): 구현된 기능과 제품 성숙도 경계를 정리합니다.
 - [기술적 난제](docs/current/technical-challenges.md): 주요 설계 문제와 코드·테스트 근거를 설명합니다.
 - [Gateway 라우팅 계약](docs/routing/README.md): category × difficulty 라우팅과 RuntimeSnapshot 계약입니다.
 - [Tenant Chat](docs/tenant-chat/README.md): Tenant Chat의 계약, 스키마, 구현 범위를 설명합니다.
+- [Pre-v1 문서 지도](docs/pre-v1/README.md): 과거 release-like workstream의 상태와 단계적 이관 계획을 설명합니다.
 - [Self-host 운영 가이드](deploy/selfhost/README.md): 설치, migration, smoke test, 운영 문서로 연결합니다.
 
-과거 버전 문서는 현재 작업의 기본 기준이 아닐 수 있습니다. 개발을 시작할 때는 항상 `docs/current`의 안내를 먼저 확인해 주세요.
+Pre-v1 문서는 현재 작업의 기본 기준이 아닐 수 있습니다. 개발을 시작할 때는 항상 `docs/current`의 안내와 계약 지도를 먼저 확인해 주세요.
 
 ## 기여하기
 

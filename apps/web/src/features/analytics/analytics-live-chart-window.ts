@@ -1,7 +1,7 @@
 import type { AnalyticsLiveUsageBucket } from "@/features/analytics/analytics-live-usage-contract";
 
-const minimumVisibleDurationMs = 5 * 60 * 1000;
-const minimumVisibleBucketCount = 12;
+const minimumVisibleDurationMs = 30 * 1000;
+const minimumVisibleBucketCount = 2;
 
 export function analyticsLiveChartStartIndex(buckets: AnalyticsLiveUsageBucket[]) {
   if (buckets.length < 2) {

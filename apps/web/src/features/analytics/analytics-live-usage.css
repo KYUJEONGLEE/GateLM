@@ -177,6 +177,7 @@
 
 .analytics-live-project-line > span {
   color: var(--text-muted);
+  font-size: calc(19px + var(--global-font-lift));
   font-weight: 800;
   text-align: center;
 }
@@ -185,8 +186,9 @@
   min-width: 0;
   overflow: hidden;
   color: var(--foreground);
-  font-size: calc(17px + var(--global-font-lift));
+  font-size: calc(21px + var(--global-font-lift));
   font-weight: 800;
+  line-height: 1.25;
   text-decoration: none;
   text-overflow: ellipsis;
   white-space: nowrap;

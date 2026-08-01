@@ -4,12 +4,14 @@ import {
   AnalyticsV5ModelShareChart,
   AnalyticsV5RoutingDifficultyChart
 } from "@/features/analytics/components/analytics-v5-charts";
+import type { ProviderDisplayDirectory } from "@/lib/control-plane/provider-display";
 import { formatDateTime, formatPercent } from "@/lib/formatting/formatters";
 import type { Locale } from "@/lib/i18n/locale";
 
 type AnalyticsV5OverviewProps = {
   locale: Locale;
   model: AnalyticsReadModel;
+  providerDirectory: ProviderDisplayDirectory;
 };
 
 const stateText: Record<Locale, Record<AnalyticsReadModel["dataState"], string>> = {
@@ -29,7 +31,8 @@ const stateText: Record<Locale, Record<AnalyticsReadModel["dataState"], string>>
 
 export function AnalyticsV5Overview({
   locale,
-  model
+  model,
+  providerDirectory
 }: AnalyticsV5OverviewProps) {
   const text = locale === "ko"
     ? {
@@ -101,6 +104,7 @@ export function AnalyticsV5Overview({
             <AnalyticsV5ModelShareChart
               ariaLabel={text.modelShare}
               locale={locale}
+              providerDirectory={providerDirectory}
               rows={modelRows}
             />
           ) : <AnalyticsV5Empty label={text.empty} />}

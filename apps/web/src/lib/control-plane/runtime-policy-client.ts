@@ -798,21 +798,7 @@ function makeRuntimePolicyConfigTemplate(
   providerConnections: ProviderConnectionRecord[]
 ): RuntimePolicyConfig {
   const now = new Date().toISOString();
-  const providers = providerConnections.map((providerConnection) =>
-    toRuntimePolicyProvider(
-      providerConnection,
-      getProviderConfigModels(providerConnection.providerConfig)
-    )
-  );
-  const models = providerConnections.flatMap((providerConnection) =>
-    getProviderConfigModels(providerConnection.providerConfig).map((modelName) =>
-      toRuntimePolicyModelConfig(providerConnection, modelName)
-    )
-  );
-  const pricingRules = models.map((model) =>
-    toRuntimePolicyPricingRule(fallbackConfig, model.provider, model.model)
-  );
-  return mergeProviderConnectionCandidates(
+  const templateConfig = mergeProviderConnectionCandidates(
     {
       ...fallbackConfig,
       applicationId,
@@ -820,15 +806,19 @@ function makeRuntimePolicyConfigTemplate(
       configVersion: createApplicationRuntimeDraftVersion(applicationId),
       effectiveAt: now,
       generatedAt: now,
-      models,
-      pricingRules,
-      providers,
       publishState: "draft",
       publishedAt: "",
       tenantId: routeTenantId
     },
-    []
+    providerConnections
   );
+
+  return {
+    ...templateConfig,
+    pricingRules: templateConfig.models.map((model) =>
+      toRuntimePolicyPricingRule(fallbackConfig, model.provider, model.model)
+    )
+  };
 }
 
 function getRuntimePolicyDraftConfigVersion(

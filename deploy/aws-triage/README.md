@@ -9,7 +9,7 @@ It differs from `deploy/selfhost` on purpose:
 - PostgreSQL, Redis, mock provider, AI service, Control Plane API, Gateway, Web Console, Chat API, and Chat Web run on one Docker network; the separate RAG worker joins only when RAG is enabled
 - PostgreSQL, Redis, mock provider, and AI service are not published to the EC2 host
 - GateLM Chat Web runs on port 3002; Chat API remains private on the Docker network at port 3003
-- the legacy `apps/application` image is not part of this production-like stack
+- the retired legacy browser application has been removed; Tenant Chat is served by `apps/chat-web`
 - the default provider mode is mock
 - the current Gateway chat path authenticates with the project Gateway API key; demo seed credentials are not used in AWS/prod-like environments
 

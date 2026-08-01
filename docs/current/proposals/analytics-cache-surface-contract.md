@@ -3,6 +3,8 @@
 | Field | Value |
 |---|---|
 | Status | Proposed contract with implementation in `feat/analysis-tab` |
+| Contract lifecycle | Proposed |
+| Document role | Contract proposal; implementation companion |
 | Applies to | Web Analytics `cache` tab |
 | Does not apply to | Cache runtime policy, cache key material, billing ledger, quota enforcement, or metrics labels |
 | Last reviewed | 2026-07-18 |

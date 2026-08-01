@@ -198,6 +198,7 @@ def render_candidate_env(runtime_model_path: str) -> str:
         "AI_SERVICE_AI_SAFETY_DETECTOR_RUNTIME": "onnx",
         "AI_SERVICE_AI_SAFETY_PRELOAD_ENABLED": "true",
         "AI_SERVICE_AI_SAFETY_MICRO_BATCH_SIZE": "1",
+        "AI_SERVICE_AI_SAFETY_MAX_CONCURRENT": "1",
         "AI_SERVICE_AI_SAFETY_ML_ALLOWED_DETECTOR_TYPES": ",".join(TARGET_TYPES),
         "AI_SERVICE_AI_SAFETY_ML_DETECTOR_THRESHOLDS": ",".join(
             f"{detector_type}={threshold:.2f}"

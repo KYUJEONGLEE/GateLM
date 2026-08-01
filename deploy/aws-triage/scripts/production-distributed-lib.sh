@@ -137,9 +137,9 @@ production_validate_env() {
   [[ "${GATELM_PRODUCTION_DISTRIBUTED_PII_MODEL_DIR}" == "/opt/gatelm/pii-v314/releases/8a5cb146/model" ]] || \
     production_fail "Unexpected pinned PII model directory."
   [[ "${GATELM_PRODUCTION_DISTRIBUTED_PII_ARTIFACT_S3_URI}" =~ ^s3://[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]/pii/v36/v314-8a5cb146/model\.tar\.gz$ ]] || \
-    production_fail "PII artifact URI must reference the immutable v3.14 object in the legacy least-privilege prefix."
+    production_fail "PII artifact URI must reference the immutable v0.1.1 (legacy v3.14) object in the legacy least-privilege prefix."
   [[ "${GATELM_PRODUCTION_DISTRIBUTED_PII_ARTIFACT_SHA256}" == "fbecea25a4508696e42c36fa3b9f40cb3abd5be82f645860c011935d96df7f13" ]] || \
-    production_fail "PII artifact SHA-256 must match the pinned v3.14 archive."
+    production_fail "PII artifact SHA-256 must match the pinned v0.1.1 (legacy v3.14) archive."
   [[ "${GATELM_ROUTING_DIFFICULTY_SERVICE_TOKEN_PARAMETER_NAME}" =~ ^/[A-Za-z0-9_./-]+$ ]] || \
     production_fail "Routing difficulty service token parameter name is invalid."
 

@@ -1,23 +1,10 @@
 import "server-only";
 
 import { existsSync } from "node:fs";
-import { isProductionLikeEnv } from "@/lib/env/production-like";
-
-const DEFAULT_RATE_LIMIT_MAX_ATTEMPTS = 60;
-const HARD_RATE_LIMIT_MAX_ATTEMPTS = 60;
-const DEFAULT_APPLICATION_CHAT_MAX_TOKENS = 2048;
-const MAX_APPLICATION_CHAT_MAX_TOKENS = 4096;
 
 export type LiveGatewayConfig = {
-  apiKey: string;
-  applicationChatMaxTokens: number;
-  applicationChatModel: string;
-  applicationChatStreamingEnabled: boolean;
   baseUrl: string;
   projectId: string;
-  providerFailureControlUrl: string;
-  providerFailureModels: string[];
-  rateLimitMaxAttempts: number;
 };
 
 export function getGatewayObservabilityHeaders(requestId: string): Record<string, string> {
@@ -36,66 +23,16 @@ export function getGatewayObservabilityHeaders(requestId: string): Record<string
   return headers;
 }
 
-export function getLiveGatewayConfig(options: { apiKey?: string } = {}): LiveGatewayConfig {
+export function getLiveGatewayConfig(): LiveGatewayConfig {
   return {
-    apiKey: options.apiKey
-      ?? getGatewayApiKey()
-      ?? "",
-    applicationChatMaxTokens: getApplicationChatMaxTokens(),
-    applicationChatModel: "auto",
-    applicationChatStreamingEnabled: getApplicationChatStreamingEnabled(),
     baseUrl: normalizeBaseUrl(
       firstEnv("GATELM_GATEWAY_BASE_URL", "GATEWAY_BASE_URL")
         ?? `http://${defaultGatewayHost()}:${process.env.GATEWAY_PORT ?? "8080"}`
     ),
     projectId:
       firstEnv("GATELM_DEMO_PROJECT_ID", "GATELM_GATEWAY_PROJECT_ID", "GATEWAY_PROJECT_ID")
-      ?? "00000000-0000-4000-8000-000000000200",
-    providerFailureControlUrl: normalizeBaseUrl(
-      firstEnv("GATELM_PROVIDER_FAILURE_CONTROL_URL", "K6_PROVIDER_FAILURE_CONTROL_URL", "MOCK_PROVIDER_BASE_URL")
-        ?? `http://${defaultGatewayHost()}:${process.env.MOCK_PROVIDER_PORT ?? "8090"}`
-    ),
-    providerFailureModels: getProviderFailureModels(),
-    rateLimitMaxAttempts: getRateLimitMaxAttempts()
+      ?? "00000000-0000-4000-8000-000000000200"
   };
-}
-
-function getGatewayApiKey(): string | undefined {
-  const explicitApiKey = normalizeApiKey(
-    firstEnv("GATELM_GATEWAY_API_KEY", "GATEWAY_API_KEY")
-  );
-  if (explicitApiKey) {
-    return explicitApiKey;
-  }
-
-  if (isProductionLikeEnv()) {
-    return undefined;
-  }
-
-  return normalizeApiKey(firstEnv("GATELM_DEMO_API_KEY")) ?? "glm_api_test_redacted";
-}
-
-function normalizeApiKey(value: string | undefined): string | undefined {
-  const normalized = value?.trim();
-
-  if (!normalized || isPlaceholderApiKey(normalized)) {
-    return undefined;
-  }
-
-  return normalized;
-}
-
-function isPlaceholderApiKey(value: string) {
-  const normalized = value.trim().toLowerCase();
-
-  return (
-    normalized.startsWith("paste_gateway_api_key_for_") ||
-    normalized.includes("replace-me") ||
-    normalized === "gsk_live_replace_me" ||
-    normalized === "glm_api_test_redacted" ||
-    normalized === "replace_me" ||
-    normalized === "your_gateway_api_key"
-  );
 }
 
 function firstEnv(...keys: string[]): string | undefined {
@@ -116,97 +53,4 @@ function normalizeBaseUrl(value: string) {
 
 function defaultGatewayHost() {
   return existsSync("/.dockerenv") ? "host.docker.internal" : "localhost";
-}
-
-function getRateLimitMaxAttempts() {
-  const explicitMaxAttempts = parsePositiveInt(process.env.GATELM_WEB_RATE_LIMIT_MAX_ATTEMPTS);
-
-  if (explicitMaxAttempts) {
-    return clamp(explicitMaxAttempts, 1, HARD_RATE_LIMIT_MAX_ATTEMPTS);
-  }
-
-  return DEFAULT_RATE_LIMIT_MAX_ATTEMPTS;
-}
-
-function getApplicationChatMaxTokens() {
-  const configured = parsePositiveInt(process.env.GATELM_APPLICATION_CHAT_MAX_TOKENS);
-
-  if (configured) {
-    return Math.max(64, Math.min(configured, MAX_APPLICATION_CHAT_MAX_TOKENS));
-  }
-
-  return DEFAULT_APPLICATION_CHAT_MAX_TOKENS;
-}
-
-function getApplicationChatStreamingEnabled() {
-  const configured = firstEnv(
-    "GATELM_APPLICATION_CHAT_STREAMING_ENABLED",
-    "GATEWAY_APPLICATION_CHAT_STREAMING_ENABLED"
-  );
-
-  return parseBoolean(configured, true);
-}
-
-function getProviderFailureModels() {
-  const configured = firstEnv("GATELM_PROVIDER_FAILURE_MODELS", "K6_PROVIDER_FAILURE_MODELS");
-  const parsed = parseCsv(configured);
-
-  if (parsed.length > 0) {
-    return parsed;
-  }
-
-  return [
-    firstEnv("GATELM_DEMO_OPENAI_LOW_COST_MODEL", "OPENAI_LOW_COST_MODEL") ?? "gpt-4o-mini",
-    firstEnv("GATELM_DEMO_OPENAI_BALANCED_MODEL", "OPENAI_BALANCED_MODEL") ?? "gpt-4o"
-  ];
-}
-
-function parseCsv(value: string | undefined) {
-  if (!value) {
-    return [];
-  }
-
-  return value
-    .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
-
-function parsePositiveInt(value: string | undefined) {
-  if (!value) {
-    return undefined;
-  }
-
-  const parsed = Number.parseInt(value, 10);
-
-  if (!Number.isFinite(parsed) || parsed <= 0) {
-    return undefined;
-  }
-
-  return parsed;
-}
-
-function parseBoolean(value: string | undefined, fallback: boolean) {
-  if (!value) {
-    return fallback;
-  }
-
-  switch (value.trim().toLowerCase()) {
-    case "1":
-    case "true":
-    case "yes":
-    case "on":
-      return true;
-    case "0":
-    case "false":
-    case "no":
-    case "off":
-      return false;
-    default:
-      return fallback;
-  }
-}
-
-function clamp(value: number, min: number, max: number) {
-  return Math.min(Math.max(value, min), max);
 }

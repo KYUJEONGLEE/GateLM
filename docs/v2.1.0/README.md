@@ -1,13 +1,15 @@
-# GateLM v2.1.0 Documentation Status
+# GateLM Pre-v1 Self-host And Routing Workstream (former v2.1.0)
 
 | Field | Value |
 |---|---|
-| Status | Latest versioned scope reference |
+| Status | Pre-v1 scoped contract and evidence workstream |
+| Former label | `v2.1.0`; 정식 제품 릴리스가 아님 |
 | Active entrypoint | [`../current/README.md`](../current/README.md) |
-| Release status | 저장소 근거만으로 공식 v2.1.0 release를 확정할 수 없음 |
+| Pre-v1 registry | [`../pre-v1/README.md`](../pre-v1/README.md) |
+| Release status | GitHub `v2.1.0` release/tag 없음 |
 | Scope | Self-host delivery, Advanced Routing offline evidence |
 
-v2.1.0은 저장소에 존재하는 최신 versioned 문서다. 그러나 최근의 모든 post-v2 제품 기능을 포괄하는 단일 umbrella contract는 아니다.
+former v2.1.0은 정식 제품 버전이 아니라 pre-v1 내부 작업명이다. 이 폴더는 최근의 모든 제품 기능을 포괄하는 단일 umbrella contract가 아니다.
 
 ## Self-host Delivery
 
@@ -68,7 +70,7 @@ Self-host 계획과 산출물이 존재한다는 사실만으로 current HEAD의
 
 ## Inherited Compatibility
 
-v2.1 문서에서 `docs/v2.0.0/contracts.md`를 참조하는 부분은 아직 대체되지 않은 행동 계약을 보존하기 위한 inherited compatibility다.
+former v2.1 workstream에서 `docs/v2.0.0/contracts.md`를 참조하는 부분은 아직 대체되지 않은 행동 계약을 보존하기 위한 inherited compatibility다.
 
 이는 다음을 의미하지 않는다.
 
