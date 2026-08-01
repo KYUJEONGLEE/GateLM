@@ -133,6 +133,8 @@ grep -Fq 'Key: stickiness.type' "${TEMPLATE_PATH}"
 grep -Fq 'Value: source_ip' "${TEMPLATE_PATH}"
 grep -Fq 'GatewayBootstrapBucket:' "${TEMPLATE_PATH}"
 grep -Fq 'GatewayBootstrapKmsKey:' "${TEMPLATE_PATH}"
+grep -A2 '^  EdgeInstanceType:' "${TEMPLATE_PATH}" | grep -Fq 'Default: t3a.medium'
+grep -A2 '^  GatewayInstanceType:' "${TEMPLATE_PATH}" | grep -Fq 'Default: t3a.large'
 grep -Fq 'Default: c7i.xlarge' "${TEMPLATE_PATH}"
 grep -Fq 'Four-vCPU compute-optimized host for RAG and authoritative E5 routing inference.' "${TEMPLATE_PATH}"
 grep -Fq 'RoutingDifficultyServiceTokenParameterName:' "${TEMPLATE_PATH}"
