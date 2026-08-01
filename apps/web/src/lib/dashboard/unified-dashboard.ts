@@ -228,6 +228,10 @@ export function mergeDashboardOverviews(
     projectApplication.cacheEligibleRequests + tenantChat.cacheEligibleRequests;
   const totalCostMicroUsd =
     projectApplication.totalCostMicroUsd + tenantChat.totalCostMicroUsd;
+  const averageLatencyMs = mergeAverageLatencyMs([
+    projectApplication,
+    tenantChat
+  ]);
 
   return {
     ...projectApplication,
@@ -260,7 +264,7 @@ export function mergeDashboardOverviews(
       projectApplication.completionTokens + tenantChat.completionTokens,
     totalCostMicroUsd,
     totalCostUsd: formatMicroUsd(totalCostMicroUsd),
-    averageLatencyMs: projectApplication.averageLatencyMs,
+    averageLatencyMs,
     p95LatencyMs: projectApplication.p95LatencyMs,
     gatewayTtft: projectApplication.gatewayTtft,
     latencyBySurface: {
@@ -498,6 +502,26 @@ function mergeGuidance(left: string | null, right: string | null) {
 
 function safeRate(numerator: number, denominator: number) {
   return denominator > 0 ? numerator / denominator : 0;
+}
+
+function mergeAverageLatencyMs(
+  overviews: Array<Pick<DashboardOverview, "averageLatencyMs" | "totalRequests">>
+) {
+  const eligible = overviews.filter(
+    (overview) => overview.totalRequests > 0 && overview.averageLatencyMs > 0
+  );
+  const requestCount = eligible.reduce(
+    (sum, overview) => sum + overview.totalRequests,
+    0
+  );
+
+  return requestCount > 0
+    ? eligible.reduce(
+        (sum, overview) =>
+          sum + overview.averageLatencyMs * overview.totalRequests,
+        0
+      ) / requestCount
+    : 0;
 }
 
 function average(values: number[]) {

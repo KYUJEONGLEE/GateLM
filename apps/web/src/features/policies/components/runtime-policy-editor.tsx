@@ -662,13 +662,10 @@ export function RuntimePolicyEditor({
       }
     }
 
-    const submitValues =
-      selectedRoutingProviderConnections.length > 0
-        ? mergeDraftValuesWithProviderConnections(
-            draftValues,
-            selectedRoutingProviderConnections
-          )
-        : draftValues;
+    const submitValues = mergeDraftValuesWithProviderConnections(
+      draftValues,
+      selectedRoutingProviderConnections
+    );
 
     const response = await fetch("/api/control-plane/runtime-config", {
       body: JSON.stringify({

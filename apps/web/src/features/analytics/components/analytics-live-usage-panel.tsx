@@ -31,6 +31,7 @@ import { parseAnalyticsLiveUsage } from "@/features/analytics/analytics-live-usa
 import type { AnalyticsReadModel } from "@/features/analytics/analytics-read-model";
 import type { AnalyticsRequestVolumePoint } from "@/features/analytics/analytics-usage-merge";
 import type { ProjectRecord } from "@/lib/control-plane/projects-types";
+import { DEFAULT_DISPLAY_TIMEZONE } from "@/lib/formatting/formatters";
 import type { LiveAnalyticsRange } from "@/lib/gateway/live-analytics-performance";
 import type { Locale } from "@/lib/i18n/locale";
 
@@ -530,7 +531,7 @@ function formatDataTime(value: string | null, locale: Locale) {
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
-    timeZone: "UTC"
+    timeZone: DEFAULT_DISPLAY_TIMEZONE
   }).format(new Date(value));
 }
 

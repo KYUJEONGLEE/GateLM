@@ -29,5 +29,7 @@ test("month-to-date spend tolerates missing Tenant Chat usage", async () => {
   expect(pageSource).toContain("tenantChat?.usage?.confirmedCostMicroUsd ?? 0");
   expect(pageSource).toContain('<Suspense fallback="—">');
   expect(pageSource).toContain('hasCurrentData ? formatDashboardMicroUsd(totalMicroUsd) : "—"');
+  expect(pageSource).toContain("maximumFractionDigits: 1");
+  expect(pageSource).toContain("minimumFractionDigits: 1");
   expect(pageSource).not.toContain("fallbackMicroUsd");
 });
