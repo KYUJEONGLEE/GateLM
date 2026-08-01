@@ -75,7 +75,7 @@ test("overview keeps four live KPI cards with month-to-date cost in the final po
   expect(totalRequestsIndex).toBeGreaterThan(totalCostIndex);
   expect(averageLatencyIndex).toBeGreaterThan(totalRequestsIndex);
   expect(monthCostIndex).toBeGreaterThan(averageLatencyIndex);
-  expect(source).toContain('totalCost: "기간 총 비용"');
+  expect(source).toContain('totalCost: "비용"');
   expect(source).toContain('totalRequests: "요청 수"');
   expect(source).toContain('monthCost: "이번 달 총 비용"');
   expect(source).not.toContain('monthCost: "이번 달 누적 비용"');
@@ -84,6 +84,8 @@ test("overview keeps four live KPI cards with month-to-date cost in the final po
     "value: formatLatency(Math.round(overview.averageLatencyMs))"
   );
   expect(source).toContain("snapshot.monthToDateCostMicroUsd");
+  expect(source).toContain("maximumFractionDigits: 1");
+  expect(source).toContain("minimumFractionDigits: 1");
 });
 
 test("overview removes the redundant data freshness timestamp from the main header", async () => {
@@ -182,6 +184,15 @@ test("provider usage keeps the existing cost breakdown wired to the redesigned d
   expect(styles).toMatch(
     /\.dashboard-provider-usage-body \{[^}]*grid-template-columns: minmax\(0, 1fr\);[^}]*grid-template-rows: minmax\(180px, 0\.9fr\) auto;/
   );
+  expect(styles).toMatch(
+    /\.dashboard-provider-usage-chart \{[^}]*place-items: center;[^}]*container-type: size;/
+  );
+  expect(styles).toMatch(
+    /\.dashboard-provider-usage-chart-shell \{[^}]*width: min\(100cqw, 100cqh, 360px\);[^}]*height: min\(100cqw, 100cqh, 360px\);[^}]*aspect-ratio: 1;[^}]*container-type: size;/
+  );
+  expect(styles).toMatch(
+    /\.dashboard-provider-usage-center strong \{[^}]*font-size: clamp\(18px, 8cqi, calc\(26px \+ var\(--global-font-lift\)\)\);[^}]*text-overflow: ellipsis;/
+  );
 });
 
 test("the five-minute dashboard swaps only the usage donut to a project breakdown", async () => {
@@ -207,26 +218,21 @@ test("dashboard keeps cost range controls and stacked mobile panels inside the l
     readFile(costSourceUrl, "utf8"),
     readFile(dashboardStylesSourceUrl, "utf8")
   ]);
-  const normalizedSource = costSource.replace(/\r\n/g, "\n");
-  const titleEnd = normalizedSource.indexOf('</div>\n        <div className="dashboard-cost-over-time-header-side">');
-  const metricsStart = normalizedSource.indexOf('className="dashboard-cost-over-time-metrics"');
-
-  expect(titleEnd).toBeGreaterThan(0);
-  expect(metricsStart).toBeGreaterThan(titleEnd);
+  expect(costSource).toContain('title: "비용 추이($)"');
+  expect(costSource).not.toContain('className="dashboard-cost-over-time-metrics"');
+  expect(costSource).not.toContain('className="dashboard-cost-over-time-legend"');
+  expect(costSource).not.toContain("<p>{bucketContext}</p>");
   expect(styles).toMatch(
-    /\.dashboard-cost-over-time-header \{[^}]*grid-template-areas:\s*"title side"\s*"metrics metrics";/
+    /\.dashboard-cost-over-time-header \{[^}]*grid-template-areas: "title side";[^}]*min-height: 42px;/
   );
   expect(styles).toMatch(
     /\.dashboard-secondary-grid \{[^}]*grid-template-columns: 1fr;[^}]*height: auto;[^}]*max-height: none;[^}]*overflow: visible;/
   );
   expect(styles).toMatch(
-    /\.dashboard-cost-chart-stack \{[^}]*grid-template-rows: minmax\(180px, 1fr\) 112px;/
+    /\.dashboard-cost-chart-stack \{[^}]*grid-template-rows: minmax\(260px, 1fr\) 92px;/
   );
   expect(styles).toMatch(
-    /\.dashboard-cost-over-time-chart \{[^}]*min-height: 180px;/
-  );
-  expect(styles).toMatch(
-    /html\[data-theme="dark"\] \.dashboard-cost-over-time-metrics > div\[data-kind="total"\] strong,[\s\S]*?color: var\(--foreground\);/
+    /\.dashboard-cost-over-time-chart \{[^}]*min-height: 260px;/
   );
 });
 
@@ -252,9 +258,6 @@ test("dashboard keeps its compact default scale and enlarges operational labels 
     /html\[data-presentation-mode="true"\] \.dashboard-overview-content \.dashboard-provider-usage-header select \{[^}]*width: fit-content;[^}]*min-width: 116px;[^}]*min-height: 38px;[^}]*font-size: calc\(15px \+ var\(--global-font-lift\)\);/
   );
   expect(readabilityStyles).toMatch(
-    /html\[data-presentation-mode="true"\] \.dashboard-overview-content \.dashboard-cost-over-time-metrics span \{[^}]*font-size: calc\(24px \+ var\(--global-font-lift\)\);/
-  );
-  expect(readabilityStyles).toMatch(
     /html\[data-presentation-mode="true"\] \.dashboard-overview-content \.dashboard-provider-usage-provider-icon \{[^}]*width: 38px;[^}]*height: 38px;/
   );
   expect(readabilityStyles).toMatch(
@@ -273,7 +276,7 @@ test("dashboard keeps its compact default scale and enlarges operational labels 
     /@media \(min-width: 1101px\) and \(max-width: 1280px\) \{\s*html\[data-presentation-mode="true"\] \.dashboard-overview-content \.dashboard-kpi-grid \{\s*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/
   );
   expect(readabilityStyles).toMatch(
-    /html\[data-presentation-mode="true"\] \.dashboard-overview-content \.dashboard-cost-over-time-header \{\s*grid-template-areas:\s*"title"\s*"side"\s*"metrics";/
+    /html\[data-presentation-mode="true"\] \.dashboard-overview-content \.dashboard-cost-over-time-header \{\s*grid-template-areas:\s*"title"\s*"side";/
   );
 });
 

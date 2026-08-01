@@ -13,6 +13,25 @@ import {
 
 import type { RoutingProviderOption } from "./runtime-policy-editor-types";
 
+const BUILTIN_MOCK_MODEL_REF = "mock-balanced";
+const BUILTIN_MOCK_PROVIDER_NAME = "mock";
+const DEFAULT_BUILTIN_MOCK_MODEL: RuntimePolicyModelConfig = {
+  contextWindowTokens: 8192,
+  displayName: "Mock Balanced",
+  model: BUILTIN_MOCK_MODEL_REF,
+  provider: BUILTIN_MOCK_PROVIDER_NAME,
+  status: "active",
+  supportsJsonMode: false,
+  supportsStreaming: false
+};
+const DEFAULT_BUILTIN_MOCK_PRICING_RULE: RuntimePolicyDraftValues["pricingRules"][number] = {
+  completionTokenMicroUsd: 0,
+  model: BUILTIN_MOCK_MODEL_REF,
+  pricingVersion: "mock-v1",
+  promptTokenMicroUsd: 0,
+  provider: BUILTIN_MOCK_PROVIDER_NAME
+};
+
 export type RoutingModelOption = {
   family: string;
   label: string;
@@ -187,18 +206,25 @@ export function mergeDraftValuesWithProviderConnections(
   providerConnections: ProviderConnectionRecord[]
 ): RuntimePolicyDraftValues {
   const providerModels = getProviderConnectionRuntimeModels(providerConnections);
-  const models = mergeRuntimePolicyModels([], providerModels);
+  const builtinMockModel =
+    values.models.find(isBuiltinMockModel) ?? DEFAULT_BUILTIN_MOCK_MODEL;
+  const models = mergeRuntimePolicyModels([builtinMockModel], providerModels);
   const providerModelKeys = new Set(
-    providerModels.map((model) => runtimePolicyModelKey(model.provider, model.model))
+    models.map((model) => runtimePolicyModelKey(model.provider, model.model))
   );
+  const pricingRules = values.pricingRules.filter((pricingRule) =>
+    providerModelKeys.has(runtimePolicyModelKey(pricingRule.provider, pricingRule.model))
+  );
+
+  if (!pricingRules.some(isBuiltinMockPricingRule)) {
+    pricingRules.push(DEFAULT_BUILTIN_MOCK_PRICING_RULE);
+  }
 
   return {
     ...values,
     models,
     pricingRules: mergeRuntimePolicyPricingRules(
-      values.pricingRules.filter((pricingRule) =>
-        providerModelKeys.has(runtimePolicyModelKey(pricingRule.provider, pricingRule.model))
-      ),
+      pricingRules,
       providerModels
     )
   };
@@ -378,6 +404,22 @@ function mergeRuntimePolicyModels(
 
 function runtimePolicyModelKey(provider: unknown, model: unknown) {
   return `${normalizePolicyText(provider)}::${normalizePolicyText(model)}`;
+}
+
+function isBuiltinMockModel(model: RuntimePolicyModelConfig) {
+  return (
+    normalizePolicyText(model.provider) === BUILTIN_MOCK_PROVIDER_NAME &&
+    normalizePolicyText(model.model) === BUILTIN_MOCK_MODEL_REF
+  );
+}
+
+function isBuiltinMockPricingRule(
+  pricingRule: RuntimePolicyDraftValues["pricingRules"][number]
+) {
+  return (
+    normalizePolicyText(pricingRule.provider) === BUILTIN_MOCK_PROVIDER_NAME &&
+    normalizePolicyText(pricingRule.model) === BUILTIN_MOCK_MODEL_REF
+  );
 }
 
 function mergeRuntimePolicyPricingRules(

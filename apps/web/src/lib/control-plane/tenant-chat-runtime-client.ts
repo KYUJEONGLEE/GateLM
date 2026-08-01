@@ -282,14 +282,21 @@ function isRoutingMatrix(value: unknown) {
 }
 
 function readErrorMessage(payload: unknown, status: number) {
-  if (payload && typeof payload === "object") {
-    const message = (payload as Record<string, unknown>).message;
-    const error = (payload as Record<string, unknown>).error;
+  if (payload && typeof payload === "object" && !Array.isArray(payload)) {
+    const record = payload as Record<string, unknown>;
+    const message = record.message;
+    const error = record.error;
     if (typeof message === "string" && message.trim()) {
       return message;
     }
     if (typeof error === "string" && error.trim()) {
       return error;
+    }
+    if (error && typeof error === "object" && !Array.isArray(error)) {
+      const nestedMessage = (error as Record<string, unknown>).message;
+      if (typeof nestedMessage === "string" && nestedMessage.trim()) {
+        return nestedMessage;
+      }
     }
   }
   return `Control Plane request failed (${status}).`;

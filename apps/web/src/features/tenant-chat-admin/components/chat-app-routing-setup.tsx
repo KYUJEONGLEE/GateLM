@@ -25,6 +25,12 @@ import { ManagementPage } from "@/components/layout/management-page";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger
+} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { KnowledgeBaseManagement } from "@/features/rag-documents/knowledge-base-management";
 import {
@@ -1135,6 +1141,10 @@ function TenantRoutingProviderModelSelect({ allowEmpty = false, ariaLabel, appea
   const emptyStateLabel = value === null
     ? (mixedLabel ?? copy[locale].modelUnavailable)
     : (emptyLabel ?? copy[locale].modelUnavailable);
+  const providerSelectValue = providerValue || "__empty";
+  const selectedProviderLabel = selectedProvider?.displayName ?? (
+    value && !selectedProvider ? copy[locale].providerUnavailable : emptyStateLabel
+  );
 
   return (
     <div
@@ -1145,37 +1155,104 @@ function TenantRoutingProviderModelSelect({ allowEmpty = false, ariaLabel, appea
       <label className={standalone ? "tenant-routing-standalone-field" : undefined}>
         <span className={standalone ? undefined : "sr-only"}>{copy[locale].provider}</span>
         <span className="tenant-routing-provider-control">
-          {showProviderIcon ? (
-            <ProviderFamilyIcon
-              className="tenant-routing-provider-icon"
-              family={selectedProvider?.providerFamily ?? "unknown"}
-              size={22}
-            />
-          ) : null}
-          <select
-            aria-label={`${ariaLabel} ${copy[locale].provider}`}
-            onChange={(event) => {
-              if (event.target.value === "") {
+          <Select
+            value={providerSelectValue}
+            onValueChange={(nextValue) => {
+              if (typeof nextValue !== "string") return;
+              if (nextValue === "__mixed" || nextValue === "__unavailable") return;
+              if (nextValue === "__empty") {
                 onChange("");
                 return;
               }
               const nextProvider = providers.find(
-                (provider) => provider.providerConnectionId === event.target.value
+                (provider) => provider.providerConnectionId === nextValue
               );
               onChange(nextProvider?.models[0]?.modelRef ?? "");
             }}
-            value={providerValue}
           >
-            {value === null ? <option disabled value="__mixed">{emptyStateLabel}</option> : null}
-            {value && !selectedProvider ? <option disabled value="__unavailable">{copy[locale].providerUnavailable}</option> : null}
-            {allowEmpty ? <option value="">{emptyLabel}</option> : null}
-            {!allowEmpty && !selectedProvider && !value ? <option disabled value="">{copy[locale].providerUnavailable}</option> : null}
-            {providers.map((provider) => (
-              <option key={provider.providerConnectionId} value={provider.providerConnectionId}>
-                {provider.displayName}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger
+              aria-label={`${ariaLabel} ${copy[locale].provider}`}
+              className="tenant-routing-provider-trigger"
+            >
+              <span className="tenant-routing-provider-trigger-copy">
+                {showProviderIcon ? (
+                  <ProviderFamilyIcon
+                    className="tenant-routing-provider-icon"
+                    family={selectedProvider?.providerFamily ?? "unknown"}
+                    size={22}
+                  />
+                ) : null}
+                <span className="tenant-routing-provider-option-label">
+                  {selectedProviderLabel}
+                </span>
+              </span>
+            </SelectTrigger>
+            <SelectContent
+              className="tenant-routing-provider-menu"
+              sideOffset={6}
+            >
+              {value === null ? (
+                <SelectItem
+                  className="tenant-routing-provider-item"
+                  disabled
+                  label={emptyStateLabel}
+                  value="__mixed"
+                >
+                  <span className="tenant-routing-provider-option-label">{emptyStateLabel}</span>
+                </SelectItem>
+              ) : null}
+              {value && !selectedProvider ? (
+                <SelectItem
+                  className="tenant-routing-provider-item"
+                  disabled
+                  label={copy[locale].providerUnavailable}
+                  value="__unavailable"
+                >
+                  <span className="tenant-routing-provider-option-label">
+                    {copy[locale].providerUnavailable}
+                  </span>
+                </SelectItem>
+              ) : null}
+              {allowEmpty ? (
+                <SelectItem
+                  className="tenant-routing-provider-item"
+                  label={emptyStateLabel}
+                  value="__empty"
+                >
+                  <span className="tenant-routing-provider-option-label">{emptyStateLabel}</span>
+                </SelectItem>
+              ) : null}
+              {!allowEmpty && !selectedProvider && !value ? (
+                <SelectItem
+                  className="tenant-routing-provider-item"
+                  disabled
+                  label={copy[locale].providerUnavailable}
+                  value="__empty"
+                >
+                  <span className="tenant-routing-provider-option-label">
+                    {copy[locale].providerUnavailable}
+                  </span>
+                </SelectItem>
+              ) : null}
+              {providers.map((provider) => (
+                <SelectItem
+                  className="tenant-routing-provider-item"
+                  key={provider.providerConnectionId}
+                  label={provider.displayName}
+                  value={provider.providerConnectionId}
+                >
+                  <ProviderFamilyIcon
+                    className="tenant-routing-provider-icon"
+                    family={provider.providerFamily}
+                    size={22}
+                  />
+                  <span className="tenant-routing-provider-option-label">
+                    {provider.displayName}
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </span>
       </label>
       <label className={standalone ? "tenant-routing-standalone-field" : undefined}>

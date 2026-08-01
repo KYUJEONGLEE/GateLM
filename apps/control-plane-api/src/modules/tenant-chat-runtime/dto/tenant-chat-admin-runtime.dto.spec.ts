@@ -99,6 +99,57 @@ describe('ActivateTenantChatRuntimeDto', () => {
     });
   });
 
+  it('accepts the complete degraded-runtime recovery payload used by Chat App', async () => {
+    const modelRef = 'tc_3ab364b76fff7eab19032f7bb29e70dc';
+    const cell = () => ({ modelRefs: [modelRef] });
+
+    await expect(
+      pipe.transform(
+        {
+          cachePolicy: {
+            enabled: true,
+            ttlSeconds: 300,
+            maxEntriesPerUser: 100,
+          },
+          manualModelRef: modelRef,
+          quota: {
+            defaultMonthlyTokenLimit: 1_000_000,
+            timezone: 'Asia/Seoul',
+            warningPercent: 80,
+            economyPercent: 90,
+            hardStopPercent: 100,
+          },
+          routes: {
+            general: { simple: cell(), complex: cell() },
+            code: { simple: cell(), complex: cell() },
+            translation: { simple: cell(), complex: cell() },
+            summarization: { simple: cell(), complex: cell() },
+            reasoning: { simple: cell(), complex: cell() },
+          },
+          routingMode: 'auto',
+          safetyPolicy: {
+            detectorSet: [
+              { detectorType: 'email', action: 'redact' },
+              { detectorType: 'phone_number', action: 'redact' },
+              { detectorType: 'person_name', action: 'redact' },
+              { detectorType: 'postal_address', action: 'redact' },
+              { detectorType: 'organization_name', action: 'redact' },
+              { detectorType: 'resident_registration_number', action: 'block' },
+              { detectorType: 'api_key', action: 'block' },
+              { detectorType: 'authorization_header', action: 'block' },
+              { detectorType: 'jwt', action: 'block' },
+              { detectorType: 'private_key', action: 'block' },
+            ],
+          },
+        },
+        { type: 'body', metatype: ActivateTenantChatRuntimeDto },
+      ),
+    ).resolves.toMatchObject({
+      manualModelRef: modelRef,
+      routingMode: 'auto',
+    });
+  });
+
   it('rejects duplicate safety detectors and invalid cache values', async () => {
     await expect(
       pipe.transform(

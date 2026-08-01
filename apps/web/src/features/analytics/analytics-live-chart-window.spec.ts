@@ -5,28 +5,28 @@ import {
   latestAnalyticsRateLimitStartIndex
 } from "@/features/analytics/analytics-live-chart-window";
 
-test("최근 활동이 짧으면 최소 5분의 요청 추이를 표시한다", () => {
+test("최근 활동이 짧으면 최소 30초의 요청 추이를 표시한다", () => {
   const buckets = makeBuckets({ count: 181, intervalSeconds: 5, activityStartIndex: 157 });
 
-  expect(analyticsLiveChartStartIndex(buckets)).toBe(121);
+  expect(analyticsLiveChartStartIndex(buckets)).toBe(175);
 });
 
-test("오래 이어진 활동도 최근 5분만 표시한다", () => {
+test("오래 이어진 활동도 최근 30초만 표시한다", () => {
   const buckets = makeBuckets({ count: 181, intervalSeconds: 5, activityStartIndex: 60 });
 
-  expect(analyticsLiveChartStartIndex(buckets)).toBe(121);
+  expect(analyticsLiveChartStartIndex(buckets)).toBe(175);
 });
 
-test("활동이 없어도 최근 5분 window를 유지한다", () => {
+test("활동이 없어도 최근 30초 window를 유지한다", () => {
   const buckets = makeBuckets({ count: 181, intervalSeconds: 5 });
 
-  expect(analyticsLiveChartStartIndex(buckets)).toBe(121);
+  expect(analyticsLiveChartStartIndex(buckets)).toBe(175);
 });
 
-test("긴 bucket 간격에서는 최소 12개 bucket을 표시한다", () => {
+test("긴 bucket 간격에서는 최소 2개 bucket을 표시한다", () => {
   const buckets = makeBuckets({ count: 337, intervalSeconds: 1_800, activityStartIndex: 335 });
 
-  expect(analyticsLiveChartStartIndex(buckets)).toBe(325);
+  expect(analyticsLiveChartStartIndex(buckets)).toBe(335);
 });
 
 test("가장 최근에 다시 시작된 요청 제한 구간을 표시한다", () => {

@@ -498,6 +498,7 @@ export default async function AnalyticsPage({ params, searchParams }: AnalyticsP
         <AnalyticsV5Overview
           locale={locale}
           model={model}
+          providerDirectory={providerDirectory}
         />
       ) : activeTab === "usage" ? (
         <AnalyticsLiveUsagePanel
