@@ -116,6 +116,11 @@ interface NormalizedAdminRouting {
   targets: AdminModelTarget[];
 }
 
+interface AdminActiveSnapshotProjection {
+  activeSnapshot: TenantChatAdminActiveSnapshot;
+  routingAvailable: boolean;
+}
+
 type UpdateEmployeeWeeklyTokenQuotaInput = {
   tenantId: string;
   employeeId: string;
@@ -736,15 +741,16 @@ export class TenantChatRuntimeService {
     const snapshot = pointer
       ? this.readValidSnapshotOrNull(pointer.snapshot.snapshotBody)
       : null;
-    const activeSnapshot = snapshot
-      ? this.toAdminActiveSnapshot(snapshot, providerRecords, modelTargets)
+    const activeProjection = snapshot
+      ? this.toAdminActiveSnapshot(snapshot, modelTargets)
       : null;
+    const activeSnapshot = activeProjection?.activeSnapshot ?? null;
     const hasConfiguredModel = providers.some(
       (provider) => provider.models.length > 0,
     );
 
     let readiness: TenantChatAdminRuntimeSetup['readiness'];
-    if (pointer && !activeSnapshot) {
+    if (pointer && (!activeProjection || !activeProjection.routingAvailable)) {
       readiness = 'degraded';
     } else if (activeSnapshot) {
       readiness = 'ready';
@@ -804,9 +810,8 @@ export class TenantChatRuntimeService {
 
   private toAdminActiveSnapshot(
     snapshot: TenantChatRuntimeSnapshotDocument,
-    providers: AdminProviderRecord[],
     modelTargets: AdminModelTarget[],
-  ): TenantChatAdminActiveSnapshot | null {
+  ): AdminActiveSnapshotProjection | null {
     const routingPolicy = snapshot.policies.routing.policy;
     const manualModelRef =
       snapshot.policies.routing.manualModelRef ??
@@ -824,11 +829,6 @@ export class TenantChatRuntimeService {
     if (!route) {
       return null;
     }
-    const provider = providers.find((candidate) => candidate.id === route.providerId);
-    if (!provider) {
-      return null;
-    }
-
     const referencedModelRefs = new Set<string>();
     if (routingPolicy) {
       if (!manualModelRef) {
@@ -872,15 +872,15 @@ export class TenantChatRuntimeService {
       );
       return { currentTarget, priceRoute };
     });
-    if (
-      pricingPairs.some(
-        ({ currentTarget, priceRoute }) => !currentTarget || !priceRoute,
-      )
-    ) {
+    if (pricingPairs.some(({ priceRoute }) => !priceRoute)) {
       return null;
     }
+    const routingAvailable = pricingPairs.every(
+      ({ currentTarget }) => currentTarget !== undefined,
+    );
     const pricingStatus = pricingPairs.some(
       ({ currentTarget, priceRoute }) =>
+        !currentTarget ||
         priceRoute?.pricingStatus === 'unavailable' ||
         currentTarget?.price.status === 'unavailable',
     )
@@ -900,38 +900,41 @@ export class TenantChatRuntimeService {
       routingPolicy?.routes ?? this.uniformRoutingMatrix(activeManualModelRef);
 
     return {
-      snapshotId: snapshot.snapshotId,
-      version: snapshot.version,
-      digest: snapshot.digest,
-      policyVersion: snapshot.policyVersion,
-      pricingVersion: snapshot.pricing.version,
-      providerConnectionId: route.providerId,
-      modelKey: route.modelKey,
-      publishedAt: snapshot.publishedAt,
-      pricingStatus,
-      routingMode: routingPolicy?.mode ?? 'manual',
-      manualModelRef: activeManualModelRef,
-      routes,
-      cachePolicy: {
-        enabled: snapshot.policies.cache.enabled,
-        ttlSeconds: snapshot.policies.cache.ttlSeconds,
-        maxEntriesPerUser: snapshot.policies.cache.maxEntriesPerUser,
-      },
-      safetyPolicy: {
-        detectorSet: snapshot.policies.safety.detectorSet.map((detector) => ({
-          ...detector,
-        })),
-      },
-      cacheEnabled:
-        snapshot.policies.cache.enabled &&
-        snapshot.policies.cache.strategy === 'exact',
-      quota: {
-        defaultMonthlyTokenLimit:
-          snapshot.policies.quota.defaultMonthlyTokenLimit,
-        timezone: snapshot.policies.quota.timezone,
-        warningPercent: snapshot.policies.quota.warningPercent,
-        economyPercent: snapshot.policies.quota.economyPercent,
-        hardStopPercent: snapshot.policies.quota.hardStopPercent,
+      routingAvailable,
+      activeSnapshot: {
+        snapshotId: snapshot.snapshotId,
+        version: snapshot.version,
+        digest: snapshot.digest,
+        policyVersion: snapshot.policyVersion,
+        pricingVersion: snapshot.pricing.version,
+        providerConnectionId: route.providerId,
+        modelKey: route.modelKey,
+        publishedAt: snapshot.publishedAt,
+        pricingStatus,
+        routingMode: routingPolicy?.mode ?? 'manual',
+        manualModelRef: activeManualModelRef,
+        routes,
+        cachePolicy: {
+          enabled: snapshot.policies.cache.enabled,
+          ttlSeconds: snapshot.policies.cache.ttlSeconds,
+          maxEntriesPerUser: snapshot.policies.cache.maxEntriesPerUser,
+        },
+        safetyPolicy: {
+          detectorSet: snapshot.policies.safety.detectorSet.map((detector) => ({
+            ...detector,
+          })),
+        },
+        cacheEnabled:
+          snapshot.policies.cache.enabled &&
+          snapshot.policies.cache.strategy === 'exact',
+        quota: {
+          defaultMonthlyTokenLimit:
+            snapshot.policies.quota.defaultMonthlyTokenLimit,
+          timezone: snapshot.policies.quota.timezone,
+          warningPercent: snapshot.policies.quota.warningPercent,
+          economyPercent: snapshot.policies.quota.economyPercent,
+          hardStopPercent: snapshot.policies.quota.hardStopPercent,
+        },
       },
     };
   }
