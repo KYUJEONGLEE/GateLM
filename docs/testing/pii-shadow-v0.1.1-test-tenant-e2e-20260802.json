@@ -1,0 +1,128 @@
+{
+  "reportVersion": "gatelm.pii-shadow-test-tenant-e2e.v1",
+  "executionDateKst": "2026-08-02",
+  "gitSha": "c51ed09670d675c795b1761b289ac1965ba9451b",
+  "model": {
+    "baselineVersion": "v0.1.1",
+    "candidateVersion": "v0.1.1",
+    "onnxSha256": "8a5cb146e84d413910a423d304e662a6aba9f69e83db129f5061d007a6de9381"
+  },
+  "environment": {
+    "existingPiiInstanceClass": "c7i.xlarge",
+    "logicalCpuCount": 4,
+    "operatingSystem": "Linux",
+    "onnxruntimeVersion": "1.27.0",
+    "containerCpuLimit": 4,
+    "containerMemoryLimitGiB": 4,
+    "containerNetwork": "none",
+    "containerRootFilesystem": "read_only",
+    "hostPortsPublished": false
+  },
+  "executionPolicy": {
+    "configuredWindowKst": "02:00-05:00",
+    "insideConfiguredWindow": false,
+    "explicitUserOverride": true,
+    "productionDeployment": false,
+    "productionTraffic": false
+  },
+  "workload": {
+    "syntheticOnly": true,
+    "configuredSamplePercent": 5.0,
+    "actualSamplePercent": 5.2,
+    "allowlistedRequests": 1000,
+    "nonAllowlistedControlRequests": 1
+  },
+  "results": {
+    "totalRequests": 1001,
+    "successfulRequests": 1001,
+    "errorRequests": 0,
+    "sampledRequests": 52,
+    "controlSampledRequests": 0,
+    "deterministicReplaySampledRequests": 52,
+    "comparedItems": 52,
+    "matchedItems": 52,
+    "mismatchedItems": 0,
+    "agreementPercent": 100.0,
+    "modelActiveComparedItems": 21,
+    "baselineModelInvocations": 21,
+    "candidateModelInvocations": 21,
+    "baselineAcceptedModelDetections": 14,
+    "candidateAcceptedModelDetections": 14,
+    "captureErrors": 0,
+    "inferenceErrors": 0,
+    "decryptErrors": 0,
+    "expiredItems": 0,
+    "evictedItems": 0,
+    "oversizedItems": 0,
+    "pausedForLiveRequests": 1
+  },
+  "latencyMs": {
+    "gatewayAllRequests": {
+      "count": 1000,
+      "p50": 44.223,
+      "p95": 47.207,
+      "p99": 48.218,
+      "max": 74.873
+    },
+    "gatewaySampledRequests": {
+      "count": 52,
+      "p50": 45.013,
+      "p95": 47.896,
+      "p99": 48.092,
+      "max": 48.092
+    },
+    "baselineInference": {
+      "count": 52,
+      "p50": 2,
+      "p95": 5,
+      "p99": 5,
+      "max": 5
+    },
+    "candidateInference": {
+      "count": 52,
+      "p50": 2,
+      "p95": 4,
+      "p99": 4,
+      "max": 4
+    }
+  },
+  "securityChecks": {
+    "testTenantExactAllowlist": true,
+    "nonAllowlistedControlExcluded": true,
+    "captureEncryptedBeforeCandidateInference": true,
+    "bufferStorage": "process_memory_only",
+    "bufferEncryption": "AES-256-GCM",
+    "maximumItems": 5000,
+    "maximumCiphertextAndNonceBytes": 10485760,
+    "ttlSeconds": 43200,
+    "liveRequestPausesNextCandidateInference": true,
+    "restartDropsPendingSamples": true,
+    "restartKeyDoesNotRecoverSamples": true,
+    "faultCountersValidated": true,
+    "aggregateOnlyEvidence": true,
+    "rawInputPersisted": false,
+    "individualResultsPersisted": false,
+    "detectedValuesPersisted": false,
+    "temporaryValidationArtifactsRemoved": true
+  },
+  "faultValidationCounters": {
+    "expiredItems": 1,
+    "evictedItems": 1,
+    "oversizedItems": 1,
+    "decryptErrors": 1,
+    "inferenceErrors": 1,
+    "restartDecryptErrors": 1
+  },
+  "limitations": [
+    "The run used an explicit user-approved exception to the configured KST window.",
+    "The identical candidate validates Shadow plumbing, not new-model quality or promotion.",
+    "The isolated loopback workload did not exercise production traffic or a provider path.",
+    "The latency aggregates do not establish a contractual SLA.",
+    "Long-duration, multi-worker, multi-replica, and authenticated full Chat API behavior remain unverified."
+  ],
+  "doesNotApprove": [
+    "candidate_model_promotion",
+    "production_global_enablement",
+    "production_sla_claim"
+  ]
+}
