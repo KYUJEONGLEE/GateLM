@@ -2134,7 +2134,7 @@ html:not([data-theme="dark"])
   max-height: 100%;
   min-height: 420px;
   align-content: start;
-  gap: 14px;
+  gap: 10px;
   padding: 20px;
   background: var(--surface);
   border: 1px solid var(--border);
@@ -2145,14 +2145,12 @@ html:not([data-theme="dark"])
 
 .dashboard-cost-over-time-header {
   display: grid;
-  grid-template-areas:
-    "title side"
-    "metrics metrics";
+  grid-template-areas: "title side";
   grid-template-columns: minmax(0, 1fr) auto;
-  align-items: flex-start;
-  align-content: space-between;
-  gap: var(--space-5);
-  min-height: 164px;
+  align-items: center;
+  align-content: center;
+  gap: var(--space-3);
+  min-height: 42px;
   min-width: 0;
 }
 
@@ -2165,11 +2163,11 @@ html:not([data-theme="dark"])
 .dashboard-cost-over-time-header-side {
   display: flex;
   grid-area: side;
-  align-items: flex-end;
+  align-items: center;
   justify-self: end;
   flex: 0 0 auto;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: 0;
   margin-left: auto;
   min-width: 0;
   max-width: 100%;
@@ -2178,7 +2176,7 @@ html:not([data-theme="dark"])
 .dashboard-cost-over-time-header h2 {
   margin: 0;
   color: var(--foreground);
-  font-size: calc(22px + var(--global-font-lift));
+  font-size: calc(26px + var(--global-font-lift));
   font-weight: var(--font-weight-bold);
   letter-spacing: 0;
   line-height: 1.25;
@@ -2334,7 +2332,7 @@ html[data-theme="dark"] .dashboard-cost-over-time-metrics > div[data-kind="avera
 
 .dashboard-cost-chart-stack {
   display: grid;
-  grid-template-rows: minmax(180px, 1fr) 112px;
+  grid-template-rows: minmax(260px, 1fr) 92px;
   gap: 8px;
   min-width: 0;
   min-height: 0;
@@ -2346,7 +2344,7 @@ html[data-theme="dark"] .dashboard-cost-over-time-metrics > div[data-kind="avera
   min-width: 0;
   height: 100%;
   max-height: 100%;
-  min-height: 180px;
+  min-height: 260px;
   overflow: hidden;
 }
 
@@ -2386,7 +2384,7 @@ html[data-theme="dark"] .dashboard-cost-over-time-metrics > div[data-kind="avera
   width: 100%;
   min-width: 0;
   height: 100%;
-  min-height: 76px;
+  min-height: 58px;
   overflow: hidden;
 }
 
@@ -2656,6 +2654,9 @@ html[data-theme="dark"] .dashboard-cost-over-time-metrics > div[data-kind="avera
 }
 
 .dashboard-provider-usage-chart {
+  display: grid;
+  place-items: center;
+  container-type: size;
   min-width: 0;
   min-height: 0;
   height: 100%;
@@ -2665,18 +2666,20 @@ html[data-theme="dark"] .dashboard-cost-over-time-metrics > div[data-kind="avera
 
 .dashboard-provider-usage-chart-shell {
   position: relative;
-  min-width: 0;
-  min-height: 0;
-  height: 100%;
+  width: min(100cqw, 100cqh, 360px);
+  height: min(100cqw, 100cqh, 360px);
+  max-width: 100%;
   max-height: 100%;
+  aspect-ratio: 1;
+  container-type: size;
   overflow: hidden;
 }
 
 .dashboard-provider-usage-chart .dashboard-pie-chart {
   width: 100%;
   height: 100%;
-  max-height: 100%;
-  min-height: 220px;
+  max-height: none;
+  min-height: 0;
   overflow: hidden;
 }
 
@@ -2687,7 +2690,10 @@ html[data-theme="dark"] .dashboard-cost-over-time-metrics > div[data-kind="avera
   display: grid;
   justify-items: center;
   gap: 4px;
-  min-width: 82px;
+  width: 52%;
+  max-width: 52%;
+  min-width: 0;
+  overflow: hidden;
   color: var(--foreground);
   text-align: center;
   transform: translate(-50%, -50%);
@@ -2695,18 +2701,27 @@ html[data-theme="dark"] .dashboard-cost-over-time-metrics > div[data-kind="avera
 }
 
 .dashboard-provider-usage-center strong {
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
   color: var(--foreground);
-  font-size: calc(26px + var(--global-font-lift));
+  font-size: clamp(18px, 8cqi, calc(26px + var(--global-font-lift)));
   font-weight: var(--font-weight-bold);
   line-height: 1;
   letter-spacing: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .dashboard-provider-usage-center span {
+  max-width: 100%;
+  overflow: hidden;
   color: var(--text-muted);
-  font-size: calc(var(--font-size-xs) + var(--global-font-lift));
+  font-size: clamp(10px, 4cqi, calc(var(--font-size-xs) + var(--global-font-lift)));
   font-weight: var(--font-weight-bold);
   line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .dashboard-provider-usage-list {
@@ -11907,7 +11922,6 @@ html[data-theme="dark"] .onboarding-provider-logo[data-family="gemini"] {
   .dashboard-cost-over-time-header {
     grid-template-areas:
       "title"
-      "metrics"
       "side";
     grid-template-columns: minmax(0, 1fr);
     align-items: stretch;
@@ -12008,9 +12022,7 @@ html[data-theme="dark"] .onboarding-provider-logo[data-family="gemini"] {
     gap: var(--space-4);
   }
 
-  .dashboard-provider-usage-chart,
-  .dashboard-provider-usage-chart-shell,
-  .dashboard-provider-usage-chart .dashboard-pie-chart {
+  .dashboard-provider-usage-chart {
     height: 220px;
     max-height: 220px;
     min-height: 220px;
@@ -12023,7 +12035,7 @@ html[data-theme="dark"] .onboarding-provider-logo[data-family="gemini"] {
 
   .dashboard-provider-usage-center strong {
     max-width: 100%;
-    font-size: calc(18px + var(--global-font-lift));
+    font-size: clamp(16px, 8cqi, calc(20px + var(--global-font-lift)));
     white-space: nowrap;
   }
 
@@ -18734,8 +18746,8 @@ html:has(.tenant-management-content) {
 }
 
 .tenant-routing-provider-control {
-  gap: 8px;
-  padding-left: 11px;
+  gap: 0;
+  padding-left: 0;
 }
 
 .tenant-routing-model-control {
@@ -18748,7 +18760,7 @@ html:has(.tenant-management-content) {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 14%, transparent);
 }
 
-.tenant-routing-provider-control:has(select:disabled),
+.tenant-routing-provider-control:has(.tenant-routing-provider-trigger[data-disabled]),
 .tenant-routing-model-control:has(select:disabled) {
   background: var(--surface-subtle);
   color: var(--text-muted);
@@ -18782,15 +18794,16 @@ html[data-theme="dark"] .tenant-routing-provider-icon[data-family="openai"] img 
   filter: brightness(0) invert(1);
 }
 
-.tenant-routing-provider-control select,
+.tenant-routing-provider-control .tenant-routing-provider-trigger,
 .tenant-routing-model-control select {
   width: 100%;
   min-width: 0;
   min-height: 68px;
-  padding: 0 30px 0 0;
   overflow: hidden;
   background: transparent;
   border: 0;
+  border-radius: inherit;
+  box-shadow: none;
   outline: 0;
   color: var(--foreground);
   font: inherit;
@@ -18800,11 +18813,54 @@ html[data-theme="dark"] .tenant-routing-provider-icon[data-family="openai"] img 
   cursor: pointer;
 }
 
-.tenant-routing-model-control select {
-  padding-left: 10px;
+.tenant-routing-provider-control .tenant-routing-provider-trigger {
+  height: auto;
+  padding: 0 18px;
 }
 
-.tenant-routing-provider-control select:disabled,
+.tenant-routing-provider-control .tenant-routing-provider-trigger:focus-visible {
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.tenant-routing-provider-trigger-copy,
+.tenant-routing-provider-item {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 12px;
+}
+
+.tenant-routing-provider-trigger-copy {
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+
+.tenant-routing-provider-option-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tenant-routing-provider-menu {
+  z-index: 220;
+  min-width: var(--anchor-width);
+  padding: 6px;
+}
+
+.tenant-routing-provider-item {
+  min-height: 46px;
+  padding: 8px 12px 8px 38px;
+  font-size: 16px;
+  font-weight: var(--font-weight-medium);
+}
+
+.tenant-routing-model-control select {
+  padding: 0 30px 0 10px;
+}
+
+.tenant-routing-provider-control .tenant-routing-provider-trigger[data-disabled],
 .tenant-routing-model-control select:disabled {
   color: var(--text-muted);
   cursor: not-allowed;
@@ -19408,7 +19464,7 @@ html[data-theme="dark"] .tenant-routing-provider-icon[data-family="openai"] img 
   min-height: 52px;
 }
 
-.tenant-chat-app-content .tenant-routing-provider-control select,
+.tenant-chat-app-content .tenant-routing-provider-control .tenant-routing-provider-trigger,
 .tenant-chat-app-content .tenant-routing-model-control select {
   min-height: 50px;
   font-size: 15px;
@@ -19655,7 +19711,10 @@ html[data-theme="dark"] .tenant-routing-provider-icon[data-family="openai"] img 
   min-height: 60px;
 }
 
-.tenant-chat-app-content .tenant-routing-difficulty-card .tenant-routing-provider-control select,
+.tenant-chat-app-content
+  .tenant-routing-difficulty-card
+  .tenant-routing-provider-control
+  .tenant-routing-provider-trigger,
 .tenant-chat-app-content .tenant-routing-difficulty-card .tenant-routing-model-control select {
   min-height: 58px;
   font-size: 16px;
@@ -19921,7 +19980,7 @@ html[data-theme="dark"] .tenant-routing-provider-icon[data-family="openai"] img 
 
   html[data-presentation-mode="true"]
     .tenant-chat-app-content
-    .tenant-routing-provider-control select,
+    .tenant-routing-provider-control .tenant-routing-provider-trigger,
   html[data-presentation-mode="true"]
     .tenant-chat-app-content
     .tenant-routing-model-control select {
@@ -20839,7 +20898,10 @@ html[data-theme="dark"] .dashboard-live-project-pill[data-project-tone="5"] {
   font-size: calc(40px + var(--global-font-lift));
 }
 
-.dashboard-overview-content .dashboard-cost-over-time-header h2,
+.dashboard-overview-content .dashboard-cost-over-time-header h2 {
+  font-size: calc(26px + var(--global-font-lift));
+}
+
 .dashboard-overview-content .dashboard-provider-usage-header h2,
 .dashboard-overview-content .dashboard-live-requests-title h2 {
   font-size: calc(22px + var(--global-font-lift));
@@ -20854,7 +20916,7 @@ html[data-theme="dark"] .dashboard-live-project-pill[data-project-tone="5"] {
 }
 
 .dashboard-overview-content .dashboard-provider-usage-center strong {
-  font-size: calc(26px + var(--global-font-lift));
+  font-size: clamp(18px, 8cqi, calc(26px + var(--global-font-lift)));
 }
 
 .dashboard-overview-content .dashboard-provider-usage-center span,
@@ -20928,7 +20990,10 @@ html[data-theme="dark"] .dashboard-live-project-pill[data-project-tone="5"] {
     height: 19px;
   }
 
-  html[data-presentation-mode="true"] .dashboard-overview-content .dashboard-cost-over-time-header h2,
+  html[data-presentation-mode="true"] .dashboard-overview-content .dashboard-cost-over-time-header h2 {
+    font-size: calc(32px + var(--global-font-lift));
+  }
+
   html[data-presentation-mode="true"] .dashboard-overview-content .dashboard-provider-usage-header h2,
   html[data-presentation-mode="true"] .dashboard-overview-content .dashboard-live-requests-title h2 {
     font-size: calc(28px + var(--global-font-lift));
@@ -20995,7 +21060,7 @@ html[data-theme="dark"] .dashboard-live-project-pill[data-project-tone="5"] {
   }
 
   html[data-presentation-mode="true"] .dashboard-overview-content .dashboard-provider-usage-center strong {
-    font-size: calc(34px + var(--global-font-lift));
+    font-size: clamp(18px, 10cqi, calc(34px + var(--global-font-lift)));
   }
 
   html[data-presentation-mode="true"] .dashboard-overview-content .dashboard-provider-usage-center span,
@@ -21060,8 +21125,7 @@ html[data-theme="dark"] .dashboard-live-project-pill[data-project-tone="5"] {
   html[data-presentation-mode="true"] .dashboard-overview-content .dashboard-cost-over-time-header {
     grid-template-areas:
       "title"
-      "side"
-      "metrics";
+      "side";
     grid-template-columns: minmax(0, 1fr);
     min-height: 0;
   }

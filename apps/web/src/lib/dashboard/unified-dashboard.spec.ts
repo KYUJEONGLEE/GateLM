@@ -44,7 +44,7 @@ test("maps a legacy Tenant Chat aggregate without security evidence", () => {
   ]);
 });
 
-test("merges additive values while keeping latency provenance by surface", () => {
+test("merges additive values while request-weighting average latency across surfaces", () => {
   const projectApplication = toTenantChatDashboardOverview(tenantId, tenantChatDashboard());
   projectApplication.surface = "project_application";
   projectApplication.totalRequests = 5;
@@ -79,9 +79,22 @@ test("merges additive values while keeping latency provenance by surface", () =>
     tenantChatAverageMs: 120,
     tenantChatP95Ms: 250
   });
-  expect(overview.averageLatencyMs).toBe(210);
+  expect(overview.averageLatencyMs).toBe(150);
   expect(overview.p95LatencyMs).toBe(400);
   expect(overview.gatewayTtft).toBe(projectApplication.gatewayTtft);
+});
+
+test("uses Tenant Chat latency when the project surface has no requests in the range", () => {
+  const projectApplication = toTenantChatDashboardOverview(tenantId, tenantChatDashboard());
+  projectApplication.surface = "project_application";
+  projectApplication.totalRequests = 0;
+  projectApplication.averageLatencyMs = 0;
+  const tenantChat = toTenantChatDashboardOverview(tenantId, tenantChatDashboard());
+
+  const overview = mergeDashboardOverviews(projectApplication, tenantChat);
+
+  expect(overview.totalRequests).toBe(10);
+  expect(overview.averageLatencyMs).toBe(120);
 });
 
 test("keeps the worst query budget and conservative freshness across surfaces", () => {

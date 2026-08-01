@@ -45,7 +45,6 @@ type CostOverTimeStatus = "loading" | "success" | "error";
 const costOverTimeText = {
   en: {
     aria: "Cost over time",
-    average: "Average interval cost",
     chartAria: "Cost over time chart",
     denseAria: "Dense cost range overview chart",
     denseRange: "Dense range",
@@ -53,13 +52,10 @@ const costOverTimeText = {
     error: "Failed to load cost data",
     loading: "Loading cost data",
     rangeAria: "Cost trend time range",
-    spend: "Spend (USD)",
-    title: "Cost Trend",
-    total: "Total spend"
+    title: "Cost Trend ($)"
   },
   ko: {
     aria: "비용 추이",
-    average: "평균 구간 비용",
     chartAria: "비용 추이 차트",
     denseAria: "밀집 비용 구간 미리보기 차트",
     denseRange: "밀집 구간",
@@ -67,9 +63,7 @@ const costOverTimeText = {
     error: "비용 데이터를 불러오지 못했습니다",
     loading: "비용 데이터 불러오는 중",
     rangeAria: "비용 추이 시간 범위",
-    spend: "사용 비용(USD)",
-    title: "비용 추이",
-    total: "총 사용 비용"
+    title: "비용 추이($)"
   }
 } as const;
 
@@ -130,13 +124,6 @@ export function CostOverTimeCard({
     [displayedSummary, range]
   );
   const hasCostData = renderedSummary?.points.some((point) => point.spendUsd > 0) ?? false;
-  const totalSpendUsd =
-    renderedSummary?.points.reduce((sum, point) => sum + point.spendUsd, 0) ?? 0;
-  const bucketContext = formatCostBucketContext(
-    rangeLabel,
-    renderedSummary?.bucketInterval,
-    locale
-  );
   const denseIntervalLabel = formatCostBucketInterval(
     renderedSummary?.bucketInterval,
     locale
@@ -281,7 +268,6 @@ export function CostOverTimeCard({
       <div className="dashboard-cost-over-time-header">
         <div className="dashboard-cost-over-time-title">
           <h2>{text.title}</h2>
-          <p>{bucketContext}</p>
         </div>
         <div className="dashboard-cost-over-time-header-side">
           {rangeOptions.length > 0 ? (
@@ -298,24 +284,6 @@ export function CostOverTimeCard({
               ))}
             </nav>
           ) : null}
-          {hasCostData && renderedSummary ? (
-            <div className="dashboard-cost-over-time-legend">
-              <span data-kind="spend">{text.spend}</span>
-              <span data-kind="average">
-                {text.average}: {formatUsd(renderedSummary.averageSpendUsd)}
-              </span>
-            </div>
-          ) : null}
-        </div>
-        <div className="dashboard-cost-over-time-metrics" aria-label={text.title}>
-          <div data-kind="total">
-            <span>{text.total}</span>
-            <strong>{formatUsd(totalSpendUsd)}</strong>
-          </div>
-          <div data-kind="average">
-            <span>{text.average}</span>
-            <strong>{formatUsd(renderedSummary?.averageSpendUsd ?? 0)}</strong>
-          </div>
         </div>
       </div>
       {displayedStatus === "loading" && !displayedSummary ? (
@@ -367,27 +335,6 @@ function setOptionalQuery(query: URLSearchParams, key: string, value: string) {
   if (normalized) {
     query.set(key, normalized);
   }
-}
-
-function formatUsd(value: number) {
-  const normalized = Number.isFinite(value) ? value : 0;
-
-  return new Intl.NumberFormat("en-US", {
-    currency: "USD",
-    maximumFractionDigits: 3,
-    minimumFractionDigits: 2,
-    style: "currency"
-  }).format(normalized);
-}
-
-function formatCostBucketContext(
-  rangeLabel: string,
-  bucketInterval: string | undefined,
-  locale: Locale
-) {
-  const intervalLabel = formatCostBucketInterval(bucketInterval, locale, true);
-
-  return intervalLabel ? `${rangeLabel} · ${intervalLabel}` : rangeLabel;
 }
 
 function formatCostBucketInterval(

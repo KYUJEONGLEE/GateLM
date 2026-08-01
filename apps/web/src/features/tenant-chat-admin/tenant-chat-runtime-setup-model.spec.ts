@@ -161,14 +161,17 @@ test("Chat App routing selects Provider first and limits models to that Provider
 
   expect(source).toContain('className="tenant-routing-provider-control"');
   expect(source).toContain('className="tenant-routing-model-control"');
-  expect(source).toContain("provider.providerConnectionId === event.target.value");
+  expect(source).toContain("provider.providerConnectionId === nextValue");
+  expect(source).toContain("onValueChange={(nextValue) => {");
+  expect(source).toContain("<SelectTrigger");
+  expect(source).toContain("<SelectItem");
   expect(source).toContain('onChange(nextProvider?.models[0]?.modelRef ?? "")');
   expect(source).toContain("selectedModels.map((model)");
   expect(source).toContain("{model.modelKey}");
   expect(source).toContain("const showProviderIcon = Boolean(selectedProvider || value);");
   expect(source).toContain("{showProviderIcon ? (");
   expect(styles).toMatch(/\.tenant-chat-app-content \.tenant-routing-provider-control,\r?\n\.tenant-chat-app-content \.tenant-routing-model-control \{[\s\S]*?min-height: 52px;/);
-  expect(styles).toMatch(/\.tenant-chat-app-content \.tenant-routing-provider-control select,\r?\n\.tenant-chat-app-content \.tenant-routing-model-control select \{[\s\S]*?min-height: 50px;[\s\S]*?font-size: 15px;/);
+  expect(styles).toMatch(/\.tenant-chat-app-content \.tenant-routing-provider-control \.tenant-routing-provider-trigger,\r?\n\.tenant-chat-app-content \.tenant-routing-model-control select \{[\s\S]*?min-height: 50px;[\s\S]*?font-size: 15px;/);
   expect(styles).toMatch(/\.tenant-chat-app-content \.tenant-routing-category-option-copy strong \{[\s\S]*?font-size: 17px;/);
   expect(styles).toMatch(/\.tenant-chat-app-content \.tenant-routing-difficulty-card h5 \{[\s\S]*?font-size: 22px;/);
   expect(styles).toMatch(/\.tenant-chat-app-content \.tenant-routing-difficulty-card p \{[\s\S]*?font-size: 14px;/);
@@ -325,7 +328,7 @@ test("Chat App routing uses a category master-detail presentation without changi
     /\.tenant-chat-app-content \.tenant-routing-difficulty-card \{[\s\S]*?min-height: 188px;[\s\S]*?height: 100%;[\s\S]*?padding: 26px 28px;[\s\S]*?box-shadow: var\(--shadow-md\);/
   );
   expect(styles).toMatch(
-    /\.tenant-chat-app-content[\s\S]*?\.tenant-routing-provider-control select,[\s\S]*?min-height: 54px;[\s\S]*?font-size: 17px;/
+    /html\[data-presentation-mode="true"\]\s+\.tenant-chat-app-content\s+\.tenant-routing-provider-control \.tenant-routing-provider-trigger,[\s\S]*?min-height: 54px;[\s\S]*?font-size: 17px;/
   );
 });
 

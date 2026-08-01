@@ -286,8 +286,8 @@ function formatDashboardMicroUsd(value: number) {
 
   return new Intl.NumberFormat("en-US", {
     currency: "USD",
-    maximumFractionDigits: 3,
-    minimumFractionDigits: 2,
+    maximumFractionDigits: 1,
+    minimumFractionDigits: 1,
     style: "currency"
   }).format(Number.isFinite(dollars) ? dollars : 0);
 }

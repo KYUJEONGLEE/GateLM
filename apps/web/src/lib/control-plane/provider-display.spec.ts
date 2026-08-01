@@ -40,6 +40,7 @@ test("uses an explicit provider family for OpenAI-compatible connections", () =>
 
 test("recognizes OpenAI-compatible provider families by key and base URL", () => {
   expect(getProviderFamilyFromKey("groq-main")).toBe("groq");
+  expect(getProviderFamilyFromKey("mock-balanced")).toBe("mock");
   expect(
     getProviderFamilyFromKey("custom-provider", "https://api.cerebras.ai/v1")
   ).toBe("cerebras");

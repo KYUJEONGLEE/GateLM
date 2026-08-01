@@ -269,7 +269,7 @@ const dashboardText: Record<
     kpi: {
       averageLatency: "평균 지연 시간",
       monthCost: "이번 달 총 비용",
-      totalCost: "기간 총 비용",
+      totalCost: "비용",
       totalRequests: "요청 수"
     },
     overviewWorkspace: "대시보드 개요 영역",
@@ -584,8 +584,8 @@ function formatMicroUsd(value: number) {
 
   return new Intl.NumberFormat("en-US", {
     currency: "USD",
-    maximumFractionDigits: 3,
-    minimumFractionDigits: 2,
+    maximumFractionDigits: 1,
+    minimumFractionDigits: 1,
     style: "currency"
   }).format(dollars);
 }

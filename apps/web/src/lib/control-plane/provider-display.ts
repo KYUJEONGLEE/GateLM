@@ -96,7 +96,7 @@ export function getProviderFamilyFromKey(providerKey: string, baseUrl = "") {
     return "mistral";
   }
 
-  if (normalizedProvider === "mock") {
+  if (normalizedProvider.includes("mock")) {
     return "mock";
   }
 

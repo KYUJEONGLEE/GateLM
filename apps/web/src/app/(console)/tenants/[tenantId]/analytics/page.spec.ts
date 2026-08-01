@@ -107,6 +107,14 @@ test("performance delegates tenant-level surface union to the Gateway contract",
   expect(pageSource).toContain("providerDirectory={providerDirectory}");
 });
 
+test("policy impact resolves model logos through the configured provider directory", async () => {
+  const pageSource = await readFile(pageSourceUrl, "utf8");
+
+  expect(pageSource).toMatch(
+    /<AnalyticsV5Overview[\s\S]*?providerDirectory=\{providerDirectory\}/
+  );
+});
+
 test("performance keeps an unavailable error rate distinct from zero percent", async () => {
   const panelsSource = await readFile(panelsSourceUrl, "utf8");
 

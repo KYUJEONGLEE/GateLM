@@ -22,7 +22,10 @@ import type {
   AnalyticsLatencyDistributionPoint,
   AnalyticsSurface
 } from "@/lib/gateway/live-analytics-performance";
-import { formatMicroUsdCurrency } from "@/lib/formatting/formatters";
+import {
+  DEFAULT_DISPLAY_TIMEZONE,
+  formatMicroUsdCurrency
+} from "@/lib/formatting/formatters";
 
 export type AnalyticsValueKind = "count" | "micro-usd" | "milliseconds" | "tokens";
 
@@ -879,21 +882,21 @@ export function AnalyticsLiveRequestTrendChart({
         liveUsageSeries(
           locale === "ko" ? "수신" : "Incoming",
           buckets.map((bucket) => bucket.incomingRps),
-          "var(--primary)",
+          palette[1],
           markerIndex,
           locale
         ),
         ...(showBreakdown ? [liveUsageSeries(
           locale === "ko" ? "처리됨" : "Processed",
           buckets.map((bucket) => bucket.processedRps),
-          "var(--success)",
+          palette[0],
           -1,
           locale
         ),
         liveUsageSeries(
           locale === "ko" ? "제한됨" : "Rate limited",
           buckets.map((bucket) => bucket.rateLimitedRps),
-          "var(--warning-indicator)",
+          palette[2],
           -1,
           locale
         )] : [])
@@ -962,7 +965,7 @@ function formatLiveBucket(value: string, locale: "en" | "ko") {
     minute: "2-digit",
     month: "numeric",
     second: "2-digit",
-    timeZone: "UTC"
+    timeZone: DEFAULT_DISPLAY_TIMEZONE
   }).format(date);
 }
 

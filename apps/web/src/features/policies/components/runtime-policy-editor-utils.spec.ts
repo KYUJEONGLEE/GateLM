@@ -1,11 +1,13 @@
 import { expect, test } from "@playwright/test";
 
 import type { ProviderConnectionRecord } from "@/lib/control-plane/provider-connections-types";
+import type { RuntimePolicyDraftValues } from "@/lib/control-plane/runtime-policy-types";
 
 import {
   formatPolicyNumberInputValue,
   getRoutingModelOptions,
   groupRoutingModelOptionsByProvider,
+  mergeDraftValuesWithProviderConnections,
   parseOptionalBoundedInteger
 } from "./runtime-policy-editor-utils";
 
@@ -51,6 +53,49 @@ test("keeps duplicate provider families separate by Provider Connection", () => 
   expect(providers[1]?.models[0]?.modelRef).toBe(
     "provider-openai-backup:gpt-4.1-mini"
   );
+});
+
+test("publishing a mock bootstrap prunes unbound provider models and keeps mock pricing", () => {
+  const values = {
+    models: [
+      {
+        contextWindowTokens: 128000,
+        displayName: "Unbound Claude",
+        model: "claude-unbound",
+        provider: "claude-unbound",
+        status: "active",
+        supportsJsonMode: true,
+        supportsStreaming: true
+      }
+    ],
+    pricingRules: [
+      {
+        completionTokenMicroUsd: 30,
+        model: "claude-unbound",
+        pricingVersion: "test",
+        promptTokenMicroUsd: 10,
+        provider: "claude-unbound"
+      }
+    ]
+  } as RuntimePolicyDraftValues;
+
+  const merged = mergeDraftValuesWithProviderConnections(values, []);
+
+  expect(merged.models).toEqual([
+    expect.objectContaining({
+      model: "mock-balanced",
+      provider: "mock",
+      status: "active"
+    })
+  ]);
+  expect(merged.pricingRules).toEqual([
+    expect.objectContaining({
+      completionTokenMicroUsd: 0,
+      model: "mock-balanced",
+      promptTokenMicroUsd: 0,
+      provider: "mock"
+    })
+  ]);
 });
 
 function providerConnection(
