@@ -276,17 +276,20 @@ func newRouterWithOptions(cfg config.Config, providers *provider.Registry, readi
 	)
 	if cfg.AISafetySidecar.Enabled {
 		maskingEngine = aiservice.NewMaskingEngine(aiservice.MaskingEngineConfig{
-			Local:          maskingEngine,
-			FallbackLocal:  resolveRouterFallbackMaskingEngine(routerOptions.MaskingEngine, cfg.AISafetySidecar.PersonNameModelOnly),
-			EndpointURL:    cfg.AISafetySidecar.EndpointURL,
-			Timeout:        cfg.AISafetySidecar.Timeout,
-			ModelID:        cfg.AISafetySidecar.ModelID,
-			DetectorSet:    cfg.AISafetySidecar.DetectorSet,
-			Locale:         cfg.AISafetySidecar.Locale,
-			Mode:           cfg.AISafetySidecar.Mode,
-			OverloadPolicy: cfg.AISafetySidecar.OverloadPolicy,
-			Surface:        "gateway_v1",
-			Metrics:        metricsRegistry,
+			Local:                      maskingEngine,
+			FallbackLocal:              resolveRouterFallbackMaskingEngine(routerOptions.MaskingEngine, cfg.AISafetySidecar.PersonNameModelOnly),
+			EndpointURL:                cfg.AISafetySidecar.EndpointURL,
+			Timeout:                    cfg.AISafetySidecar.Timeout,
+			ModelID:                    cfg.AISafetySidecar.ModelID,
+			DetectorSet:                cfg.AISafetySidecar.DetectorSet,
+			Locale:                     cfg.AISafetySidecar.Locale,
+			Mode:                       cfg.AISafetySidecar.Mode,
+			OverloadPolicy:             cfg.AISafetySidecar.OverloadPolicy,
+			Surface:                    "gateway_v1",
+			Metrics:                    metricsRegistry,
+			PIIShadowEnabled:           cfg.AISafetySidecar.PIIShadowEnabled,
+			PIIShadowAllowedTenantIDs:  cfg.AISafetySidecar.PIIShadowAllowedTenantIDs,
+			PIIShadowSampleBasisPoints: cfg.AISafetySidecar.PIIShadowSampleBasisPoints,
 		})
 	}
 	observabilityToken := cfg.ObservabilityInternalToken

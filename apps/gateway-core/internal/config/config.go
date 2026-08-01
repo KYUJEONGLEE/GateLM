@@ -264,15 +264,18 @@ type RAGEmbeddingConfig struct {
 }
 
 type AISafetySidecarConfig struct {
-	Enabled             bool
-	EndpointURL         string
-	Timeout             time.Duration
-	ModelID             string
-	DetectorSet         string
-	Locale              string
-	Mode                string
-	OverloadPolicy      string
-	PersonNameModelOnly bool
+	Enabled                    bool
+	EndpointURL                string
+	Timeout                    time.Duration
+	ModelID                    string
+	DetectorSet                string
+	Locale                     string
+	Mode                       string
+	OverloadPolicy             string
+	PersonNameModelOnly        bool
+	PIIShadowEnabled           bool
+	PIIShadowAllowedTenantIDs  []string
+	PIIShadowSampleBasisPoints int
 }
 
 type RuntimeSnapshotCacheConfig struct {
@@ -556,15 +559,18 @@ func LoadWithError() (Config, error) {
 		RateLimitAlgorithm:      rateLimitAlgorithm,
 		RateLimitRedisKeyPrefix: strings.TrimSpace(envString("GATEWAY_RATE_LIMIT_REDIS_KEY_PREFIX", "")),
 		AISafetySidecar: AISafetySidecarConfig{
-			Enabled:             envBool("GATEWAY_AI_SAFETY_SIDECAR_ENABLED", true),
-			EndpointURL:         envString("GATEWAY_AI_SAFETY_SIDECAR_URL", "http://127.0.0.1:8001/internal/ai-safety/v1/detect"),
-			Timeout:             envDurationMillis("GATEWAY_AI_SAFETY_SIDECAR_TIMEOUT_MS", 750),
-			ModelID:             envString("GATEWAY_AI_SAFETY_SIDECAR_MODEL_ID", "openai/privacy-filter"),
-			DetectorSet:         envString("GATEWAY_AI_SAFETY_SIDECAR_DETECTOR_SET", "privacy-filter-default"),
-			Locale:              envString("GATEWAY_AI_SAFETY_SIDECAR_LOCALE", ""),
-			Mode:                envString("GATEWAY_AI_SAFETY_SIDECAR_MODE", "enforce"),
-			OverloadPolicy:      envString("GATEWAY_AI_SAFETY_OVERLOAD_POLICY", AISafetyOverloadPolicyLocalFallback),
-			PersonNameModelOnly: envBool("GATEWAY_AI_SAFETY_PERSON_NAME_MODEL_ONLY", false),
+			Enabled:                    envBool("GATEWAY_AI_SAFETY_SIDECAR_ENABLED", true),
+			EndpointURL:                envString("GATEWAY_AI_SAFETY_SIDECAR_URL", "http://127.0.0.1:8001/internal/ai-safety/v1/detect"),
+			Timeout:                    envDurationMillis("GATEWAY_AI_SAFETY_SIDECAR_TIMEOUT_MS", 750),
+			ModelID:                    envString("GATEWAY_AI_SAFETY_SIDECAR_MODEL_ID", "openai/privacy-filter"),
+			DetectorSet:                envString("GATEWAY_AI_SAFETY_SIDECAR_DETECTOR_SET", "privacy-filter-default"),
+			Locale:                     envString("GATEWAY_AI_SAFETY_SIDECAR_LOCALE", ""),
+			Mode:                       envString("GATEWAY_AI_SAFETY_SIDECAR_MODE", "enforce"),
+			OverloadPolicy:             envString("GATEWAY_AI_SAFETY_OVERLOAD_POLICY", AISafetyOverloadPolicyLocalFallback),
+			PersonNameModelOnly:        envBool("GATEWAY_AI_SAFETY_PERSON_NAME_MODEL_ONLY", false),
+			PIIShadowEnabled:           envBool("GATEWAY_PII_SHADOW_ENABLED", false),
+			PIIShadowAllowedTenantIDs:  envCSV("GATEWAY_PII_SHADOW_ALLOWED_TENANT_IDS", nil),
+			PIIShadowSampleBasisPoints: envInt("GATEWAY_PII_SHADOW_SAMPLE_BASIS_POINTS", 500),
 		},
 		ClickHouseAnalytics: ClickHouseAnalyticsConfig{
 			Enabled:                    envBool("GATEWAY_CLICKHOUSE_ANALYTICS_ENABLED", false),
@@ -925,6 +931,17 @@ func validateProviderTransportConfig(cfg ProviderTransportConfig) error {
 }
 
 func validateAISafetySidecarConfig(cfg AISafetySidecarConfig) error {
+	if cfg.PIIShadowSampleBasisPoints < 1 || cfg.PIIShadowSampleBasisPoints > 10_000 {
+		return errors.New("GATEWAY_PII_SHADOW_SAMPLE_BASIS_POINTS must be between 1 and 10000")
+	}
+	if cfg.PIIShadowEnabled {
+		if !cfg.Enabled {
+			return errors.New("GATEWAY_AI_SAFETY_SIDECAR_ENABLED=true is required when PII Shadow capture is enabled")
+		}
+		if len(cfg.PIIShadowAllowedTenantIDs) == 0 {
+			return errors.New("GATEWAY_PII_SHADOW_ALLOWED_TENANT_IDS is required when PII Shadow capture is enabled")
+		}
+	}
 	switch cfg.OverloadPolicy {
 	case AISafetyOverloadPolicyLocalFallback, AISafetyOverloadPolicyFailClosed:
 	default:

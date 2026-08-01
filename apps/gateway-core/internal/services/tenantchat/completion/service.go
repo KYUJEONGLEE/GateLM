@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"gatelm/apps/gateway-core/internal/domain/masking"
 	"gatelm/apps/gateway-core/internal/domain/metrics"
 	"gatelm/apps/gateway-core/internal/domain/provider"
 	"gatelm/apps/gateway-core/internal/domain/routing"
@@ -302,7 +303,12 @@ func (s *Service) Prepare(
 		if s.safety == nil || s.ledgerless == nil {
 			return nil, tenantchat.ErrRuntimeUnavailable
 		}
-		evaluation, evaluateErr := s.safety.Evaluate(ctx, snapshot, input)
+		safetyContext := masking.WithPIIShadowScope(
+			ctx,
+			request.Context.ExecutionScope.TenantID,
+			request.Context.RequestID,
+		)
+		evaluation, evaluateErr := s.safety.Evaluate(safetyContext, snapshot, input)
 		if evaluateErr != nil {
 			return nil, tenantchat.ErrRuntimeUnavailable
 		}

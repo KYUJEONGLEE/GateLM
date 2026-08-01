@@ -207,7 +207,12 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 	}
 
 	maskingStartedAt := time.Now()
-	maskingResult, redactedMessages, redactedPrompt, logSafePrompt, err := h.applyMasking(r.Context(), chatReq.Messages, firstNonEmpty(reqCtx.SecurityPolicyHash, reqCtx.SecurityPolicyVersionID), reqCtx.RuntimeSafetyPolicy)
+	maskingContext := maskdomain.WithPIIShadowScope(
+		r.Context(),
+		reqCtx.TenantID,
+		reqCtx.RequestID,
+	)
+	maskingResult, redactedMessages, redactedPrompt, logSafePrompt, err := h.applyMasking(maskingContext, chatReq.Messages, firstNonEmpty(reqCtx.SecurityPolicyHash, reqCtx.SecurityPolicyVersionID), reqCtx.RuntimeSafetyPolicy)
 	recordRequestStageTiming(reqCtx, stagetiming.StagePIIMasking, time.Since(maskingStartedAt))
 	if err != nil {
 		writeGatewayErrorWithContext(w, reqCtx, http.StatusInternalServerError, "internal_error", "Gateway masking failed.", "mask_or_block")

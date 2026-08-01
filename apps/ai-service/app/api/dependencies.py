@@ -7,9 +7,15 @@ from pathlib import Path
 
 from fastapi import Request
 
+from app.adapters.safety import PrivacyFilterAdapter
+from app.adapters.safety.privacy_filter_adapter import (
+    public_model_id_for_model,
+    source_for_model,
+)
 from app.core.config import Settings, load_settings
 from app.domain.routing_difficulty.runtime import RoutingDifficultyRuntime
 from app.services.ai_safety_detector import AiSafetyDetectorService
+from app.services.pii_shadow import EncryptedPiiShadowBuffer, PiiShadowEvaluator
 from app.services.rag_extraction import RagExtractionService
 from app.services.routing_difficulty import RoutingDifficultyService
 from app.services.routing_difficulty_batcher import RoutingDifficultyBatcher
@@ -114,6 +120,10 @@ class AiSafetyConcurrencyGate:
         async with self._lock:
             self._release_locked()
 
+    async def is_idle(self) -> bool:
+        async with self._lock:
+            return self._active == 0 and not self._waiters
+
 
 class RagExtractionConcurrencyGate:
     def __init__(self, maximum_concurrency: int) -> None:
@@ -204,6 +214,51 @@ def create_ai_safety_detector_service(settings: Settings) -> AiSafetyDetectorSer
         ),
         person_name_model_only=settings.ai_safety_person_name_model_only,
     )
+
+
+def create_pii_shadow_evaluator(settings: Settings) -> PiiShadowEvaluator:
+    candidate_model_id = (
+        settings.pii_shadow_candidate_model_id
+        or settings.ai_safety_detector_model_id
+    )
+    allowed_detector_types = frozenset(settings.ai_safety_ml_allowed_detector_types)
+    detector_thresholds = dict(settings.ai_safety_ml_detector_thresholds)
+
+    def candidate_service_factory() -> AiSafetyDetectorService:
+        adapter = PrivacyFilterAdapter(
+            model_name=candidate_model_id,
+            source=source_for_model(candidate_model_id),
+            runtime=settings.ai_safety_detector_runtime,
+            allowed_detector_types=allowed_detector_types,
+            min_confidence_by_detector_type=detector_thresholds,
+            onnx_intra_op_threads=1,
+            onnx_inter_op_threads=1,
+            onnx_allow_spinning=False,
+        )
+        return AiSafetyDetectorService(
+            adapter=adapter,
+            detector_runtime=settings.ai_safety_detector_runtime,
+            ml_allowed_detector_types=settings.ai_safety_ml_allowed_detector_types,
+            ml_min_confidence_by_detector_type=detector_thresholds,
+            person_name_model_only=settings.ai_safety_person_name_model_only,
+        )
+
+    return PiiShadowEvaluator(
+        buffer=EncryptedPiiShadowBuffer(
+            maximum_items=settings.pii_shadow_max_items,
+            maximum_bytes=settings.pii_shadow_max_bytes,
+            ttl_seconds=settings.pii_shadow_ttl_seconds,
+        ),
+        candidate_service_factory=candidate_service_factory,
+        candidate_model_id=public_model_id_for_model(candidate_model_id),
+        candidate_model_version=settings.pii_shadow_candidate_version,
+        maximum_latency_samples=settings.pii_shadow_max_items,
+    )
+
+
+def get_pii_shadow_evaluator(request: Request) -> PiiShadowEvaluator | None:
+    evaluator = getattr(request.app.state, "pii_shadow_evaluator", None)
+    return evaluator if isinstance(evaluator, PiiShadowEvaluator) else None
 
 
 def get_rag_extraction_service(request: Request) -> RagExtractionService:

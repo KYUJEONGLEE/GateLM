@@ -12,6 +12,7 @@ from app.api.dependencies import (
     AiSafetyConcurrencyGate,
     get_ai_safety_concurrency_gate,
     get_ai_safety_detector_service,
+    get_pii_shadow_evaluator,
 )
 from app.schemas.safety import (
     AI_SAFETY_DETECTOR_BATCH_CONTRACT_VERSION,
@@ -22,6 +23,11 @@ from app.schemas.safety import (
     AiSafetyDetectResponse,
 )
 from app.services.ai_safety_detector import AiSafetyDetectorService
+from app.services.pii_shadow import (
+    PII_SHADOW_CAPTURE_HEADER,
+    PiiShadowEvaluator,
+    is_shadow_capture_requested,
+)
 
 
 router = APIRouter()
@@ -42,6 +48,9 @@ async def detect_ai_safety(
     concurrency_gate: AiSafetyConcurrencyGate = Depends(
         get_ai_safety_concurrency_gate
     ),
+    shadow_evaluator: PiiShadowEvaluator | None = Depends(
+        get_pii_shadow_evaluator
+    ),
     request: Request = None,  # type: ignore[assignment]
 ) -> AiSafetyDetectResponse | JSONResponse:
     if not await _try_acquire_while_connected(request, concurrency_gate):
@@ -50,6 +59,12 @@ async def detect_ai_safety(
         service.detect,
         request_body,
         concurrency_gate,
+        observer=(
+            shadow_evaluator.capture_single
+            if shadow_evaluator is not None
+            and _shadow_capture_requested(request)
+            else None
+        ),
     )
 
 
@@ -64,6 +79,9 @@ async def detect_ai_safety_batch(
     concurrency_gate: AiSafetyConcurrencyGate = Depends(
         get_ai_safety_concurrency_gate
     ),
+    shadow_evaluator: PiiShadowEvaluator | None = Depends(
+        get_pii_shadow_evaluator
+    ),
     request: Request = None,  # type: ignore[assignment]
 ) -> AiSafetyBatchDetectResponse | JSONResponse:
     if not await _try_acquire_while_connected(request, concurrency_gate):
@@ -74,6 +92,12 @@ async def detect_ai_safety_batch(
         service.detect_batch,
         request_body,
         concurrency_gate,
+        observer=(
+            shadow_evaluator.capture_batch
+            if shadow_evaluator is not None
+            and _shadow_capture_requested(request)
+            else None
+        ),
     )
 
 
@@ -81,6 +105,7 @@ async def _run_detector_with_permit(
     detector: Callable[[_RequestT], _ResponseT],
     request_body: _RequestT,
     concurrency_gate: AiSafetyConcurrencyGate,
+    observer: Callable[[_RequestT, _ResponseT], object] | None = None,
 ) -> _ResponseT:
     owner_task = _track_background_task(
         asyncio.create_task(
@@ -88,6 +113,7 @@ async def _run_detector_with_permit(
                 detector,
                 request_body,
                 concurrency_gate,
+                observer,
             )
         )
     )
@@ -98,11 +124,34 @@ async def _execute_detector_and_release(
     detector: Callable[[_RequestT], _ResponseT],
     request_body: _RequestT,
     concurrency_gate: AiSafetyConcurrencyGate,
+    observer: Callable[[_RequestT, _ResponseT], object] | None,
 ) -> _ResponseT:
     try:
-        return await run_in_threadpool(detector, request_body)
+        return await run_in_threadpool(
+            _detect_and_observe,
+            detector,
+            request_body,
+            observer,
+        )
     finally:
         await concurrency_gate.release()
+
+
+def _detect_and_observe(
+    detector: Callable[[_RequestT], _ResponseT],
+    request_body: _RequestT,
+    observer: Callable[[_RequestT, _ResponseT], object] | None,
+) -> _ResponseT:
+    response = detector(request_body)
+    if observer is not None:
+        observer(request_body, response)
+    return response
+
+
+def _shadow_capture_requested(request: Request | None) -> bool:
+    return request is not None and is_shadow_capture_requested(
+        request.headers.get(PII_SHADOW_CAPTURE_HEADER)
+    )
 
 
 async def _try_acquire_while_connected(
