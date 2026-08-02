@@ -26,10 +26,15 @@ from app.domain.ai_safety_training.pii_error_curation import (
     load_regression_guard_fixture,
     sha256_file,
 )
+from app.domain.ai_safety_benchmark.types import BenchmarkError
 from app.domain.safety_eval.report import scan_text_for_forbidden_sensitive_values
 from app.services.ai_safety_master_eval_runner import (
     DEFAULT_CORPUS_PATH,
     load_screening_subset,
+)
+from app.services.pii_direct_inference_concurrency_benchmark_runner import (
+    CANONICAL_MODEL_REGISTRY_PATH,
+    bind_model_artifact,
 )
 
 
@@ -58,12 +63,19 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def run(argv: Sequence[str] | None = None) -> int:
+def run(
+    argv: Sequence[str] | None = None,
+    *,
+    registry_path: Path = CANONICAL_MODEL_REGISTRY_PATH,
+) -> int:
     args = build_parser().parse_args(argv)
     try:
-        model_path = args.model_dir / "model.onnx"
-        if not model_path.is_file() or sha256_file(model_path) != MODEL_SHA256:
-            raise ValueError("canonical v0.1.1 model checksum mismatch")
+        model_binding = validate_canonical_model_directory(
+            model_dir=args.model_dir,
+            registry_path=registry_path,
+        )
+        if model_binding["modelOnnxSha256"] != MODEL_SHA256:
+            raise ValueError("canonical v0.1.1 registry model checksum mismatch")
         fixture = load_regression_guard_fixture(args.regression_guards)
         all_cases = load_master_eval_corpus(args.corpus)
         cases, subset_metadata = load_screening_subset(
@@ -82,6 +94,13 @@ def run(argv: Sequence[str] | None = None) -> int:
         )
         adapter.warmup()
         guards = evaluate_regression_guards(adapter, fixture)
+        if not guards["passed"]:
+            print(
+                "FAIL: canonical v0.1.1 regression guards did not pass; "
+                "curation artifacts were not written",
+                file=sys.stderr,
+            )
+            return 1
         screening = evaluate_screening_candidates(adapter, cases)
         report = {
             "reportVersion": CURATION_REPORT_VERSION,
@@ -93,6 +112,11 @@ def run(argv: Sequence[str] | None = None) -> int:
                 "version": MODEL_VERSION,
                 "sha256": MODEL_SHA256,
                 "thresholds": TARGET_THRESHOLDS,
+                "canonicalRegistrySha256": model_binding["registrySha256"],
+                "artifactManifestSha256": model_binding[
+                    "artifactManifestSha256"
+                ],
+                "artifactFileCount": model_binding["artifactFileCount"],
             },
             "source": {
                 "corpusSha256": subset_metadata["sourceCorpusSha256"],
@@ -129,7 +153,14 @@ def run(argv: Sequence[str] | None = None) -> int:
         review_path = args.out / "pii-v0.1.1-error-review.json"
         report_path.write_text(report_text, encoding="utf-8")
         review_path.write_text(review_text, encoding="utf-8")
-    except (ImportError, OSError, UnicodeError, ValueError, RuntimeError) as exc:
+    except (
+        BenchmarkError,
+        ImportError,
+        OSError,
+        UnicodeError,
+        ValueError,
+        RuntimeError,
+    ) as exc:
         print(f"FAIL: {exc}", file=sys.stderr)
         return 2
 
@@ -139,7 +170,19 @@ def run(argv: Sequence[str] | None = None) -> int:
         f"mismatchCandidates={screening['mismatchCandidateCount']}, "
         "humanReview=pending"
     )
-    return 0 if guards["passed"] else 1
+    return 0
+
+
+def validate_canonical_model_directory(
+    *,
+    model_dir: Path,
+    registry_path: Path = CANONICAL_MODEL_REGISTRY_PATH,
+) -> dict[str, object]:
+    return bind_model_artifact(
+        model_dir=model_dir,
+        model_version=MODEL_VERSION,
+        registry_path=registry_path,
+    )
 
 
 def main() -> int:

@@ -6,12 +6,21 @@ import tempfile
 import unittest
 from dataclasses import dataclass
 from pathlib import Path
+from unittest.mock import patch
 
+from app.domain.ai_safety_benchmark.types import BenchmarkError
 from app.domain.ai_safety_eval.master_corpus import (
     DetectorExpectation,
     GatewayExpectation,
     MasterEvalCase,
     TargetExpectations,
+)
+from app.services.pii_direct_inference_concurrency_benchmark_runner import (
+    REQUIRED_MODEL_FILES,
+)
+from app.services.pii_model_error_curation_cli import (
+    run as run_curation_cli,
+    validate_canonical_model_directory,
 )
 from app.domain.ai_safety_training.pii_error_curation import (
     CURATED_HARD_NEGATIVE_VARIANTS_PER_CASE,
@@ -70,6 +79,30 @@ class ScreeningAdapter:
     def detect(self, text: str) -> list[FakeDetection]:
         if "account number" in text:
             return [FakeDetection("phone_number", 0, 1)]
+        return []
+
+
+class BoundaryOverreachAdapter:
+    def detect(self, text: str) -> list[FakeDetection]:
+        expected_value = "Synthetic Person"
+        start = text.index(expected_value)
+        return [
+            FakeDetection(
+                detector_type="person_name",
+                start=start,
+                end=start + len(expected_value) + 1,
+            )
+        ]
+
+
+class FailingGuardAdapter:
+    def __init__(self, *args: object, **kwargs: object) -> None:
+        pass
+
+    def warmup(self) -> None:
+        pass
+
+    def detect(self, text: str) -> list[FakeDetection]:
         return []
 
 
@@ -152,6 +185,80 @@ class PiiErrorCurationTests(unittest.TestCase):
             "excluded_fixture_artifact",
         )
 
+    def test_screening_rejects_same_type_and_count_with_overwide_span(self) -> None:
+        case = make_case(
+            "gen_person_boundary_overreach",
+            template="Name {SYNTHETIC_PERSON_NAME}.",
+            binding=("SYNTHETIC_PERSON_NAME", "person_name"),
+            expected_types=("person_name",),
+            expected_count=1,
+            tags=("risk-false-positive",),
+        )
+
+        result = evaluate_screening_candidates(BoundaryOverreachAdapter(), [case])
+
+        self.assertEqual(result["exactSpanMatchCaseCount"], 0)
+        self.assertEqual(result["mismatchCandidateCount"], 1)
+        self.assertEqual(result["boundaryMismatchCandidateCount"], 1)
+        candidate = result["mismatchCandidates"][0]
+        self.assertEqual(candidate["expectedTargetTypes"], ["person_name"])
+        self.assertEqual(candidate["actualTargetTypes"], ["person_name"])
+        self.assertEqual(candidate["expectedCount"], 1)
+        self.assertEqual(candidate["actualCount"], 1)
+        self.assertIn("span_boundary_mismatch", candidate["errorKinds"])
+        self.assertNotIn("start", candidate)
+        self.assertNotIn("end", candidate)
+
+    def test_canonical_model_directory_rejects_tokenizer_drift(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            model_dir = root / "model"
+            model_dir.mkdir()
+            registry_path = root / "registry.json"
+            write_fake_canonical_registry(model_dir, registry_path)
+
+            binding = validate_canonical_model_directory(
+                model_dir=model_dir,
+                registry_path=registry_path,
+            )
+            self.assertEqual(binding["artifactFileCount"], len(REQUIRED_MODEL_FILES))
+
+            (model_dir / "tokenizer.json").write_text(
+                "tampered-tokenizer",
+                encoding="utf-8",
+            )
+            with self.assertRaises(BenchmarkError):
+                validate_canonical_model_directory(
+                    model_dir=model_dir,
+                    registry_path=registry_path,
+                )
+
+    def test_failed_regression_guards_write_no_review_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            out_dir = Path(temp_dir) / "curation"
+            with (
+                patch(
+                    "app.services.pii_model_error_curation_cli."
+                    "validate_canonical_model_directory",
+                    return_value={"modelOnnxSha256": MODEL_SHA256},
+                ),
+                patch(
+                    "app.services.pii_model_error_curation_cli.PrivacyFilterAdapter",
+                    FailingGuardAdapter,
+                ),
+            ):
+                exit_code = run_curation_cli(
+                    [
+                        "--model-dir",
+                        str(Path(temp_dir) / "unused-model"),
+                        "--out",
+                        str(out_dir),
+                    ]
+                )
+
+            self.assertEqual(exit_code, 1)
+            self.assertFalse(out_dir.exists())
+
     def test_review_template_is_fail_closed_until_dataset_owner_review(self) -> None:
         screening = {
             "mismatchCandidates": [
@@ -174,6 +281,9 @@ class PiiErrorCurationTests(unittest.TestCase):
         self.assertEqual(review["status"], "pending")
         self.assertFalse(review["trainingEligible"])
         self.assertIsNone(review["reviewedAt"])
+        self.assertEqual(review["approvalMechanism"], "manual_json_attestation")
+        self.assertFalse(review["reviewerIdentityVerified"])
+        self.assertTrue(review["repositoryApprovalEvidenceRequired"])
         self.assertEqual(review["decisions"][0]["decision"], "pending")
 
     def test_pending_review_cannot_be_loaded_as_training_input(self) -> None:
@@ -237,6 +347,9 @@ class PiiErrorCurationTests(unittest.TestCase):
             "trainingEligible": True,
             "reviewerRole": "dataset_owner",
             "reviewedAt": "2026-08-02T00:00:00Z",
+            "approvalMechanism": "manual_json_attestation",
+            "reviewerIdentityVerified": False,
+            "repositoryApprovalEvidenceRequired": True,
             "syntheticOnly": True,
             "modelVersion": "v0.1.1",
             "modelSha256": MODEL_SHA256,
@@ -281,6 +394,55 @@ class PiiErrorCurationTests(unittest.TestCase):
 
         self.assertEqual(approved, {"candidate_one": "hard_negative"})
 
+    def test_failed_regression_report_cannot_be_approved_for_training(self) -> None:
+        report = make_curation_report(
+            [
+                {
+                    "caseId": "candidate_one",
+                    "proposedTrainingDisposition": "hard_negative",
+                    "recommendedDecision": "confirmed_model_error",
+                    "recommendationReason": "non_target_fixture_detected_as_target",
+                }
+            ]
+        )
+        report["regressionGuards"] = {
+            "caseCount": 13,
+            "passedCaseCount": 12,
+            "failedCaseIds": ["person"],
+            "passed": False,
+        }
+        report_text = json.dumps(report, sort_keys=True) + "\n"
+        review = build_review_template(
+            curation_report_sha256=hashlib.sha256(
+                report_text.encode("utf-8")
+            ).hexdigest(),
+            screening=report["screening"],
+            corpus_sha256="b" * 64,
+            subset_manifest_sha256="c" * 64,
+        )
+        review.update(
+            {
+                "status": "approved",
+                "trainingEligible": True,
+                "reviewedAt": "2026-08-02T00:00:00Z",
+            }
+        )
+        review["decisions"][0]["decision"] = "confirmed_model_error"
+        with tempfile.TemporaryDirectory() as temp_dir:
+            report_path = Path(temp_dir) / "report.json"
+            review_path = Path(temp_dir) / "review.json"
+            report_path.write_text(report_text, encoding="utf-8")
+            review_path.write_text(
+                json.dumps(review, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(ValueError, "report contract mismatch"):
+                load_approved_review(
+                    review_path,
+                    curation_report_path=report_path,
+                )
+
     def test_curated_hard_negative_expands_only_approved_synthetic_case(self) -> None:
         case = make_case(
             "gen_private_date_hard_negative",
@@ -318,13 +480,56 @@ def make_curation_report(candidates: list[dict[str, str]]) -> dict[str, object]:
             "version": "v0.1.1",
             "sha256": MODEL_SHA256,
             "thresholds": TARGET_THRESHOLDS,
+            "canonicalRegistrySha256": "d" * 64,
+            "artifactManifestSha256": "e" * 64,
+            "artifactFileCount": len(REQUIRED_MODEL_FILES),
         },
         "source": {
             "corpusSha256": "b" * 64,
             "subsetManifestSha256": "c" * 64,
         },
+        "regressionGuards": {
+            "caseCount": 13,
+            "passedCaseCount": 13,
+            "failedCaseIds": [],
+            "passed": True,
+        },
         "screening": {"mismatchCandidates": candidates},
     }
+
+
+def write_fake_canonical_registry(model_dir: Path, registry_path: Path) -> None:
+    files = []
+    for name in sorted(REQUIRED_MODEL_FILES):
+        content = f"canonical-{name}".encode("utf-8")
+        (model_dir / name).write_bytes(content)
+        files.append(
+            {
+                "path": name,
+                "bytes": len(content),
+                "sha256": hashlib.sha256(content).hexdigest(),
+            }
+        )
+    registry = {
+        "schemaVersion": "gatelm.pii-model-canonical-registry.v1",
+        "modelId": "gatelm/koelectra-small-v3-pii-ner",
+        "entries": [
+            {
+                "canonicalVersion": "v0.1.1",
+                "legacyRevision": "v3.14",
+                "runtime": "onnxruntime",
+                "lifecycle": "test",
+                "sourceManifests": [
+                    {"path": "manifest.json", "sha256": "f" * 64}
+                ],
+                "files": files,
+            }
+        ],
+    }
+    registry_path.write_text(
+        json.dumps(registry, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
 
 
 def make_case(

@@ -10,7 +10,8 @@ from typing import Any, Protocol
 
 from app.domain.ai_safety_eval.master_corpus import (
     MasterEvalCase,
-    render_master_eval_prompt,
+    RenderedPlaceholderSpan,
+    render_master_eval_prompt_with_spans,
 )
 from app.domain.ai_safety_training.koelectra_dataset import (
     MAX_NEGATIVE_TO_POSITIVE_RATIO,
@@ -237,19 +238,28 @@ def evaluate_screening_candidates(
     dispositions: Counter[str] = Counter()
     confusing_risk_false_positive_correct = 0
     confusing_risk_false_negative_correct = 0
+    boundary_mismatch_candidates = 0
     confusion_groups: Counter[tuple[tuple[str, ...], tuple[str, ...]]] = Counter()
 
     for case in cases:
-        expected_counts = expected_target_counts(case)
+        rendered_text, rendered_spans = render_master_eval_prompt_with_spans(case)
+        expected_spans = expected_target_spans(case, rendered_spans)
+        expected_counts = Counter(
+            detector_type for detector_type, _, _ in expected_spans
+        )
         detections = [
             detection
-            for detection in adapter.detect(render_master_eval_prompt(case))
+            for detection in adapter.detect(rendered_text)
             if detection.detector_type in TARGET_TYPES
         ]
         actual_counts = Counter(detection.detector_type for detection in detections)
+        actual_spans = Counter(
+            (detection.detector_type, detection.start, detection.end)
+            for detection in detections
+        )
         expected_types = tuple(sorted(expected_counts))
         actual_types = tuple(sorted(actual_counts))
-        if dict(actual_counts) == expected_counts:
+        if actual_spans == Counter(expected_spans):
             classification = "confusing_but_correct" if _is_risk_case(case) else "correct"
             classifications[classification] += 1
             if "risk-false-positive" in case.tags:
@@ -258,20 +268,30 @@ def evaluate_screening_candidates(
                 confusing_risk_false_negative_correct += 1
             continue
 
-        missing_types = sorted(set(expected_counts) - set(actual_counts))
-        extra_types = sorted(set(actual_counts) - set(expected_counts))
-        count_mismatch = (
-            not missing_types
-            and not extra_types
-            and sum(expected_counts.values()) != sum(actual_counts.values())
+        missing_types = sorted(
+            detector_type
+            for detector_type in set(expected_counts).union(actual_counts)
+            if expected_counts[detector_type] > actual_counts[detector_type]
         )
+        extra_types = sorted(
+            detector_type
+            for detector_type in set(expected_counts).union(actual_counts)
+            if actual_counts[detector_type] > expected_counts[detector_type]
+        )
+        count_mismatch = (
+            expected_types == actual_types and actual_counts != expected_counts
+        )
+        boundary_mismatch = actual_counts == expected_counts
         error_kinds = []
-        if extra_types or sum(actual_counts.values()) > sum(expected_counts.values()):
+        if extra_types:
             error_kinds.append("false_positive")
-        if missing_types or sum(actual_counts.values()) < sum(expected_counts.values()):
+        if missing_types:
             error_kinds.append("false_negative")
         if count_mismatch:
             error_kinds.append("count_mismatch")
+        if boundary_mismatch:
+            error_kinds.append("span_boundary_mismatch")
+            boundary_mismatch_candidates += 1
         proposed_disposition = proposed_training_disposition(
             expected_counts=expected_counts,
             actual_counts=actual_counts,
@@ -302,7 +322,11 @@ def evaluate_screening_candidates(
     return {
         "caseCount": len(cases),
         "classificationCounts": dict(sorted(classifications.items())),
+        "exactSpanMatchCaseCount": (
+            classifications["correct"] + classifications["confusing_but_correct"]
+        ),
         "mismatchCandidateCount": len(candidate_rows),
+        "boundaryMismatchCandidateCount": boundary_mismatch_candidates,
         "proposedTrainingDispositionCounts": dict(sorted(dispositions.items())),
         "reviewRecommendationCounts": dict(
             sorted(
@@ -332,14 +356,41 @@ def expected_target_counts(case: MasterEvalCase) -> dict[str, int]:
     expected_types = sorted(
         set(case.expectations.detector.detected_types).intersection(TARGET_TYPES)
     )
+    _, rendered_spans = render_master_eval_prompt_with_spans(case)
+    span_counts = Counter(
+        span.detector_type
+        for span in rendered_spans
+        if span.detector_type in TARGET_TYPES
+    )
     if not expected_types:
+        if span_counts:
+            raise ValueError(f"{case.case_id}: unexpected target placeholder spans")
         return {}
     expected_count = case.expectations.detector.detected_count
     if len(expected_types) == 1:
-        return {expected_types[0]: expected_count}
-    if expected_count != len(expected_types):
+        expected = {expected_types[0]: expected_count}
+    elif expected_count != len(expected_types):
         raise ValueError(f"{case.case_id}: ambiguous target detector count")
-    return {detector_type: 1 for detector_type in expected_types}
+    else:
+        expected = {detector_type: 1 for detector_type in expected_types}
+    if dict(span_counts) != expected:
+        raise ValueError(f"{case.case_id}: target placeholder span expectation mismatch")
+    return expected
+
+
+def expected_target_spans(
+    case: MasterEvalCase,
+    rendered_spans: Sequence[RenderedPlaceholderSpan],
+) -> tuple[tuple[str, int, int], ...]:
+    expected_counts = expected_target_counts(case)
+    spans = tuple(
+        (span.detector_type, span.start, span.end)
+        for span in rendered_spans
+        if span.detector_type in TARGET_TYPES
+    )
+    if Counter(detector_type for detector_type, _, _ in spans) != expected_counts:
+        raise ValueError(f"{case.case_id}: rendered target span expectation mismatch")
+    return spans
 
 
 def proposed_training_disposition(
@@ -396,6 +447,9 @@ def build_review_template(
         "trainingEligible": False,
         "reviewerRole": "dataset_owner",
         "reviewedAt": None,
+        "approvalMechanism": "manual_json_attestation",
+        "reviewerIdentityVerified": False,
+        "repositoryApprovalEvidenceRequired": True,
         "syntheticOnly": True,
         "modelVersion": MODEL_VERSION,
         "modelSha256": MODEL_SHA256,
@@ -433,6 +487,9 @@ def load_approved_review(
         "trainingEligible",
         "reviewerRole",
         "reviewedAt",
+        "approvalMechanism",
+        "reviewerIdentityVerified",
+        "repositoryApprovalEvidenceRequired",
         "syntheticOnly",
         "modelVersion",
         "modelSha256",
@@ -452,6 +509,9 @@ def load_approved_review(
         or review["reviewerRole"] != "dataset_owner"
         or not isinstance(review["reviewedAt"], str)
         or not review["reviewedAt"]
+        or review["approvalMechanism"] != "manual_json_attestation"
+        or review["reviewerIdentityVerified"] is not False
+        or review["repositoryApprovalEvidenceRequired"] is not True
         or review["syntheticOnly"] is not True
         or review["modelVersion"] != MODEL_VERSION
         or review["modelSha256"] != MODEL_SHA256
@@ -516,6 +576,7 @@ def _validate_curation_report_for_review(report: object) -> None:
         raise ValueError("PII error curation report must be an object")
     model = report.get("model")
     source = report.get("source")
+    regression_guards = report.get("regressionGuards")
     screening = report.get("screening")
     if (
         report.get("reportVersion") != CURATION_REPORT_VERSION
@@ -526,9 +587,17 @@ def _validate_curation_report_for_review(report: object) -> None:
         or model.get("version") != MODEL_VERSION
         or model.get("sha256") != MODEL_SHA256
         or model.get("thresholds") != TARGET_THRESHOLDS
+        or not _is_sha256(model.get("canonicalRegistrySha256"))
+        or not _is_sha256(model.get("artifactManifestSha256"))
+        or model.get("artifactFileCount") != 7
         or not isinstance(source, dict)
         or not _is_sha256(source.get("corpusSha256"))
         or not _is_sha256(source.get("subsetManifestSha256"))
+        or not isinstance(regression_guards, dict)
+        or regression_guards.get("passed") is not True
+        or regression_guards.get("caseCount") != 13
+        or regression_guards.get("passedCaseCount") != 13
+        or regression_guards.get("failedCaseIds") != []
         or not isinstance(screening, dict)
         or not isinstance(screening.get("mismatchCandidates"), list)
     ):
