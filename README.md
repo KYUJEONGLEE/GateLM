@@ -1,4 +1,4 @@
-# GateLM
+# GateLM (https://gatelm.co.kr)
 
 **기업의 LLM 트래픽을 한곳에서 통제하는 셀프 호스팅 LLM Gateway**
 
