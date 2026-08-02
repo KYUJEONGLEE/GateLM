@@ -1,15 +1,15 @@
 {
   "schemaVersion": "gatelm.pii-v0.1.1-error-curation-evidence.v1",
   "executedAt": "2026-08-02",
-  "baseGitSha": "3e18d1eaa36456d667c0c20321bb46b4da4de4bc",
+  "baseGitSha": "3bec6a30f7e89901d904be9df6d929e2e1e6057f",
   "syntheticOnly": true,
   "productionPromotionEvidence": false,
   "model": {
     "version": "v0.1.1",
     "sha256": "8a5cb146e84d413910a423d304e662a6aba9f69e83db129f5061d007a6de9381",
-    "runtimeFilesExpected": 6,
-    "runtimeFilesVerified": 6,
-    "runtimeFileChecksumFailures": 0
+    "canonicalArtifactFilesExpected": 7,
+    "canonicalArtifactFilesVerified": 7,
+    "canonicalArtifactFileChecksumFailures": 0
   },
   "regressionGuards": {
     "positiveCases": 7,
@@ -33,6 +33,8 @@
     "caseCount": 103,
     "correctCases": 15,
     "confusingButCorrectCases": 49,
+    "exactSpanMatchCases": 64,
+    "spanBoundaryMismatchCandidates": 0,
     "modelMismatchCandidates": 39,
     "hardNegativeCandidates": 10,
     "positiveCandidates": 29,
@@ -45,7 +47,10 @@
     "required": true,
     "status": "pending",
     "trainingEligible": false,
-    "recommendationOnly": true
+    "recommendationOnly": true,
+    "approvalMechanism": "manual_json_attestation",
+    "reviewerIdentityVerified": false,
+    "repositoryApprovalEvidenceRequired": true
   },
   "artifactAvailability": {
     "canonicalRuntimeAvailable": true,
@@ -55,8 +60,8 @@
     "privateRegression1000Available": false
   },
   "verification": {
-    "aiServiceTestsRun": 418,
-    "aiServiceTestsPassed": 415,
+    "aiServiceTestsRun": 423,
+    "aiServiceTestsPassed": 420,
     "aiServiceTestsSkipped": 3,
     "gatewayGoTestsPassed": true,
     "docsVerificationPassed": true,
@@ -81,7 +86,8 @@
   "limitations": [
     "The latest hybrid path did not invoke the model for this subset, so direct adapter screening was kept separate from product-path behavior.",
     "Mismatch candidates are not training data until dataset-owner review is complete.",
-    "The accessible canonical bundle contains all six expected runtime files with exact checksums, but its archive checksum differs from the historical package digest.",
+    "The accessible canonical bundle contains all seven files required by the canonical registry with exact byte sizes and checksums, but its archive checksum differs from the historical package digest.",
+    "The manual JSON review is a mistake-prevention gate, not reviewer authentication; CODEOWNERS approval or signed evidence is required for authorization.",
     "The trainable v0.1.1 checkpoint and the three historical frozen evaluation datasets are not present in Git, Git LFS, or the accessible PII artifact inventory."
   ]
 }
