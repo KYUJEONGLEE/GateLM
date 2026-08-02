@@ -1,0 +1,90 @@
+{
+  "schemaVersion": "pii-v0.1.1-regression-guards.v1",
+  "syntheticOnly": true,
+  "modelVersion": "v0.1.1",
+  "modelSha256": "8a5cb146e84d413910a423d304e662a6aba9f69e83db129f5061d007a6de9381",
+  "thresholds": {
+    "email": 0.99,
+    "organization_name": 0.9,
+    "person_name": 0.9,
+    "phone_number": 0.99,
+    "postal_address": 0.9,
+    "resident_registration_number": 0.99
+  },
+  "positiveCases": [
+    {
+      "caseId": "email",
+      "text": "문의 이메일은 demo.user@example.com입니다.",
+      "expectedDetectorType": "email",
+      "expectedValue": "demo.user@example.com"
+    },
+    {
+      "caseId": "organization",
+      "text": "소속 기관은 네오테크솔루션입니다.",
+      "expectedDetectorType": "organization_name",
+      "expectedValue": "네오테크솔루션"
+    },
+    {
+      "caseId": "person",
+      "text": "담당자 이름은 김민수입니다.",
+      "expectedDetectorType": "person_name",
+      "expectedValue": "김민수"
+    },
+    {
+      "caseId": "phone",
+      "text": "연락처는 010-1234-5678입니다.",
+      "expectedDetectorType": "phone_number",
+      "expectedValue": "010-1234-5678"
+    },
+    {
+      "caseId": "postal_address",
+      "text": "배송지는 서울특별시 강남구 테헤란로 123입니다.",
+      "expectedDetectorType": "postal_address",
+      "expectedValue": "서울특별시 강남구 테헤란로 123"
+    },
+    {
+      "caseId": "postal_address_no_space",
+      "text": "배송지는 서울특별시 강남구테헤란로 123입니다.",
+      "expectedDetectorType": "postal_address",
+      "expectedValue": "서울특별시 강남구테헤란로 123"
+    },
+    {
+      "caseId": "resident_registration_number",
+      "text": "확인용 주민등록번호는 900101-1234567입니다.",
+      "expectedDetectorType": "resident_registration_number",
+      "expectedValue": "900101-1234567"
+    }
+  ],
+  "negativeCases": [
+    {
+      "caseId": "single_syllable_question",
+      "text": "너의이름은?",
+      "forbiddenDetectorTypes": ["person_name"]
+    },
+    {
+      "caseId": "name_change_compound",
+      "text": "이름변경 기능을 설명해 주세요.",
+      "forbiddenDetectorTypes": ["person_name"]
+    },
+    {
+      "caseId": "name_tag_compound",
+      "text": "이름표를 새로 만들어 주세요.",
+      "forbiddenDetectorTypes": ["person_name"]
+    },
+    {
+      "caseId": "customer_center_compound",
+      "text": "고객센터 연결 방법을 알려 주세요.",
+      "forbiddenDetectorTypes": ["person_name"]
+    },
+    {
+      "caseId": "customer_inquiry_compound",
+      "text": "고객문의 내역을 정리해 주세요.",
+      "forbiddenDetectorTypes": ["person_name"]
+    },
+    {
+      "caseId": "compatibility_jamo_only",
+      "text": "ㅁㄴㅇㄹㅇㄹ",
+      "forbiddenDetectorTypes": ["person_name"]
+    }
+  ]
+}

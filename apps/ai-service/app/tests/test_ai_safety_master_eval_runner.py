@@ -155,6 +155,28 @@ class AiSafetyMasterEvalRunnerTests(unittest.TestCase):
                     cases=cases,
                 )
 
+    def test_screening_subset_checksum_is_stable_across_crlf_checkout(self) -> None:
+        cases = load_master_eval_corpus(DEFAULT_CORPUS_PATH)
+        subset_path = DEFAULT_CORPUS_PATH.parent / "pii-model-screening-subset-v1.json"
+        with tempfile.TemporaryDirectory() as temp_dir:
+            crlf_corpus = Path(temp_dir) / "corpus.jsonl"
+            canonical_text = DEFAULT_CORPUS_PATH.read_text(encoding="utf-8")
+            crlf_corpus.write_bytes(
+                canonical_text.replace("\n", "\r\n").encode("utf-8")
+            )
+
+            selected, metadata = load_screening_subset(
+                subset_path,
+                corpus_path=crlf_corpus,
+                cases=cases,
+            )
+
+        self.assertEqual(len(selected), 103)
+        self.assertEqual(
+            metadata["sourceCorpusSha256"],
+            "bd35df356f5fccc44720d5a00812c5555fc33c36a53db92ebe9fe976780aefd8",
+        )
+
     def test_rules_both_profile_selects_only_known_configured_models(self) -> None:
         settings = Settings(
             ai_safety_detector_model_id=(

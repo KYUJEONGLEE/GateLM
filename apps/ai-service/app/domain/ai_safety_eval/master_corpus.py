@@ -89,6 +89,14 @@ class MasterEvalCase:
     tags: tuple[str, ...]
 
 
+@dataclass(frozen=True)
+class RenderedPlaceholderSpan:
+    placeholder: str
+    detector_type: str
+    start: int
+    end: int
+
+
 def load_master_eval_corpus(corpus_path: Path) -> list[MasterEvalCase]:
     if not corpus_path.exists():
         raise MasterEvalError(f"master corpus not found: {corpus_path}")
@@ -110,14 +118,46 @@ def load_master_eval_corpus(corpus_path: Path) -> list[MasterEvalCase]:
 
 
 def render_master_eval_prompt(case: MasterEvalCase) -> str:
-    values = {
-        placeholder: _synthetic_value_for_detector_type(detector_type)
-        for placeholder, detector_type in case.placeholder_bindings.items()
-    }
-    try:
-        return case.input_template.format(**values)
-    except KeyError as exc:
-        raise MasterEvalError(f"{case.case_id}: missing synthetic placeholder value {exc}") from exc
+    rendered, _ = render_master_eval_prompt_with_spans(case)
+    return rendered
+
+
+def render_master_eval_prompt_with_spans(
+    case: MasterEvalCase,
+) -> tuple[str, tuple[RenderedPlaceholderSpan, ...]]:
+    formatter = Formatter()
+    rendered_parts: list[str] = []
+    spans: list[RenderedPlaceholderSpan] = []
+    rendered_length = 0
+    for literal, field_name, format_spec, conversion in formatter.parse(
+        case.input_template
+    ):
+        rendered_parts.append(literal)
+        rendered_length += len(literal)
+        if field_name is None:
+            continue
+        try:
+            detector_type = case.placeholder_bindings[field_name]
+        except KeyError as exc:
+            raise MasterEvalError(
+                f"{case.case_id}: missing synthetic placeholder value {exc}"
+            ) from exc
+        value: Any = _synthetic_value_for_detector_type(detector_type)
+        if conversion:
+            value = formatter.convert_field(value, conversion)
+        rendered_value = formatter.format_field(value, format_spec)
+        start = rendered_length
+        rendered_parts.append(rendered_value)
+        rendered_length += len(rendered_value)
+        spans.append(
+            RenderedPlaceholderSpan(
+                placeholder=field_name,
+                detector_type=detector_type,
+                start=start,
+                end=rendered_length,
+            )
+        )
+    return "".join(rendered_parts), tuple(spans)
 
 
 def parse_master_eval_case(raw_case: dict[str, Any], line_number: int) -> MasterEvalCase:

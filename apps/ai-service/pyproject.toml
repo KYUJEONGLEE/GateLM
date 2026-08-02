@@ -26,6 +26,7 @@ gatelm-pii-concurrency-benchmark = "app.services.pii_direct_inference_concurrenc
 gatelm-pii-thread-budget-matrix = "app.services.pii_thread_budget_matrix_benchmark_runner:run"
 gatelm-pii-shadow-e2e = "app.services.pii_shadow_e2e_runner:run"
 gatelm-pii-http-admission-benchmark = "app.services.pii_http_admission_concurrency_benchmark_runner:run"
+gatelm-pii-error-curation = "app.services.pii_model_error_curation_cli:main"
 
 [build-system]
 requires = ["setuptools>=69"]

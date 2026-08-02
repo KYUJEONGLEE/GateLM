@@ -10,6 +10,7 @@ from app.domain.ai_safety_eval.master_corpus import (
     MasterEvalError,
     load_master_eval_corpus,
     parse_master_eval_case,
+    render_master_eval_prompt_with_spans,
 )
 
 
@@ -96,6 +97,20 @@ class AiSafetyMasterEvalCorpusTests(unittest.TestCase):
 
         with self.assertRaisesRegex(MasterEvalError, "expectations fields mismatch"):
             parse_master_eval_case(raw_case, 1)
+
+    def test_renderer_returns_exact_placeholder_boundaries(self) -> None:
+        case = next(
+            case
+            for case in load_master_eval_corpus(CORPUS_PATH)
+            if case.case_id == "gen_person_name_repeated_value_risk_16"
+        )
+
+        rendered, spans = render_master_eval_prompt_with_spans(case)
+
+        self.assertEqual(len(spans), 2)
+        for span in spans:
+            self.assertEqual(span.detector_type, "person_name")
+            self.assertEqual(rendered[span.start : span.end], "Synthetic Person")
 
 
 def count_tagged(cases: list[Any], *tags: str) -> int:

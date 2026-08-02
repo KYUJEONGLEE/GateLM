@@ -94,6 +94,7 @@ Master corpus:
 ```text
 fixtures/master-safety-eval-corpus.jsonl
 fixtures/pii-model-screening-subset-v1.json
+fixtures/pii-v0.1.1-regression-guards-v1.json
 ```
 
 `master-safety-eval-corpus.jsonl`은 하나의 synthetic inputTemplate을 기준으로
@@ -107,6 +108,8 @@ Cross-service tests should use small representative sidecar responses instead
 of turning the eval corpus into hot-path payload.
 
 `pii-model-screening-subset-v1.json`은 rendered prompt가 아니라 case ID와 원본 corpus SHA-256만 저장한다. `ai_safety_model_ablation_runner`는 rules-only, OpenAI, KoELECTRA, combined를 별도 프로세스로 실행하고 모델별 호출·기여 aggregate만 비교한다. 이 결과는 당일 모델 선택용 screening이며 production promotion evidence가 아니다.
+
+`pii-v0.1.1-regression-guards-v1.json`은 canonical 모델의 정상 탐지 7건과 이름 오탐 회귀 6건을 고정한다. `pii_model_error_curation_cli`는 canonical registry의 전체 artifact file set과 이 guard를 먼저 통과한 뒤 103건을 product adapter에 직접 실행하고, detector type·개수·`start·end`를 exact 비교한다. report에는 원문·탐지값·span을 넣지 않고 mismatch case ID와 detector type만 남긴다. 자동 권고는 비대상 날짜·URL을 target으로 탐지한 10건을 모델 오류, master renderer가 실제 PII 형태가 아닌 합성 표식을 넣은 positive miss 29건을 fixture artifact로 분리하지만 사람 승인을 대신하지 않는다. guard 실패 시 report/review를 만들지 않으며, dataset owner가 report checksum에 결속된 모든 후보를 승인 또는 제외하기 전에는 `pii_ner_training_dataset_cli --curation-report ... --curation-review ...` 확장 경로가 fail-closed한다. JSON의 `dataset_owner` 값은 신원·권한 검증이 아닌 수동 실수 방지 attestation이므로, 권한 승인은 CODEOWNERS 또는 서명된 별도 근거가 필요하다.
 
 ## 4. Current Main Path
 
